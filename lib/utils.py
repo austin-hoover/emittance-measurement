@@ -26,8 +26,9 @@ def delete_files_not_folders(directory):
 
 def loadRTBT():
     """Load the RTBT sequence of the SNS accelerator."""
-    accelerator = XMLDataManager.acceleratorWithPath(
-        '/Users/46h/Research/code/snsxal/site/optics/design/main.xal')
+    accelerator = XMLDataManager.loadDefaultAccelerator()
+    # accelerator = XMLDataManager.acceleratorWithPath(
+    # '/Users/46h/Research/code/snsxal/site/optics/design/main.xal')
     return accelerator.getComboSequence('RTBT')
 
 

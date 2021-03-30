@@ -186,27 +186,39 @@ class PhaseController:
         UNTESTED
         """
         field_strength = self.get_field_strength(quad_id)
-        ch_Bset = self.channel_factory.getChannel(quad_id + ':B_Set')
-        ch_Bbook = self.channel_factory.getChannel(quad_id + ':B_Book')
-        ch_Bset.putVal(field_strength)
-        ch_Bbook.putVal(field_strength)
-        
+	self.set_live_field_strength(quad_id, field_strength)        
+
     def update_live_quads(self, quad_ids):
         """Update quad field strengths to reflect the current model values."""
         for quad_id in quad_ids:
-            self.update_live_quad(quad_id)   
+            self.update_live_quad(quad_id)  
+
+    def set_live_field_strength(self, quad_id, field_strength):
+	field_strength = abs(field_strength)
+	prefix, suffix = quad_id.split(':')
+	ch_id = prefix + ':PS_' + suffix + ':B_Set'
+	ch_id_book = prefix + ':PS_' + suffix + ':B_Book'
+	ch_Bset = self.channel_factory.getChannel(ch_id)
+	ch_Bbook = self.channel_factory.getChannel(ch_id_book)
+	ch_Bset.connectAndWait()
+	ch_Bbook.connectAndWait()
+	ch_Bset.putVal(field_strength)
+	ch_Bbook.putVal(field_strength) 
             
     def get_live_field_strength(self, quad_id):
         """Get field strength [T/m] of live quad.
         
         UNTESTED
         """
-        ch_Bset = self.channel_factory.getChannel(quad_id + ':B_Set')
+	prefix, suffix = quad_id.split(':')
+	ch_id = prefix + ':PS_' + suffix + ':B_Set'
+        ch_Bset = self.channel_factory.getChannel(ch_id)
+	ch_Bset.connectAndWait()
         return ch_Bset.getValFlt()
     
     def get_live_field_strengths(self, quad_ids):
         """Get field strengths [T/m] of live quads."""
-        return [get_live_field_strength(quad_id) for quad_id in quad_ids]
+        return [self.get_live_field_strength(quad_id) for quad_id in quad_ids]
     
     def set_ref_ws_phases(self, mux, muy, beta_lims=(40, 40), verbose=0):
         """Set x and y phases at reference wire-scanner.
