@@ -13,9 +13,8 @@ from lib.mathfuncs import radians, multiply
 #------------------------------------------------------------------------------
 delete_files_not_folders('./output/')
 
-sequence = loadRTBT()
-
 # Create phase controller
+sequence = loadRTBT()
 ref_ws_id = 'RTBT_Diag:WS24' # scan phases at this wire-scanner
 init_twiss['ex'] = init_twiss['ey'] = 20e-6 # arbitrary [m*rad] 
 controller = PhaseController(sequence, ref_ws_id, init_twiss)
@@ -42,12 +41,12 @@ for i, (mux, muy) in enumerate(phases, start=1):
 print ''
 
 # Set phase advance at reference wire-scanner
-print 'Scan index =', scan_index
+print 'Scan index = {}.'.format(scan_index)
 print 'Setting phases at {}.'.format(ref_ws_id)
 controller.set_ref_ws_phases(mux, muy, beta_lims, verbose=1)
 print 'Setting betas at target.'
 controller.set_betas_at_target(design_betas_at_target, beta_lim_after_ws24, verbose=1)
-controller.update_live_quads(all_quad_ids)
+controller.sync_live_quads_with_model(all_quad_ids)
 
 # Save transfer matrix at each wire-scanner. There will be one row per 
 # wire-scanner in the order [ws02, ws20, ws21, ws23, ws24]. Each row lists
@@ -62,3 +61,10 @@ for ws_id in ws_ids:
 file.close()
 
 # Wire-scanner data needs to collected externally using WireScanner app.
+# ...
+
+# Save phases at each scan index
+file = open('output/phases.dat', 'w')
+for (mux, muy) in phases:
+    file.write('{}, {}\n'.format(mux, muy))
+file.close()

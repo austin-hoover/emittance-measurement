@@ -18,6 +18,7 @@ from utils import get_trial_vals, minimize, init_twiss
 #------------------------------------------------------------------------------
 ws_ids = ['RTBT_Diag:WS02', 'RTBT_Diag:WS20', 'RTBT_Diag:WS21', 
           'RTBT_Diag:WS23', 'RTBT_Diag:WS24']
+
 all_quad_ids = [
     'RTBT_Mag:QH02', 'RTBT_Mag:QV03', 'RTBT_Mag:QH04', 'RTBT_Mag:QV05', 
     'RTBT_Mag:QH06', 'RTBT_Mag:QV07', 'RTBT_Mag:QH08', 'RTBT_Mag:QV09', 
@@ -27,16 +28,37 @@ all_quad_ids = [
     'RTBT_Mag:QH22', 'RTBT_Mag:QV23', 'RTBT_Mag:QH24', 'RTBT_Mag:QV25',    
     'RTBT_Mag:QH26', 'RTBT_Mag:QV27', 'RTBT_Mag:QH28', 'RTBT_Mag:QV29', 
     'RTBT_Mag:QH30']
-ind_quad_ids = [ # quads with independent power supplies
+
+# The following quadrupoles are treated as having independent power 
+# supplies in the model. 
+ind_quad_ids = [ 
     'RTBT_Mag:QH02', 'RTBT_Mag:QV03', 'RTBT_Mag:QH04', 'RTBT_Mag:QV05', 
     'RTBT_Mag:QH06', 'RTBT_Mag:QH12', 'RTBT_Mag:QV13', 'RTBT_Mag:QH14', 
     'RTBT_Mag:QV15', 'RTBT_Mag:QH16', 'RTBT_Mag:QV17', 'RTBT_Mag:QH18', 
     'RTBT_Mag:QV19', 'RTBT_Mag:QH26', 'RTBT_Mag:QV27', 'RTBT_Mag:QH28',
     'RTBT_Mag:QV29', 'RTBT_Mag:QH30']
+
+# In the following dictionary, the keys are quads which we treat as 
+# having independent power suplies in the model. Each value is a list
+# quads which will share the same field strength as the key. We need
+# to keep track of this because changing one quad in the model won't
+# affect the quads it shares a power supply with.
+shared_power_dict = {
+    'RTBT_Mag:QV05': ['RTBT_Mag:QV07', 'RTBT_Mag:QV09', 'RTBT_Mag:QV11'],
+    'RTBT_Mag:QH06': ['RTBT_Mag:QH08', 'RTBT_Mag:QH10'],
+    'RTBT_Mag:QH18': ['RTBT_Mag:QH20', 'RTBT_Mag:QH22', 'RTBT_Mag:QH24'],
+    'RTBT_Mag:QV19': ['RTBT_Mag:QV21', 'RTBT_Mag:QV23', 'RTBT_Mag:QV25']
+}
+
+# When selecting phases at WS24, only the quads before WS24 need to be
+# varied. We then constrain the beta function from WS24 to the target,
+# for which we vary the last 5 quads. Maybe this could be done all
+# at once, but it seemed easier to do it this way.
 ind_quad_ids_before_ws24 = ind_quad_ids[:-5]
 ind_quad_ids_after_ws24 = ind_quad_ids[-5:]
 
-# Limits on quadrupole field strengths [T/m]
+# Limits on quadrupole field strengths [T/m]. These are used as bounds
+# by the Solver.
 ind_quads_before_ws24_lb = [0, -5.4775, 0, -7.96585, 0, 0, -7.0425, 
                             0, -5.4775, 0, -5.4775, 0, -7.0425]
 ind_quads_before_ws24_ub = [5.4775, 0, 7.0425, 0, 7.96585, 7.0425, 
@@ -69,11 +91,10 @@ class PhaseController:
         self.init_twiss = init_twiss
         self.initialize_envelope()
         self.track()
-        self.channel_factory = ChannelFactory.defaultFactory()
         self.ref_ws_id = ref_ws_id
         self.ref_ws_node = sequence.getNodeWithId(ref_ws_id)
-        self.default_field_strengths_before_ws24 = self.get_field_strengths(ind_quad_ids_before_ws24)
-        self.default_field_strengths_after_ws24 = self.get_field_strengths(ind_quad_ids_after_ws24)
+        self.default_field_strengths_before_ws24 = self.get_field_strengths(ind_quad_ids_before_ws24, 'model')
+        self.default_field_strengths_after_ws24 = self.get_field_strengths(ind_quad_ids_after_ws24, 'model')
 
     def initialize_envelope(self):
         """Construct covariance matrix at s=0."""
@@ -145,80 +166,57 @@ class PhaseController:
         return max(bx_list), max(by_list)
     
     def get_betas_at_target(self):
-        """Get beta functions at the target."""
+        """Return (beta_x, beta_y) at the target."""
         return self.get_twiss()[-1][4:6]
     
-    def set_field_strength(self, quad_id, field_strength):
-        """Set field strength [T/m] of model quad."""
+    def get_field_strength(self, quad_id, opt='model'):
+        """Return quadrupole field strength [T/m].
+        
+        quad_id : str
+            Id of the quadrupole accelerator node.
+        opt : {'model', 'live'}
+            If 'model', return the model value. If 'live', return the EPICS 
+            readback value. 
+            
+        The same parameters are used in the next few functions.
+        """
         node = self.sequence.getNodeWithId(quad_id)
-        for elem in self.scenario.elementsMappedTo(node): 
-            elem.setMagField(field_strength)
+        if opt == 'model':
+            return self.scenario.elementsMappedTo(node)[0].getMagField()
+        elif opt == 'live':
+            return node.getField()
+            
+    def get_field_strengths(self, quad_ids, opt='model'):
+        return [self.get_field_strength(quad_id, opt) for quad_id in quad_ids]
     
-    def set_field_strengths(self, quad_ids, field_strengths):
-        """Set field strengths [T/m] of model quads."""
-        if type(field_strengths) is float:
+    def set_field_strength(self, quad_id, field_strength, opt='model'):
+        node = self.sequence.getNodeWithId(quad_id)
+        if opt == 'model':
+            if quad_id not in ind_quad_ids:
+                return
+            for elem in self.scenario.elementsMappedTo(node): 
+                elem.setMagField(field_strength)
+            # Update quads with shared power supplies
+            for indep_quad_id, dep_quad_ids in shared_power_dict.items():
+                shared_field_strength = self.get_field_strength(indep_quad_id, 'model')
+                for dep_quad_id in dep_quad_ids:
+                    self.set_field_strength(dep_quad_id, shared_field_strength, 'model')
+        elif opt == 'live':
+            node.setField(field_strength)
+
+    def set_field_strengths(self, quad_ids, field_strengths, opt='model'):
+        if type(field_strengths) in [float, int]:
             field_strengths = len(quad_ids) * [field_strengths]
         for quad_id, field_strength in zip(quad_ids, field_strengths):
-            self.set_field_strength(quad_id, field_strength)
-            
-        def share_power(dep_quad_ids, indep_quad_id):
-            shared_field_strength = self.get_field_strength(indep_quad_id)
-            for dep_quad_id in dep_quad_ids:
-                self.set_field_strength(dep_quad_id, shared_field_strength)
-                
-        share_power(['RTBT_Mag:QV07', 'RTBT_Mag:QV09', 'RTBT_Mag:QV11'], 'RTBT_Mag:QV05')
-        share_power(['RTBT_Mag:QH08', 'RTBT_Mag:QH10'], 'RTBT_Mag:QH06')
-        share_power(['RTBT_Mag:QH20', 'RTBT_Mag:QH22', 'RTBT_Mag:QH24'], 'RTBT_Mag:QH18')
-        share_power(['RTBT_Mag:QV21', 'RTBT_Mag:QV23', 'RTBT_Mag:QV25'], 'RTBT_Mag:QV19')         
-            
-    def get_field_strength(self, quad_id):
-        """Get field strength [T/m] of model quad."""
-        node = self.sequence.getNodeWithId(quad_id)
-        return self.scenario.elementsMappedTo(node)[0].getMagField()
-            
-    def get_field_strengths(self, quad_ids):
-        """Get field strengths [T/m] of model quads."""
-        return [self.get_field_strength(quad_id) for quad_id in quad_ids]
-    
-    def update_live_quad(self, quad_id):
-        """Update live quad field strength to reflect the current model value.
-        
-        UNTESTED
-        """
-        field_strength = self.get_field_strength(quad_id)
-	self.set_live_field_strength(quad_id, field_strength)        
+            self.set_field_strength(quad_id, field_strength, opt)
+                    
+    def sync_live_quad_with_model(self, quad_id):
+        model_field_strength = self.get_field_strength(quad_id, 'model')
+        self.set_field_strength(quad_id, model_field_strength, 'live')
 
-    def update_live_quads(self, quad_ids):
-        """Update quad field strengths to reflect the current model values."""
+    def sync_live_quads_with_model(self, quad_ids):
         for quad_id in quad_ids:
-            self.update_live_quad(quad_id)  
-
-    def set_live_field_strength(self, quad_id, field_strength):
-	field_strength = abs(field_strength)
-	prefix, suffix = quad_id.split(':')
-	ch_id = prefix + ':PS_' + suffix + ':B_Set'
-	ch_id_book = prefix + ':PS_' + suffix + ':B_Book'
-	ch_Bset = self.channel_factory.getChannel(ch_id)
-	ch_Bbook = self.channel_factory.getChannel(ch_id_book)
-	ch_Bset.connectAndWait()
-	ch_Bbook.connectAndWait()
-	ch_Bset.putVal(field_strength)
-	ch_Bbook.putVal(field_strength) 
-            
-    def get_live_field_strength(self, quad_id):
-        """Get field strength [T/m] of live quad.
-        
-        UNTESTED
-        """
-	prefix, suffix = quad_id.split(':')
-	ch_id = prefix + ':PS_' + suffix + ':B_Set'
-        ch_Bset = self.channel_factory.getChannel(ch_id)
-	ch_Bset.connectAndWait()
-        return ch_Bset.getValFlt()
-    
-    def get_live_field_strengths(self, quad_ids):
-        """Get field strengths [T/m] of live quads."""
-        return [self.get_live_field_strength(quad_id) for quad_id in quad_ids]
+            self.sync_live_quad_with_model(quad_id)  
     
     def set_ref_ws_phases(self, mux, muy, beta_lims=(40, 40), verbose=0):
         """Set x and y phases at reference wire-scanner.
@@ -240,7 +238,7 @@ class PhaseController:
                 
             def score(self, trial, variables):
                 field_strengths = get_trial_vals(trial, variables)   
-                self.controller.set_field_strengths(ind_quad_ids_before_ws24, field_strengths)
+                self.controller.set_field_strengths(ind_quad_ids_before_ws24, field_strengths, 'model')
                 self.controller.track()
                 calc_phases = self.controller.get_ref_ws_phases()
                 cost = norm(subtract(calc_phases, self.target_phases))
@@ -258,7 +256,7 @@ class PhaseController:
                      'B15', 'B16', 'B17', 'B18', 'B19']
         bounds = (ind_quads_before_ws24_lb, ind_quads_before_ws24_ub)
         init_field_strengths = self.default_field_strengths_before_ws24      
-        self.set_field_strengths(ind_quad_ids_before_ws24, init_field_strengths)
+        self.set_field_strengths(ind_quad_ids_before_ws24, init_field_strengths, 'model')
         field_strengths = minimize(scorer, init_field_strengths, var_names, bounds)
         if verbose > 0:
             print '  Desired phases : {:.3f}, {:.3f}'.format(mux, muy)
@@ -272,8 +270,7 @@ class PhaseController:
         ws_phases = self.adaptor.computeBetatronPhase(ws_state)
         return ws_phases.getx(), ws_phases.gety()
     
-    def set_betas_at_target(self, betas, beta_lim_after_ws24=100., 
-                            verbose=0):
+    def set_betas_at_target(self, betas, beta_lim_after_ws24=100., verbose=0):
         """Vary quads after last wire-scanner to set betas at the target.
         
         Parameters
@@ -293,7 +290,7 @@ class PhaseController:
                 
             def score(self, trial, variables):
                 field_strengths = get_trial_vals(trial, variables)            
-                self.controller.set_field_strengths(ind_quad_ids_after_ws24, field_strengths)
+                self.controller.set_field_strengths(ind_quad_ids_after_ws24, field_strengths, 'model')
                 self.controller.track()
                 residuals = subtract(self.betas, self.controller.get_betas_at_target())
                 cost = norm(residuals)
@@ -308,11 +305,10 @@ class PhaseController:
             
         scorer = MyScorer(self)
         var_names = ['B26', 'B27', 'B28', 'B29', 'B30']
-        init_field_strengths = [self.get_field_strength(quad_id) 
-                                for quad_id in ind_quad_ids_after_ws24]     
+        init_field_strengths = self.get_field_strengths(ind_quad_ids_after_ws24, 'model')
         bounds = (ind_quads_after_ws24_lb, ind_quads_after_ws24_ub)
         field_strengths = minimize(scorer, init_field_strengths, var_names, bounds)
-        self.set_field_strengths(ind_quad_ids_after_ws24, field_strengths)
+        self.set_field_strengths(ind_quad_ids_after_ws24, field_strengths, 'model')
         if verbose > 0:
             print '  Desired betas: {:.3f}, {:.3f}'.format(*betas)
             print '  Calc betas   : {:.3f}, {:.3f}'.format(*self.get_betas_at_target())
@@ -360,5 +356,5 @@ class PhaseController:
 
     def restore_default_optics(self):
         """Return quad strengths to their default settings."""
-        self.set_field_strengths(ind_quad_ids_before_ws24, self.default_field_strengths_before_ws24)
-        self.set_field_strengths(ind_quad_ids_after_ws24, self.default_field_strengths_after_ws24)
+        self.set_field_strengths(ind_quad_ids_before_ws24, self.default_field_strengths_before_ws24, 'model')
+        self.set_field_strengths(ind_quad_ids_after_ws24, self.default_field_strengths_after_ws24, 'model')

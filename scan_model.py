@@ -23,7 +23,7 @@ controller = PhaseController(sequence, ref_ws_id, init_twiss)
 
 # Settings
 phase_coverage = radians(180)
-scans_per_dim = 5
+scans_per_dim = 2
 beta_lims = (40, 40)
 beta_lim_after_ws24 = 100
 
@@ -54,7 +54,7 @@ for scan_index, (mux, muy) in enumerate(phases, start=1):
     controller.set_ref_ws_phases(mux, muy, beta_lims, verbose=1)
     print 'Setting betas at target.'
     controller.set_betas_at_target(design_betas_at_target, beta_lim_after_ws24, verbose=1)
-    print '  Max betas anywhere:', controller.get_max_betas(stop_id=None)
+    print '  Max betas anywhere: {:.3f}, {:.3f}'.format(*controller.get_max_betas(stop_id=None))
     print ''
     
     # Save Twiss vs. position data
@@ -81,3 +81,16 @@ for scan_index, (mux, muy) in enumerate(phases, start=1):
         moments = controller.get_moments_at(ws_id)
         file.write('{} {} {}\n'.format(*moments))
     file.close()
+    
+    # Save model quadrupole strengths.
+    file = open('output/quad_settings_{}.dat'.format(scan_index), 'w')
+    for quad_id in all_quad_ids:
+        field_strength = controller.get_field_strength(quad_id)
+        file.write('{}, {}\n'.format(quad_id, field_strength))
+    file.close()
+    
+# Save phases at each scan index
+file = open('output/phases.dat', 'w')
+for (mux, muy) in phases:
+    file.write('{}, {}\n'.format(mux, muy))
+file.close()

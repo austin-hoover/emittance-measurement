@@ -1,2 +1,4 @@
+.ipynb_checkpoints
+.jython_cache
 *.dat
 *$py.class
