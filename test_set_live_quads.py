@@ -4,7 +4,7 @@ readback values to makes sure it worked.
 """
 import random
 from lib.phase_controller import PhaseController, ind_quad_ids, all_quad_ids
-from lib.utils import loadRTBT, init_twiss
+from lib.helpers import loadRTBT, init_twiss
 
 
 sequence = loadRTBT()

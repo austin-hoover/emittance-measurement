@@ -4,9 +4,9 @@ it writes the file 'transfer_matrix_elems_i.dat', where i is the scan number.
 Each of row of the file corresponds to a different wire-scanner.
 """
 from lib.phase_controller import PhaseController, all_quad_ids, ws_ids
-from lib.utils import loadRTBT, write_traj_to_file, delete_files_not_folders
-from lib.utils import init_twiss, design_betas_at_target
-from lib.mathfuncs import radians, multiply
+from lib.helpers import loadRTBT, write_traj_to_file, delete_files_not_folders
+from lib.helpers import init_twiss, design_betas_at_target
+from lib.utils import radians, multiply
 
 
 # Setup

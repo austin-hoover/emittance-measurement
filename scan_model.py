@@ -5,9 +5,9 @@ is the scan number. Each of row in these files corresponds to a different
 wire-scanner.
 """
 from lib.phase_controller import PhaseController, all_quad_ids, ws_ids
-from lib.utils import loadRTBT, write_traj_to_file
-from lib.utils import init_twiss, design_betas_at_target, delete_files_not_folders
-from lib.mathfuncs import radians, multiply
+from lib.helpers import loadRTBT, write_traj_to_file
+from lib.helpers import init_twiss, design_betas_at_target, delete_files_not_folders
+from lib.utils import radians, multiply
 
 
 # Setup

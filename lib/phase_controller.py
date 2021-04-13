@@ -12,8 +12,8 @@ from xal.extension.solver.ProblemFactory import getInverseSquareMinimizerProblem
 from xal.extension.solver.SolveStopperFactory import maxEvaluationsStopper
 from xal.extension.solver.algorithm import SimplexSearchAlgorithm
 
-from mathfuncs import subtract, norm, step_func, put_angle_in_range
-from utils import get_trial_vals, minimize, init_twiss
+from utils import subtract, norm, step_func, put_angle_in_range
+from helpers import get_trial_vals, minimize, init_twiss
 
 #------------------------------------------------------------------------------
 ws_ids = ['RTBT_Diag:WS02', 'RTBT_Diag:WS20', 'RTBT_Diag:WS21', 
