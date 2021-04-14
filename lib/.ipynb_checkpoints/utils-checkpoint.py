@@ -1,4 +1,5 @@
 import math
+import os
 
 
 def linspace(start, stop, num=10):
@@ -73,3 +74,12 @@ def put_angle_in_range(angle):
     if angle > lim:
         angle %= lim
     return angle
+
+
+# File processing
+def delete_files_not_folders(directory):
+    """Delete all files in directory and subdirectories."""
+    for root, dirs, files in os.walk(directory):
+        for file in files:
+            if not file.startswith('.'):
+                os.remove(os.path.join(root, file))

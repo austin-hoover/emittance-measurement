@@ -2,8 +2,8 @@
 This script changes one live quadrupole strength in the RTBT, then reads back
 the value to verify that it worked.
 """
-from lib.phase_controller import PhaseController
-from lib.helpers import loadRTBT, init_twiss
+from lib.phase_controller import PhaseController, init_twiss
+from lib.helpers import loadRTBT
 
 
 # Create phase controller

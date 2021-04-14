@@ -63,8 +63,12 @@ ind_quads_before_ws24_lb = [0, -5.4775, 0, -7.96585, 0, 0, -7.0425,
                             0, -5.4775, 0, -5.4775, 0, -7.0425]
 ind_quads_before_ws24_ub = [5.4775, 0, 7.0425, 0, 7.96585, 7.0425, 
                             0, 5.4775, 0, 5.4775, 0, 7.0425, 0]
-ind_quads_after_ws24_lb = [0, -5.4775, 0, -5.4775, 0]    # Don't know if these are correct... using them for now.
-ind_quads_after_ws24_ub = [5.4775, 0, 5.4775, 0, 5.4775] # Don't know if these are correct... using them for now.
+ind_quads_after_ws24_lb = [0, -5.4775, 0, -5.4775, 0]    # Don't know if these are correct.
+ind_quads_after_ws24_ub = [5.4775, 0, 5.4775, 0, 5.4775] # Don't know if these are correct.
+
+# Design optics
+init_twiss = {'ax': -1.378, 'ay':0.645, 'bx': 6.243, 'by':10.354} # at RTBT entrance
+design_betas_at_target = (57.705, 7.909) # beta_x, beta_y
 
 
 class PhaseController:

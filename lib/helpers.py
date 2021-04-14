@@ -1,6 +1,5 @@
 """Helper functions for OpenXAL scripts."""
 
-import os
 import math
 import random
 from xal.smf import Accelerator
@@ -11,19 +10,6 @@ from xal.extension.solver.SolveStopperFactory import maxEvaluationsStopper
 from xal.extension.solver.algorithm import SimplexSearchAlgorithm
 
 from utils import subtract, norm, step_func, dot, put_angle_in_range
-
-
-# Module level variables
-init_twiss = {'ax': -1.378, 'ay':0.645, 'bx': 6.243, 'by':10.354} # RTBT entrance
-design_betas_at_target = (57.705, 7.909)
-
-
-def delete_files_not_folders(directory):
-    """Delete all files in directory and subdirectories."""
-    for root, dirs, files in os.walk(directory):
-        for file in files:
-            if not file.startswith('.'):
-                os.remove(os.path.join(root, file))
 
 
 def loadRTBT():
