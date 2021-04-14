@@ -10,7 +10,7 @@ from xal.extension.solver.ProblemFactory import getInverseSquareMinimizerProblem
 from xal.extension.solver.SolveStopperFactory import maxEvaluationsStopper
 from xal.extension.solver.algorithm import SimplexSearchAlgorithm
 
-from mathfuncs import subtract, norm, step_func, dot, put_angle_in_range
+from utils import subtract, norm, step_func, dot, put_angle_in_range
 
 
 # Module level variables
@@ -29,8 +29,6 @@ def delete_files_not_folders(directory):
 def loadRTBT():
     """Load the RTBT sequence of the SNS accelerator."""
     accelerator = XMLDataManager.loadDefaultAccelerator()
-    # accelerator = XMLDataManager.acceleratorWithPath(
-    # '/Users/46h/Research/code/snsxal/site/optics/design/main.xal')
     return accelerator.getComboSequence('RTBT')
 
 

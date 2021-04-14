@@ -23,7 +23,7 @@ controller = PhaseController(sequence, ref_ws_id, init_twiss)
 
 # Settings
 phase_coverage = radians(180)
-scans_per_dim = 2
+scans_per_dim = 5
 beta_lims = (40, 40)
 beta_lim_after_ws24 = 100
 
@@ -55,8 +55,26 @@ for scan_index, (mux, muy) in enumerate(phases, start=1):
     print 'Setting betas at target.'
     controller.set_betas_at_target(design_betas_at_target, beta_lim_after_ws24, verbose=1)
     print '  Max betas anywhere: {:.3f}, {:.3f}'.format(*controller.get_max_betas(stop_id=None))
-    print ''
     
+    # Check if field settings are outside trip limits or warning limits
+    print 'Checking field limits.'
+    for quad_id in all_quad_ids:
+        B = controller.get_field_strength(quad_id, 'model')
+        quad_node = sequence.getNodeWithId(quad_id)
+        print '  ' + quad_id
+        print '    desired field = {:.3f}'.format(B)
+        print '    default field = {:.3f}'.format(quad_node.getField())
+        lower_field_limit = quad_node.lowerFieldLimit()
+        upper_field_limit = quad_node.upperFieldLimit()
+        lower_alarm_field_limit = quad_node.lowerAlarmFieldLimit()
+        upper_alarm_field_limit = quad_node.upperAlarmFieldLimit()
+        if B <= lower_field_limit or B >= upper_field_limit:
+            print '    Desired field exceeds field limits!'
+        if B <= lower_alarm_field_limit or B >= upper_alarm_field_limit:
+            print '    Desired field exceeds alarm field limits!'
+        print '    Field limits = {:.3f}, {:.3f}'.format(lower_field_limit, upper_field_limit)
+        print '    Alarm field limits = {:.3f}, {:.3f}'.format(lower_alarm_field_limit, upper_alarm_field_limit)
+
     # Save Twiss vs. position data
     filename = 'output/twiss_{}.dat'.format(scan_index)
     write_traj_to_file(controller.get_twiss(), controller.positions, filename)
@@ -89,8 +107,12 @@ for scan_index, (mux, muy) in enumerate(phases, start=1):
         file.write('{}, {}\n'.format(quad_id, field_strength))
     file.close()
     
+    print ''
+    
 # Save phases at each scan index
 file = open('output/phases.dat', 'w')
 for (mux, muy) in phases:
     file.write('{}, {}\n'.format(mux, muy))
 file.close()
+
+exit()
