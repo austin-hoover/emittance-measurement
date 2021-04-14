@@ -28,14 +28,14 @@ for quad_id in all_quad_ids:
         channel.connectAndWait(0.5)
         print '  old = {:.3f}'.format(channel.getValFlt())
         file.write('{}, {}\n'.format(channel_id, channel.getValFlt()))
-#         if key in ['B.LOLO', 'B.LOW']:
-#             channel.putVal(0.0)
-#         elif key in ['B.HIHI', 'B.HIGH']:
-#             channel.putVal(30.0)
-#         elif key in ['I.LOLO', 'I.LOW']:
-#             channel.putVal(0.0)
-#         elif key in ['I.HIHI', 'I.HIGH']:
-#             channel.putVal(1000.0)
+        if key in ['B.LOLO', 'B.LOW']:
+            channel.putVal(0.0)
+        elif key in ['B.HIHI', 'B.HIGH']:
+            channel.putVal(30.0)
+        elif key in ['I.LOLO', 'I.LOW']:
+            channel.putVal(0.0)
+        elif key in ['I.HIHI', 'I.HIGH']:
+            channel.putVal(1000.0)
         print '  new = {:.3f}'.format(channel.getValFlt())
 file.close()
 exit()
