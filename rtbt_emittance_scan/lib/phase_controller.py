@@ -1,5 +1,5 @@
 import math
-
+import time
 from xal.ca import Channel, ChannelFactory
 from xal.smf import Accelerator, AcceleratorSeq 
 from xal.model.probe import Probe
@@ -14,6 +14,7 @@ from xal.extension.solver.algorithm import SimplexSearchAlgorithm
 
 from utils import subtract, norm, step_func, put_angle_in_range
 from helpers import get_trial_vals, minimize
+from lib.utils import arange
 
 #------------------------------------------------------------------------------
 ws_ids = ['RTBT_Diag:WS02', 'RTBT_Diag:WS20', 'RTBT_Diag:WS21', 
@@ -213,7 +214,20 @@ class PhaseController:
                 for dep_quad_id in dep_quad_ids:
                     self.set_field_strength(dep_quad_id, shared_field_strength, 'model')
         elif opt == 'live':
-            node.setField(field_strength)
+            ps_id = node.getMainSupply().getId()
+            book_id = ps_id + ':B_Book'
+            factory = ChannelFactory.defaultFactory()
+            book_ch = factory.getChannel(book_id)
+            book_ch.connectAndWait(0.5)
+            current_book = book_ch.getValFlt()
+
+            sign = +1 if field_strength > 0 else -1
+            delta = 0.1
+            book_vals = arange(current_book, abs(field_strength), delta)
+            for book_val in book_vals:
+                node.setField(sign * book_val)
+                book_ch.putVal(book_val)
+
 
     def set_field_strengths(self, quad_ids, field_strengths, opt='model'):
         if type(field_strengths) in [float, int]:

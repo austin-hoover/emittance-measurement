@@ -2,6 +2,7 @@
 This script changes one live quadrupole strength in the RTBT, then reads back
 the value to verify that it worked.
 """
+import time
 from lib.phase_controller import PhaseController, init_twiss
 from lib.helpers import loadRTBT
 
@@ -14,7 +15,7 @@ controller = PhaseController(sequence, ref_ws_id, init_twiss)
 
 # Change single quad strength
 quad_id = 'RTBT_Mag:QH02'
-fractional_change = 0.05
+fractional_change = 0.1
 
 init_field_strength_model = controller.get_field_strength(quad_id, 'model')
 init_field_strength_live = controller.get_field_strength(quad_id, 'live')
@@ -22,6 +23,8 @@ init_field_strength_live = controller.get_field_strength(quad_id, 'live')
 target_field_strength = (1 + fractional_change) * init_field_strength_model
 controller.set_field_strength(quad_id, target_field_strength)
 controller.sync_live_quad_with_model(quad_id)
+
+time.sleep(1.0)
 
 final_field_strength_model = controller.get_field_strength(quad_id, 'model')
 final_field_strength_live = controller.get_field_strength(quad_id, 'live')

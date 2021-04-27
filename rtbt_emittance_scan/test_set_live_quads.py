@@ -2,6 +2,7 @@
 This script changes the live quadrupole strengths in the RTBT and prints the
 readback values to makes sure it worked.
 """
+import time
 import random
 from lib.phase_controller import PhaseController, ind_quad_ids, all_quad_ids
 from lib.phase_controller import init_twiss
@@ -16,10 +17,12 @@ controller = PhaseController(sequence, ref_ws_id, init_twiss)
 # Randomly change model quad strengths
 for quad_id in ind_quad_ids:
     quad_strength = controller.get_field_strength(quad_id, 'model')
-    delta_B = 0.1 * (2 * random.random() - 1)
+    delta_B = 0.05 * quad_strength
     controller.set_field_strength(quad_id, quad_strength + delta_B)
     
 controller.sync_live_quads_with_model(all_quad_ids)
+
+time.sleep(2.0)
 
 print 'quadrupole id | model   | live'
 print '---------------------------------'
