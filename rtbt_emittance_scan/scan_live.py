@@ -20,7 +20,7 @@ init_twiss['ex'] = init_twiss['ey'] = 20e-6 # arbitrary [m*rad]
 controller = PhaseController(sequence, ref_ws_id, init_twiss)
 
 # Settings
-phase_coverage = radians(180)
+phase_coverage = radians(155)
 scans_per_dim = 5
 beta_lims = (40, 40)
 beta_lim_after_ws24 = 100
@@ -58,6 +58,14 @@ for ws_id in ws_ids:
     M = controller.get_transfer_matrix_at(ws_id)
     elements = [elem for row in M for elem in row]
     file.write(fstr.format(*elements))
+file.close()
+
+# Save model quadrupole strengths.
+file = open('output/quad_settings_{}.dat'.format(scan_index), 'w')
+for quad_id in all_quad_ids:
+    field_strength_model = controller.get_field_strength(quad_id, 'model')
+#     field_strength_live = controller.get_field_strength(quad_id, 'live')
+    file.write('{}, {}\n'.format(quad_id, field_strength_model))
 file.close()
 
 # Wire-scanner data needs to collected externally using WireScanner app.

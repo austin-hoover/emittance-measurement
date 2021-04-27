@@ -16,7 +16,7 @@ accelerator = XMLDataManager.loadDefaultAccelerator()
 sequence = accelerator.getComboSequence('RTBT')
 channel_factory = ChannelFactory.defaultFactory()
 
-file = open('default_field_limits.dat', 'w')
+file = open('field_limits/default_field_limits.dat', 'w')
 for quad_id in all_quad_ids:
     quad_node = sequence.getNodeWithId(quad_id)
     quad_ps_id = quad_node.getMainSupply().getId()  

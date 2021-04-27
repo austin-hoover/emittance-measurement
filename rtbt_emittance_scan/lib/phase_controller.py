@@ -13,7 +13,7 @@ from xal.extension.solver.SolveStopperFactory import maxEvaluationsStopper
 from xal.extension.solver.algorithm import SimplexSearchAlgorithm
 
 from utils import subtract, norm, step_func, put_angle_in_range
-from helpers import get_trial_vals, minimize, init_twiss
+from helpers import get_trial_vals, minimize
 
 #------------------------------------------------------------------------------
 ws_ids = ['RTBT_Diag:WS02', 'RTBT_Diag:WS20', 'RTBT_Diag:WS21', 
@@ -58,13 +58,20 @@ ind_quad_ids_before_ws24 = ind_quad_ids[:-5]
 ind_quad_ids_after_ws24 = ind_quad_ids[-5:]
 
 # Limits on quadrupole field strengths [T/m]. These are used as bounds
-# by the Solver.
-ind_quads_before_ws24_lb = [0, -5.4775, 0, -7.96585, 0, 0, -7.0425, 
-                            0, -5.4775, 0, -5.4775, 0, -7.0425]
-ind_quads_before_ws24_ub = [5.4775, 0, 7.0425, 0, 7.96585, 7.0425, 
-                            0, 5.4775, 0, 5.4775, 0, 7.0425, 0]
-ind_quads_after_ws24_lb = [0, -5.4775, 0, -5.4775, 0]    # Don't know if these are correct.
-ind_quads_after_ws24_ub = [5.4775, 0, 5.4775, 0, 5.4775] # Don't know if these are correct.
+# by the Solver. These obtained from `node.lowerFieldLimit()` and 
+# `node.upperFieldLimit()` in OpenXAL.
+ind_quads_before_ws24_lb = [0, -4.35, 0, -15.206, 0, 0, -5.530, 0, -4.350, 0, -4.350, 0, -5.530]
+ind_quads_before_ws24_ub = [5.5, 0, 5.53, 0, 15.206, 5.53, 0, 4.35, 0, 4.35, 0, 5.53, 0]
+ind_quads_after_ws24_lb = [0, -3.5, 0, -2.75, 0]
+ind_quads_after_ws24_ub = [5.5, 0, 3.6, 0, 2.8]
+
+# I got these from MADX script from Julia. They don't match up with OpenXAL numbers
+# ind_quads_before_ws24_lb = [0, -5.4775, 0, -7.96585, 0, 0, -7.0425, 
+#                             0, -5.4775, 0, -5.4775, 0, -7.0425]
+# ind_quads_before_ws24_ub = [5.4775, 0, 7.0425, 0, 7.96585, 7.0425, 
+#                             0, 5.4775, 0, 5.4775, 0, 7.0425, 0]
+# ind_quads_after_ws24_lb = [0, -5.4775, 0, -5.4775, 0]    # Don't know if these are correct.
+# ind_quads_after_ws24_ub = [5.4775, 0, 5.4775, 0, 5.4775] # Don't know if these are correct.
 
 # Design optics
 init_twiss = {'ax': -1.378, 'ay':0.645, 'bx': 6.243, 'by':10.354} # at RTBT entrance
@@ -228,7 +235,7 @@ class PhaseController:
         Parameters
         ----------
         mux, muy : float
-            The desired phase advances at the reference wire-scanner.
+            The desired phase advances at the reference wire-scanner [rad].
         beta_lims : (xmax, ymax)
             Maximum beta functions to allow from s=0 to ws24.
         verbose : int

@@ -22,7 +22,7 @@ init_twiss['ex'] = init_twiss['ey'] = 20e-6 # arbitrary [m*rad]
 controller = PhaseController(sequence, ref_ws_id, init_twiss)
 
 # Settings
-phase_coverage = radians(180)
+phase_coverage = radians(160)
 scans_per_dim = 5
 beta_lims = (40, 40)
 beta_lim_after_ws24 = 100
@@ -57,23 +57,24 @@ for scan_index, (mux, muy) in enumerate(phases, start=1):
     print '  Max betas anywhere: {:.3f}, {:.3f}'.format(*controller.get_max_betas(stop_id=None))
     
     # Check if field settings are outside trip limits or warning limits
-    print 'Checking field limits.'
-    for quad_id in all_quad_ids:
-        B = controller.get_field_strength(quad_id, 'model')
-        quad_node = sequence.getNodeWithId(quad_id)
-        print '  ' + quad_id
-        print '    desired field = {:.3f}'.format(B)
-        print '    default field = {:.3f}'.format(quad_node.getField())
-        lower_field_limit = quad_node.lowerFieldLimit()
-        upper_field_limit = quad_node.upperFieldLimit()
-        lower_alarm_field_limit = quad_node.lowerAlarmFieldLimit()
-        upper_alarm_field_limit = quad_node.upperAlarmFieldLimit()
-        if B <= lower_field_limit or B >= upper_field_limit:
-            print '    Desired field exceeds field limits!'
-        if B <= lower_alarm_field_limit or B >= upper_alarm_field_limit:
-            print '    Desired field exceeds alarm field limits!'
-        print '    Field limits = {:.3f}, {:.3f}'.format(lower_field_limit, upper_field_limit)
-        print '    Alarm field limits = {:.3f}, {:.3f}'.format(lower_alarm_field_limit, upper_alarm_field_limit)
+    if False:
+        print 'Checking field limits.'
+        for quad_id in all_quad_ids:
+            B = controller.get_field_strength(quad_id, 'model')
+            quad_node = sequence.getNodeWithId(quad_id)
+            print '  ' + quad_id
+            print '    desired field = {:.3f}'.format(B)
+            print '    default field = {:.3f}'.format(quad_node.getField())
+            lower_field_limit = quad_node.lowerFieldLimit()
+            upper_field_limit = quad_node.upperFieldLimit()
+            lower_alarm_field_limit = quad_node.lowerAlarmFieldLimit()
+            upper_alarm_field_limit = quad_node.upperAlarmFieldLimit()
+            if B <= lower_field_limit or B >= upper_field_limit:
+                print '    Desired field exceeds field limits!'
+            if B <= lower_alarm_field_limit or B >= upper_alarm_field_limit:
+                print '    Desired field exceeds alarm field limits!'
+            print '    Field limits = {:.3f}, {:.3f}'.format(lower_field_limit, upper_field_limit)
+            print '    Alarm field limits = {:.3f}, {:.3f}'.format(lower_alarm_field_limit, upper_alarm_field_limit)
 
     # Save Twiss vs. position data
     filename = 'output/twiss_{}.dat'.format(scan_index)
