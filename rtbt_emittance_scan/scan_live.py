@@ -16,7 +16,6 @@ delete_files_not_folders('./output/')
 # Create phase controller
 sequence = loadRTBT()
 ref_ws_id = 'RTBT_Diag:WS24' # scan phases at this wire-scanner
-init_twiss['ex'] = init_twiss['ey'] = 20e-6 # arbitrary [m*rad] 
 controller = PhaseController(sequence, ref_ws_id, init_twiss)
 
 # Settings
@@ -46,7 +45,7 @@ print 'Setting phases at {}.'.format(ref_ws_id)
 controller.set_ref_ws_phases(mux, muy, beta_lims, verbose=1)
 print 'Setting betas at target.'
 controller.set_betas_at_target(design_betas_at_target, beta_lim_after_ws24, verbose=1)
-controller.sync_live_quads_with_model(all_quad_ids)
+# controller.sync_live_quads_with_model(all_quad_ids)
 
 # Save transfer matrix at each wire-scanner. There will be one row per 
 # wire-scanner in the order [ws02, ws20, ws21, ws23, ws24]. Each row lists
@@ -63,9 +62,9 @@ file.close()
 # Save model quadrupole strengths.
 file = open('output/quad_settings_{}.dat'.format(scan_index), 'w')
 for quad_id in all_quad_ids:
-    field_strength_model = controller.get_field_strength(quad_id, 'model')
-#     field_strength_live = controller.get_field_strength(quad_id, 'live')
-    file.write('{}, {}\n'.format(quad_id, field_strength_model))
+    field_model = controller.get_field(quad_id, 'model')
+#     field_live = controller.get_field(quad_id, 'live')
+    file.write('{}, {}\n'.format(quad_id, field_model))
 file.close()
 
 # Wire-scanner data needs to collected externally using WireScanner app.

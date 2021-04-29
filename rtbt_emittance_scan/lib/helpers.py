@@ -35,39 +35,45 @@ def get_trial_vals(trial, variables):
     return [trial_point.getValue(var) for var in variables]
 
 
-def minimize(variables, scorer, solver, tol=1e-8):
-    """Run the solver to minimize the score."""
-    problem = getInverseSquareMinimizerProblem(variables, scorer, tol)
-    solver.solve(problem)
-    trial = solver.getScoreBoard().getBestSolution()
-    return get_trial_vals(trial, variables)
+# def minimize(variables, scorer, solver, tol=1e-8):
+#     """Run the solver to minimize the score."""
+#     problem = getInverseSquareMinimizerProblem(variables, scorer, tol)
+#     solver.solve(problem)
+#     trial = solver.getScoreBoard().getBestSolution()
+#     return get_trial_vals(trial, variables)
 
-def minimize(scorer, x0, var_names, bounds, maxiters=1000, tol=1e-8):
+def minimize(scorer, x, var_names, bounds, maxiters=1000, tol=1e-8):
     """Minimize a multivariate function using the simplex algorithm.
+    
+    To do: ensure initial guess is within bounds.
     
     Parameters
     ----------
     scorer : Scorer subclass
         Must implement method `score(trial, variables).`
-    x0 : list[float], shape (n,)
+    x : list[float], shape (n,)
         Initial guess.
     var_names : list[str], shape(n,)
         List of variable names.
     bounds : 2-tuple of list
         Lower and upper bounds on independent variables. Each array must match
-        the size of x0 or be a scalar; in the latter case the bound will be the 
+        the size of x or be a scalar; in the latter case the bound will be the 
         same for all variables.
     """ 
-    if len(x0) != len(var_names):
+    n = len(x)
+    if n != len(var_names):
         raise ValueError('Parameter list and variable name list have different length.')
     
     lb, ub = bounds
     if type(lb) in [float, int]:
-        lb = len(x0) * [lb]
+        lb = n * [lb]
     if type(ub) in [float, int]:
-        ub = len(x0) * [ub]
-    variables = [Variable(name, val, l, u) for name, val, l, u 
-                 in zip(var_names, x0, lb, ub)]
+        ub = n * [ub]
+    for i in range(n):
+        if x[i] < lb[i] or x[i] > ub[i]:
+            raise ValueError('Initial guess is outside bounds.')
+            
+    variables = [Variable(name, val, l, u) for name, val, l, u in zip(var_names, x, lb, ub)]
     stopper = maxEvaluationsStopper(maxiters)
     solver = Solver(SimplexSearchAlgorithm(), stopper)
     problem = getInverseSquareMinimizerProblem(variables, scorer, tol)
@@ -76,7 +82,7 @@ def minimize(scorer, x0, var_names, bounds, maxiters=1000, tol=1e-8):
     return get_trial_vals(trial, variables)
     
 
-def least_squares(A, b, x0=None, bounds=None, verbose=0):
+def least_squares(A, b, x=None, bounds=None, verbose=0):
     """Return the least-squares solution to the equation A.x = b.
     
     This will be used if we want to reconstruct the beam emittances from 
@@ -94,6 +100,6 @@ def least_squares(A, b, x0=None, bounds=None, verbose=0):
         bounds = (-float('inf'), float('inf'))
     n = len(A[0])
     var_names = ['v{}'.format(i) for i in range(n)]
-    x0 = [random.random() for _ in range(n)] if x0 is None else x0
+    x = [random.random() for _ in range(n)] if x is None else x
     scorer = MyScorer(A, b)
-    return minimize(scorer, x0, var_names, bounds)
+    return minimize(scorer, x, var_names, bounds)

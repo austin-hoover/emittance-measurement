@@ -4,7 +4,7 @@ it writes the files 'transfer_matrix_elems_i.dat' and 'moments_i.dat', where i
 is the scan number. Each of row in these files corresponds to a different 
 wire-scanner.
 """
-from lib.phase_controller import PhaseController, all_quad_ids, ws_ids
+from lib.phase_controller import PhaseController, ws_ids
 from lib.phase_controller import init_twiss, design_betas_at_target
 from lib.helpers import loadRTBT, write_traj_to_file
 from lib.utils import radians, multiply, delete_files_not_folders
@@ -17,15 +17,14 @@ delete_files_not_folders('./output/')
 sequence = loadRTBT()
 
 # Create phase controller
-ref_ws_id = 'RTBT_Diag:WS24' # scan phases at this wire-scanner
-init_twiss['ex'] = init_twiss['ey'] = 20e-6 # arbitrary [m*rad] 
+ref_ws_id = 'RTBT_Diag:WS24' 
 controller = PhaseController(sequence, ref_ws_id, init_twiss)
 
 # Settings
 phase_coverage = radians(160)
-scans_per_dim = 5
+scans_per_dim = 6
 beta_lims = (40, 40)
-beta_lim_after_ws24 = 100
+max_beta = 100
 
 # Save wire-scanner indices in trajectory (for plotting)
 file = open('output/ws_index_in_trajectory.dat', 'w')
@@ -53,29 +52,9 @@ for scan_index, (mux, muy) in enumerate(phases, start=1):
     print 'Setting phases at {}.'.format(ref_ws_id)
     controller.set_ref_ws_phases(mux, muy, beta_lims, verbose=1)
     print 'Setting betas at target.'
-    controller.set_betas_at_target(design_betas_at_target, beta_lim_after_ws24, verbose=1)
-    print '  Max betas anywhere: {:.3f}, {:.3f}'.format(*controller.get_max_betas(stop_id=None))
+    controller.set_betas_at_target(design_betas_at_target, max_beta, verbose=1)
+    print '  Max betas anywhere: {:.3f}, {:.3f}'.format(*controller.get_max_betas(stop=None))
     
-    # Check if field settings are outside trip limits or warning limits
-    if False:
-        print 'Checking field limits.'
-        for quad_id in all_quad_ids:
-            B = controller.get_field_strength(quad_id, 'model')
-            quad_node = sequence.getNodeWithId(quad_id)
-            print '  ' + quad_id
-            print '    desired field = {:.3f}'.format(B)
-            print '    default field = {:.3f}'.format(quad_node.getField())
-            lower_field_limit = quad_node.lowerFieldLimit()
-            upper_field_limit = quad_node.upperFieldLimit()
-            lower_alarm_field_limit = quad_node.lowerAlarmFieldLimit()
-            upper_alarm_field_limit = quad_node.upperAlarmFieldLimit()
-            if B <= lower_field_limit or B >= upper_field_limit:
-                print '    Desired field exceeds field limits!'
-            if B <= lower_alarm_field_limit or B >= upper_alarm_field_limit:
-                print '    Desired field exceeds alarm field limits!'
-            print '    Field limits = {:.3f}, {:.3f}'.format(lower_field_limit, upper_field_limit)
-            print '    Alarm field limits = {:.3f}, {:.3f}'.format(lower_alarm_field_limit, upper_alarm_field_limit)
-
     # Save Twiss vs. position data
     filename = 'output/twiss_{}.dat'.format(scan_index)
     write_traj_to_file(controller.get_twiss(), controller.positions, filename)
@@ -103,9 +82,9 @@ for scan_index, (mux, muy) in enumerate(phases, start=1):
     
     # Save model quadrupole strengths.
     file = open('output/quad_settings_{}.dat'.format(scan_index), 'w')
-    for quad_id in all_quad_ids:
-        field_strength = controller.get_field_strength(quad_id)
-        file.write('{}, {}\n'.format(quad_id, field_strength))
+    for quad_id in controller.ind_quad_ids:
+        field = controller.get_field(quad_id)
+        file.write('{}, {}\n'.format(quad_id, field))
     file.close()
     
     print ''
@@ -115,5 +94,8 @@ file = open('output/phases.dat', 'w')
 for (mux, muy) in phases:
     file.write('{}, {}\n'.format(mux, muy))
 file.close()
+
+
+
 
 exit()
