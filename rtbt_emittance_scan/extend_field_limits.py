@@ -6,26 +6,22 @@ for example: 'RTBT_Mag:PS_QH02:B.LOLO, 2.145'. It then extends these limits.
 
 Note: the script needs to be run with chief operator privileges.
 """
-import time
 from xal.ca import Channel, ChannelFactory
-from xal.smf import Accelerator
-from xal.smf.data import XMLDataManager
-from lib.phase_controller import ind_quad_ids
+from lib.phase_controller import PhaseController
+from lib.helpers import loadRTBT
 
-accelerator = XMLDataManager.loadDefaultAccelerator()
-sequence = accelerator.getComboSequence('RTBT')
+sequence = loadRTBT()
 channel_factory = ChannelFactory.defaultFactory()
+controller = PhaseController(sequence)
 
 file = open('field_limits/default_field_limits.dat', 'w')
-for quad_id in ind_quad_ids:
-    quad_node = sequence.getNodeWithId(quad_id)
-    quad_ps_id = quad_node.getMainSupply().getId()  
+for ps_id in controller.ind_ps_ids:
     for key in ['B.LOLO', 'B.LOW', 'B.HIHI', 'B.HIGH', 
                 'I.LOLO', 'I.LOW', 'I.HIHI', 'I.HIGH']:
-        channel_id = quad_ps_id + ':' + key
+        channel_id = ps_id + ':' + key
         print channel_id
         channel = channel_factory.getChannel(channel_id)
-        channel.connectAndWait(0.5)
+        channel.connectAndWait(0.1)
         print '  old = {:.3f}'.format(channel.getValFlt())
         file.write('{}, {}\n'.format(channel_id, channel.getValFlt()))
         if key in ['B.LOLO', 'B.LOW']:
@@ -38,4 +34,5 @@ for quad_id in ind_quad_ids:
             channel.putVal(1000.0)
         print '  new = {:.3f}'.format(channel.getValFlt())
 file.close()
+
 exit()

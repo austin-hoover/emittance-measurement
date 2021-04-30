@@ -1,8 +1,38 @@
 """
-This script performs the phase scan using the linear model. For each scan
-it writes the files 'transfer_matrix_elems_i.dat' and 'moments_i.dat', where i
-is the scan number. Each of row in these files corresponds to a different 
-wire-scanner.
+This script sets the phase advance at one wire-scanner in the RTBT using the 
+online model. It scans a range of phases, each time writing two files. 
+
+Important variables
+-------------------
+ref_ws_id : str
+    ID of the wirescanner at which the phase advance will be measured. Options: 
+    {'RTBT_Diag:WS20', 'RTBT_Diag:WS21', 'RTBT_Diag:WS23', 'RTBT_Diag:WS24'}
+phase_coverage : float
+    The horizontal and vertical phases are varied by this many radians during
+    the scan. For example, suppose phase_coverage = T and the default phase
+    advances are mux and muy. Then the horizontal phase is varied in the range
+    (mux - T/2, mux + T/2) and the vertical phase is varied in the range 
+    (muy - T/2, muy + T/2). Ideally this is equal to pi radians.
+nsteps_per_dim : int
+    Number of phases to measure in each dimension. 
+    `x_phases = np.linspace(mux_min, mux_max, nsteps_per_dim)`,
+    `y_phases = np.linspace(muy_min, muy_max, nsteps_per_dim)`.
+    
+Output files
+------------
+Let w = [WS02, WS20, WS21, WS23, WS24] be a list of the RTBT wire-scanners.
+Also let i be the scan index, i.e., the ith phase advance measured in the scan. 
+Then the following files are produced for each i:
+* 'transfer_matrix_elems_i.dat': 
+     The jth row in the file gives the 16 transfer matrix elements from s = 0 
+     to wire-scanner w[j]. The elements are written in the order: [M11, M12,
+     M13, M14, M21, M22, M23, M24, M31, M32, M33, M34, M41, M42, M43, M44].
+* 'moments_i.dat': 
+     The jth row in the file gives [Sigma_11, Sigma_33, Sigma_13] at 
+     wire-scanner w[j], where Sigma_mn is the m,n entry in the transverse beam
+     covariance matrix with m and n running from 1 to 4. 
+* 'model_fields_i.dat':
+    ID and field strength of every independent quadrupole.
 """
 from lib.phase_controller import PhaseController, ws_ids
 from lib.phase_controller import init_twiss, design_betas_at_target
@@ -14,15 +44,14 @@ from lib.utils import radians, multiply, delete_files_not_folders
 #------------------------------------------------------------------------------
 delete_files_not_folders('./output/')
 
+# Create lattice and phase controller
 sequence = loadRTBT()
-
-# Create phase controller
 ref_ws_id = 'RTBT_Diag:WS24' 
 controller = PhaseController(sequence, ref_ws_id, init_twiss)
 
 # Settings
-phase_coverage = radians(160)
-scans_per_dim = 6
+phase_coverage = radians(180)
+nsteps_per_dim = 6
 beta_lims = (40, 40)
 max_beta = 100
 
@@ -36,7 +65,7 @@ file.close()
 
 # Scan
 #------------------------------------------------------------------------------
-phases = controller.get_phases_for_scan(phase_coverage, scans_per_dim)
+phases = controller.get_phases_for_scan(phase_coverage, nsteps_per_dim)
 mux0, muy0 = controller.get_ref_ws_phases()
 
 print 'Initial phases at {}: {:.3f}, {:.3f}'.format(ref_ws_id, mux0, muy0)
@@ -48,7 +77,7 @@ for i, (mux, muy) in enumerate(phases, start=1):
 
 for scan_index, (mux, muy) in enumerate(phases, start=1):
     
-    print 'Scan {}/{}'.format(scan_index, 2 * scans_per_dim)
+    print 'Scan {}/{}'.format(scan_index, 2 * nsteps_per_dim)
     print 'Setting phases at {}.'.format(ref_ws_id)
     controller.set_ref_ws_phases(mux, muy, beta_lims, verbose=1)
     print 'Setting betas at target.'
@@ -59,10 +88,7 @@ for scan_index, (mux, muy) in enumerate(phases, start=1):
     filename = 'output/twiss_{}.dat'.format(scan_index)
     write_traj_to_file(controller.get_twiss(), controller.positions, filename)
 
-    # Save transfer matrix at each wire-scanner. There will be one row per 
-    # wire-scanner in the order [ws02, ws20, ws21, ws23, ws24]. Each row lists
-    # the 16 elements of the transfer matrix in the order [00, 01, 02, 03, 10,
-    # 11, 12, 13, 20, 21, 22, 23, 30, 31, 32, 33].
+    # Save transfer matrix at each wire-scanner
     file = open('output/transfer_mat_elems_{}.dat'.format(scan_index),'w')
     fstr = 16 * '{} ' + '\n'
     for ws_id in ws_ids:
@@ -71,17 +97,15 @@ for scan_index, (mux, muy) in enumerate(phases, start=1):
         file.write(fstr.format(*elements))
     file.close()
 
-    # Save real space beam moments at each wire-scanner. There will be one row 
-    # per wire-scanner in the order [ws02, ws20, ws21, ws23, ws24]. Each row 
-    # lists [<xx>, <yy>, <xy>].
+    # Save real space beam moments at each wire-scanner
     file = open('output/moments_{}.dat'.format(scan_index), 'w')
     for ws_id in ws_ids:
         moments = controller.get_moments_at(ws_id)
         file.write('{} {} {}\n'.format(*moments))
     file.close()
     
-    # Save model quadrupole strengths.
-    file = open('output/quad_settings_{}.dat'.format(scan_index), 'w')
+    # Save model quadrupole strengths
+    file = open('output/model_fields_{}.dat'.format(scan_index), 'w')
     for quad_id in controller.ind_quad_ids:
         field = controller.get_field(quad_id)
         file.write('{}, {}\n'.format(quad_id, field))
@@ -94,8 +118,5 @@ file = open('output/phases.dat', 'w')
 for (mux, muy) in phases:
     file.write('{}, {}\n'.format(mux, muy))
 file.close()
-
-
-
 
 exit()

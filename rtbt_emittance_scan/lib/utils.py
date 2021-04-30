@@ -11,7 +11,7 @@ def linspace(start, stop, num=10):
 
 def arange(start, stop, step=1.0):
     vals, x = [], start
-    while x < stop:
+    while abs(x - stop) > abs(step):
         vals.append(x)
         x += step
     return vals

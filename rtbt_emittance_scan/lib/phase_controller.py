@@ -1,15 +1,6 @@
 """
 This module is for controlling the phase advances at a wire-scanner in the
 RTBT. 
-
-To do
-* There is some discrepancy between the default model quad strengths and 
-  the live values for the last 5 quads before the target. I think this might
-  Therefore I currently set the default model values to the live values before 
-  doing anything. Since we're running this script once per measurement, we
-  need to reset the machine to it's original state at the end of the script.
-* Change B_Book when setting the field. 
-* Test and double check everything before Sunday.
 """
 
 import math
@@ -28,7 +19,7 @@ from xal.extension.solver.algorithm import SimplexSearchAlgorithm
 
 from utils import subtract, norm, step_func, put_angle_in_range
 from helpers import get_trial_vals, minimize
-from lib.utils import arange
+from lib.utils import linspace
 
 
 ws_ids = ['RTBT_Diag:WS02', 'RTBT_Diag:WS20', 'RTBT_Diag:WS21', 
@@ -43,8 +34,8 @@ def get_ids(nodes):
 
 
 class PhaseController:
-    """Class to control phases at one wire-scanner in the RTBT."""
-    def __init__(self, sequence, ref_ws_id, init_twiss):
+    """Class to control phases at a wire-scanner in the RTBT."""
+    def __init__(self, sequence, ref_ws_id=ws_ids[0], init_twiss=init_twiss):
         """Constructor.
         
         Parameters
@@ -111,7 +102,6 @@ class PhaseController:
             self.ps_lb.append(lb)
             self.ps_ub.append(ub)
             
-        self.sync_model_with_live()
         self.default_fields = self.get_fields(self.ind_quad_ids, 'model')
         
     def get_node(self, node_id):
@@ -196,9 +186,9 @@ class PhaseController:
         quad_id : str
             Id of the quadrupole accelerator node.
         opt : {'model', 'live', 'book'}
-            'model': return model value
-            'live' : return EPICS readback value
-            'book' : return book setting
+            'model': model value
+            'live' : live readback value from EPICS
+            'book' : book setting
             
         The same parameters are used in the next few functions.
         """
@@ -221,22 +211,37 @@ class PhaseController:
             if quad_id in self.shared_ps_dict:
                 for dep_quad_id in self.shared_ps_dict[quad_id]:
                     self.set_field(dep_quad_id, field)
-        elif opt == 'live':
+        elif opt == 'live': 
+            # This also changes the book value
+            self.book_channels[quad_id].putVal(node.toCAFromField(field))
             node.setField(field)
-            # To do: change the B_Book value
-            
 
-    def set_fields(self, quad_ids, fields, opt='model'):
-        for quad_id, field in zip(quad_ids, fields):
-            self.set_field(quad_id, field, opt)
-            
-    def sync_live_with_model(self):
-        fields_model = self.get_fields(self.ind_quad_ids, 'model')
-        self.set_fields(self.ind_quad_ids, fields_model, 'live')
-        
-    def sync_model_with_live(self):
-        fields_live = self.get_fields(self.ind_quad_ids, 'live')
-        self.set_fields(self.ind_quad_ids, fields_live, 'model')
+    def set_fields(self, quad_ids, fields, opt='model', max_change=1e6, 
+                   wait=0.5, max_iters=100):
+        if opt == 'model':
+            for quad_id, field in zip(quad_ids, fields):
+                self.set_field(quad_id, field, opt)
+        elif opt == 'live':
+            # Define diff[i] as the difference between the desired field and
+            # the live/book field for quad i. Check each quad and 
+            # increase/decrease the field of quad i by max_change if 
+            # abs(D[i]) > max_change. Move on if no quads changed, otherwise 
+            # wait a moment so that the  machine doesn't trip and try again.
+            stop, iters = False, 0
+            while not stop and iters < max_iters:
+                stop, iters = True, iters + 1
+                for quad_id, field in zip(quad_ids, fields):
+                    diff = field - self.get_field(quad_id, 'book')
+                    if abs(diff) > max_change:
+                        stop = False
+                        if diff > 0:
+                            self.set_field(quad_id, book + max_change, opt)
+                        else:
+                            self.set_field(quad_id, book - max_chage, opt)
+                time.sleep(wait)
+            # Now we can set the field like normal
+            for quad_id, field in zip(quad_ids, fields): 
+                self.set_field(quad_id, field, opt)
     
     def set_ref_ws_phases(self, mux, muy, beta_lims=(40, 40), verbose=0):
         """Set x and y phases at reference wire-scanner.
@@ -334,7 +339,7 @@ class PhaseController:
             print '  Desired betas: {:.3f}, {:.3f}'.format(*betas)
             print '  Calc betas   : {:.3f}, {:.3f}'.format(*self.get_betas_at_target())
             
-    def get_phases_for_scan(self, phase_coverage, npts):
+    def get_phases_for_scan(self, phase_coverage, nsteps_per_dim):
         """Create array of phases for scan. 
         
         Note that this will reset the model optics to their default settings.
@@ -361,9 +366,9 @@ class PhaseController:
             if abs_diff > math.pi:
                 abs_diff = 2*math.pi - abs_diff
             # Return list of phases
-            step = abs_diff / (npts - 1)
+            step = abs_diff / (nsteps_per_dim - 1)
             phases = [min_phase]
-            for _ in range(npts - 1):
+            for _ in range(nsteps_per_dim - 1):
                 phase = put_angle_in_range(phases[-1] + step)
                 phases.append(phase)
             return phases

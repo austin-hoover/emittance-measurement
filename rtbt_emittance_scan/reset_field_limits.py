@@ -9,19 +9,16 @@ Note: the script needs to be run with chief operator privileges.
 """
 import time
 from xal.ca import Channel, ChannelFactory
-from xal.smf import Accelerator
-from xal.smf.data import XMLDataManager
-from lib.phase_controller import all_quad_ids
+from lib.helpers import loadRTBT
 
-accelerator = XMLDataManager.loadDefaultAccelerator()
-sequence = accelerator.getComboSequence('RTBT')
+sequence = loadRTBT()
 channel_factory = ChannelFactory.defaultFactory()
 
 file = open('field_limits/default_field_limits.dat', 'r')
 for line in file:
     channel_id, value = line.rstrip().split(',')
     channel = channel_factory.getChannel(channel_id)
-    channel.connectAndWait(0.5)
+    channel.connectAndWait(0.1)
     print channel_id
     print '  old = {:.3f}'.format(channel.getValFlt())
     channel.putVal(value)
