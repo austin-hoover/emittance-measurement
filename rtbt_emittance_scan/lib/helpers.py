@@ -1,7 +1,9 @@
-"""Helper functions for OpenXAL scripts."""
-
+"""
+Helper functions for OpenXAL scripts.
+"""
 import math
 import random
+
 from xal.smf import Accelerator
 from xal.smf.data import XMLDataManager
 from xal.extension.solver import Trial, Variable, Scorer, Stopper, Solver, Problem
@@ -27,6 +29,17 @@ def write_traj_to_file(data, positions, filename):
         file.write(fstr.format(s, *dat))
     file.close()
     
+    
+def list_from_xal_matrix(matrix):
+    """Return list of lists from XAL matrix object."""
+    M = []
+    for i in range(matrix.getRowCnt()):
+        row = []
+        for j in range(matrix.getColCnt()):
+            row.append(matrix.getElem(i, j))
+        M.append(row)
+    return M
+    
 
 # Helper functions for OpenXAL Solver
 def get_trial_vals(trial, variables):
@@ -34,13 +47,6 @@ def get_trial_vals(trial, variables):
     trial_point = trial.getTrialPoint()
     return [trial_point.getValue(var) for var in variables]
 
-
-# def minimize(variables, scorer, solver, tol=1e-8):
-#     """Run the solver to minimize the score."""
-#     problem = getInverseSquareMinimizerProblem(variables, scorer, tol)
-#     solver.solve(problem)
-#     trial = solver.getScoreBoard().getBestSolution()
-#     return get_trial_vals(trial, variables)
 
 def minimize(scorer, x, var_names, bounds, maxiters=1000, tol=1e-8):
     """Minimize a multivariate function using the simplex algorithm.

@@ -8,15 +8,15 @@ ref_ws_id : str
     ID of the wirescanner at which the phase advance will be measured. Options: 
     {'RTBT_Diag:WS20', 'RTBT_Diag:WS21', 'RTBT_Diag:WS23', 'RTBT_Diag:WS24'}
 phase_coverage : float
-    The horizontal and vertical phases are varied by this many radians during
+    The horizontal and vertical phases are varied by this many degrees during
     the scan. For example, suppose phase_coverage = T and the default phase
     advances are mux and muy. Then the horizontal phase is varied in the range
-    (mux - T/2, mux + T/2) and the vertical phase is varied in the range 
-    (muy - T/2, muy + T/2). Ideally this is equal to pi radians.
-nsteps_per_dim : int
+    (mux - T, mux + T) and the vertical phase is varied in the range 
+    (muy + T, muy - T). Ideally this is equal to 180 degrees.
+npts : int
     Number of phases to measure in each dimension. 
-    `x_phases = np.linspace(mux_min, mux_max, nsteps_per_dim)`,
-    `y_phases = np.linspace(muy_min, muy_max, nsteps_per_dim)`.
+    `x_phases = numpy.linspace(mux_min, mux_max, npts)`,
+    `y_phases = numpy.linspace(muy_max, muy_min, npts)`.
     
 Output files
 ------------
@@ -32,7 +32,7 @@ Then the following files are produced for each i:
      wire-scanner w[j], where Sigma_mn is the m,n entry in the transverse beam
      covariance matrix with m and n running from 1 to 4. 
 * 'model_fields_i.dat':
-    ID and field strength of every independent quadrupole.
+    Node ID and field strength of independent quadrupoles.
 """
 from lib.phase_controller import PhaseController, ws_ids
 from lib.phase_controller import init_twiss, design_betas_at_target
@@ -40,72 +40,73 @@ from lib.helpers import loadRTBT, write_traj_to_file
 from lib.utils import radians, multiply, delete_files_not_folders
 
 
+# Settings
+phase_coverage = 180.0
+npts = 12
+beta_lims = (40, 40)
+max_beta = 100
+
+
 # Setup
 #------------------------------------------------------------------------------
-delete_files_not_folders('./output/')
+# Clear output folder
+delete_files_not_folders('_output/')
 
 # Create lattice and phase controller
 sequence = loadRTBT()
 ref_ws_id = 'RTBT_Diag:WS24' 
 controller = PhaseController(sequence, ref_ws_id, init_twiss)
 
-# Settings
-phase_coverage = radians(180)
-nsteps_per_dim = 6
-beta_lims = (40, 40)
-max_beta = 100
-
-# Save wire-scanner indices in trajectory (for plotting)
-file = open('output/ws_index_in_trajectory.dat', 'w')
-for ws_id in ws_ids:
-    index = controller.trajectory.indicesForElement(ws_id)[0]
-    file.write('name = {}, index = {}\n'.format(ws_id, index))
-file.close()
+# Save default Twiss vs. position data
+filename = '_output/twiss_default.dat'
+write_traj_to_file(controller.get_twiss(), controller.positions, filename)
 
 
 # Scan
 #------------------------------------------------------------------------------
-phases = controller.get_phases_for_scan(phase_coverage, nsteps_per_dim)
+phases = controller.get_phases_for_scan(phase_coverage, npts)
 mux0, muy0 = controller.get_ref_ws_phases()
-
 print 'Initial phases at {}: {:.3f}, {:.3f}'.format(ref_ws_id, mux0, muy0)
-print 'Phase coverage = {:.3f} rad'.format(phase_coverage)
+print 'Phase coverage = {:.3f} deg'.format(phase_coverage)
 print 'Scan | mux  | muy [rad]'
 print '--------------------------'
 for i, (mux, muy) in enumerate(phases, start=1):
     print '{:<4} | {:.2f} | {:.2f}'.format(i, mux, muy)
 
+    
 for scan_index, (mux, muy) in enumerate(phases, start=1):
     
-    print 'Scan {}/{}'.format(scan_index, 2 * nsteps_per_dim)
+    print 'Scan {}/{}'.format(scan_index, npts)
     print 'Setting phases at {}.'.format(ref_ws_id)
     controller.set_ref_ws_phases(mux, muy, beta_lims, verbose=1)
     print 'Setting betas at target.'
     controller.set_betas_at_target(design_betas_at_target, max_beta, verbose=1)
-    print '  Max betas anywhere: {:.3f}, {:.3f}'.format(*controller.get_max_betas(stop=None))
+    max_betas_anywhere = controller.get_max_betas(stop=None)
+    print '  Max betas anywhere: {:.3f}, {:.3f}'.format(*max_betas_anywhere)
+    print ''
     
     # Save Twiss vs. position data
-    filename = 'output/twiss_{}.dat'.format(scan_index)
+    filename = '_output/twiss_{}.dat'.format(scan_index)
     write_traj_to_file(controller.get_twiss(), controller.positions, filename)
 
     # Save transfer matrix at each wire-scanner
-    file = open('output/transfer_mat_elems_{}.dat'.format(scan_index),'w')
+    file = open('_output/transfer_mat_elems_{}.dat'.format(scan_index),'w')
     fstr = 16 * '{} ' + '\n'
     for ws_id in ws_ids:
-        M = controller.get_transfer_matrix_at(ws_id)
+        M = controller.transfer_matrix(ws_id)
         elements = [elem for row in M for elem in row]
         file.write(fstr.format(*elements))
     file.close()
 
     # Save real space beam moments at each wire-scanner
-    file = open('output/moments_{}.dat'.format(scan_index), 'w')
+    file = open('_output/moments_{}.dat'.format(scan_index), 'w')
     for ws_id in ws_ids:
-        moments = controller.get_moments_at(ws_id)
+        moments = controller.moments(ws_id)
         file.write('{} {} {}\n'.format(*moments))
     file.close()
     
     # Save model quadrupole strengths
-    file = open('output/model_fields_{}.dat'.format(scan_index), 'w')
+    file = open('_output/model_fields_{}.dat'.format(scan_index), 'w')
     for quad_id in controller.ind_quad_ids:
         field = controller.get_field(quad_id)
         file.write('{}, {}\n'.format(quad_id, field))
@@ -113,8 +114,9 @@ for scan_index, (mux, muy) in enumerate(phases, start=1):
     
     print ''
     
+    
 # Save phases at each scan index
-file = open('output/phases.dat', 'w')
+file = open('_output/phases.dat', 'w')
 for (mux, muy) in phases:
     file.write('{}, {}\n'.format(mux, muy))
 file.close()

@@ -1,4 +1,8 @@
 """
+TO DO: Rewrite this script to reflect changes in /lib. Just copy over 
+`scan_model`.
+
+
 This script sets the phase advance at one wire-scanner in the RTBT using the 
 online model, then updates the live power supplies to reflect the model. 
 
@@ -38,89 +42,89 @@ let i be the scan index.
 * 'live_fields_i.dat':
     ID and field strength of every independent live quadrupole.
 """
-from lib.phase_controller import PhaseController, ws_ids
-from lib.phase_controller import init_twiss, design_betas_at_target
-from lib.helpers import loadRTBT, write_traj_to_file
-from lib.utils import radians, multiply, delete_files_not_folders
+# from lib.phase_controller import PhaseController, ws_ids
+# from lib.phase_controller import init_twiss, design_betas_at_target
+# from lib.helpers import loadRTBT, write_traj_to_file
+# from lib.utils import radians, multiply, delete_files_not_folders
 
 
-# Setup
-#------------------------------------------------------------------------------
-delete_files_not_folders('./output/')
+# # Setup
+# #------------------------------------------------------------------------------
+# delete_files_not_folders('./output/')
 
-# Create lattice and phase controller
-sequence = loadRTBT()
-ref_ws_id = 'RTBT_Diag:WS24' 
-controller = PhaseController(sequence, ref_ws_id, init_twiss)
+# # Create lattice and phase controller
+# sequence = loadRTBT()
+# ref_ws_id = 'RTBT_Diag:WS24' 
+# controller = PhaseController(sequence, ref_ws_id, init_twiss)
 
-# Settings
-scan_index = 0
-phase_coverage = radians(180)
-nsteps_per_dim = 6
-beta_lims = (40, 40)
-max_beta = 100
+# # Settings
+# scan_index = 0
+# phase_coverage = radians(180)
+# nsteps_per_dim = 6
+# beta_lims = (40, 40)
+# max_beta = 100
 
-# Save wire-scanner indices in trajectory (for plotting)
-file = open('output/ws_index_in_trajectory.dat', 'w')
-for ws_id in ws_ids:
-    index = controller.trajectory.indicesForElement(ws_id)[0]
-    file.write('name = {}, index = {}\n'.format(ws_id, index))
-file.close()
-
-
-# Scan
-#------------------------------------------------------------------------------
-phases = controller.get_phases_for_scan(phase_coverage, nsteps_per_dim)
-mux0, muy0 = controller.get_ref_ws_phases()
-
-print 'Initial phases at {}: {:.3f}, {:.3f}'.format(ref_ws_id, mux0, muy0)
-print 'Phase coverage = {:.3f} rad'.format(phase_coverage)
-print 'Scan | mux  | muy [rad]'
-print '--------------------------'
-for i, (mux, muy) in enumerate(phases, start=1):
-    print '{:<4} | {:.2f} | {:.2f}'.format(i, mux, muy)
-
-mux, muy = phases[scan_index]
-
-print 'Scan {}/{}'.format(scan_index, 2 * nsteps_per_dim)
-print 'Setting phases at {}.'.format(ref_ws_id)
-controller.set_ref_ws_phases(mux, muy, beta_lims, verbose=1)
-print 'Setting betas at target.'
-controller.set_betas_at_target(design_betas_at_target, max_beta, verbose=1)
-print '  Max betas anywhere: {:.3f}, {:.3f}'.format(*controller.get_max_betas(stop=None))
-
-# Sync live with model
-model_fields = controller.get_fields(controller.ind_quad_ids, 'model')
-controller.set_fields(controller.ind_quad_ids, model_fields, 'live',
-                      max_change=1e6, wait=0.5, max_iters=100)
-
-# Save transfer matrix at each wire-scanner
-file = open('output/transfer_mat_elems_{}.dat'.format(scan_index),'w')
-fstr = 16 * '{} ' + '\n'
-for ws_id in ws_ids:
-    M = controller.get_transfer_matrix_at(ws_id)
-    elements = [elem for row in M for elem in row]
-    file.write(fstr.format(*elements))
-file.close()
-
-# Save model and live quadrupole strengths
-file1 = open('output/model_fields_{}.dat'.format(scan_index), 'w')
-file2 = open('output/live_fields_{}.dat'.format(scan_index), 'w')
-for quad_id in controller.ind_quad_ids:
-    model_field = controller.get_field(quad_id, 'model')
-    live_field = controller.get_field(quad_id, 'live')
-    file1.write('{}, {}\n'.format(quad_id, model_field))
-    file2.write('{}, {}\n'.format(quad_id, live_field))
-file1.close()
-file2.close()
-
-# Save phases at each scan index
-file = open('output/phases.dat', 'w')
-for (mux, muy) in phases:
-    file.write('{}, {}\n'.format(mux, muy))
-file.close()
-
-# Beam moments need to be measured using wire-scanner....
+# # Save wire-scanner indices in trajectory (for plotting)
+# file = open('output/ws_index_in_trajectory.dat', 'w')
+# for ws_id in ws_ids:
+#     index = controller.trajectory.indicesForElement(ws_id)[0]
+#     file.write('name = {}, index = {}\n'.format(ws_id, index))
+# file.close()
 
 
-exit()
+# # Scan
+# #------------------------------------------------------------------------------
+# phases = controller.get_phases_for_scan(phase_coverage, nsteps_per_dim)
+# mux0, muy0 = controller.get_ref_ws_phases()
+
+# print 'Initial phases at {}: {:.3f}, {:.3f}'.format(ref_ws_id, mux0, muy0)
+# print 'Phase coverage = {:.3f} rad'.format(phase_coverage)
+# print 'Scan | mux  | muy [rad]'
+# print '--------------------------'
+# for i, (mux, muy) in enumerate(phases, start=1):
+#     print '{:<4} | {:.2f} | {:.2f}'.format(i, mux, muy)
+
+# mux, muy = phases[scan_index]
+
+# print 'Scan {}/{}'.format(scan_index, 2 * nsteps_per_dim)
+# print 'Setting phases at {}.'.format(ref_ws_id)
+# controller.set_ref_ws_phases(mux, muy, beta_lims, verbose=1)
+# print 'Setting betas at target.'
+# controller.set_betas_at_target(design_betas_at_target, max_beta, verbose=1)
+# print '  Max betas anywhere: {:.3f}, {:.3f}'.format(*controller.get_max_betas(stop=None))
+
+# # Sync live with model
+# model_fields = controller.get_fields(controller.ind_quad_ids, 'model')
+# controller.set_fields(controller.ind_quad_ids, model_fields, 'live',
+#                       max_change=1e6, wait=0.5, max_iters=100)
+
+# # Save transfer matrix at each wire-scanner
+# file = open('output/transfer_mat_elems_{}.dat'.format(scan_index),'w')
+# fstr = 16 * '{} ' + '\n'
+# for ws_id in ws_ids:
+#     M = controller.get_transfer_matrix_at(ws_id)
+#     elements = [elem for row in M for elem in row]
+#     file.write(fstr.format(*elements))
+# file.close()
+
+# # Save model and live quadrupole strengths
+# file1 = open('output/model_fields_{}.dat'.format(scan_index), 'w')
+# file2 = open('output/live_fields_{}.dat'.format(scan_index), 'w')
+# for quad_id in controller.ind_quad_ids:
+#     model_field = controller.get_field(quad_id, 'model')
+#     live_field = controller.get_field(quad_id, 'live')
+#     file1.write('{}, {}\n'.format(quad_id, model_field))
+#     file2.write('{}, {}\n'.format(quad_id, live_field))
+# file1.close()
+# file2.close()
+
+# # Save phases at each scan index
+# file = open('output/phases.dat', 'w')
+# for (mux, muy) in phases:
+#     file.write('{}, {}\n'.format(mux, muy))
+# file.close()
+
+# # Beam moments need to be measured using wire-scanner....
+
+
+# exit()
