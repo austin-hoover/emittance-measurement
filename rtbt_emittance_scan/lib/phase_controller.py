@@ -20,27 +20,34 @@ from xal.extension.solver.ProblemFactory import getInverseSquareMinimizerProblem
 from xal.extension.solver.SolveStopperFactory import maxEvaluationsStopper
 from xal.extension.solver.algorithm import SimplexSearchAlgorithm
 
-from utils import subtract, norm, step_func, put_angle_in_range
+from utils import subtract, norm, clip, put_angle_in_range
 from helpers import get_trial_vals, minimize, list_from_xal_matrix
 from lib.utils import radians
 
 
 # IDs of available wire-scanners in the RTBT
-ws_ids = ['RTBT_Diag:WS02', 'RTBT_Diag:WS20', 'RTBT_Diag:WS21',
+ws_ids = ['RTBT_Diag:WS02', 'RTBT_Diag:WS20', 'RTBT_Diag:WS21', 
           'RTBT_Diag:WS23', 'RTBT_Diag:WS24']
 
 # Default Twiss parameters at the lattice entrance
-init_twiss = {'alpha_x': -1.378, 'alpha_y':0.645, 
-              'beta_x': 6.243, 'beta_y':10.354, 
-              'eps_x': 20e-6, 'eps_y': 20e-6} 
-
-# Default beta functions at the target
-design_betas_at_target = (57.705, 7.909) 
+init_twiss = dict(alpha_x=-1.378, alpha_y=0.645, 
+                  beta_x=6.243, beta_y=10.354, 
+                  eps_x=20e-6, eps_y=20e-6)
 
 
 def node_ids(nodes):
     """Return list of node ids from list of accelerator nodes."""
     return [node.getId() for node in nodes]
+
+
+def compute_twiss(state, adaptor):
+    """Compute Twiss parameters from envelope trajectory state."""
+    twiss_x, twiss_y, _ = adaptor.computeTwissParameters(state)
+    alpha_x, beta_x = twiss_x.getAlpha(), twiss_x.getBeta()
+    alpha_y, beta_y = twiss_y.getAlpha(), twiss_y.getBeta()
+    eps_x, eps_y = twiss_x.getEmittance(), twiss_y.getEmittance()
+    mu_x, mu_y, _ = adaptor.computeBetatronPhase(state).toArray()
+    return mu_x, mu_y, alpha_x, alpha_y, beta_x, beta_y, eps_x, eps_y
 
 
 class PhaseController:
@@ -132,7 +139,8 @@ class PhaseController:
             self.ps_ub.append(ub)
             
         # Store the default field settings
-        self.default_fields = self.get_fields(self.ind_quad_ids, 'model')        
+        self.default_fields = self.get_fields(self.ind_quad_ids, 'model')    
+        self.default_betas_at_target = self.beta_funcs('RTBT:Tgt')
 
     def initialize_envelope(self):
         """Reset the envelope probe to the start of the lattice."""
@@ -152,30 +160,26 @@ class PhaseController:
         self.states = self.trajectory.getStatesViaIndexer()
         self.positions = [state.getPosition() for state in self.states]
         return self.trajectory
-        
-    def get_twiss(self):
-        """Return Twiss parameters at every state in the trajectory."""
-        twiss = []
-        for state in self.states:
-            twiss_x, twiss_y, _ = self.adaptor.computeTwissParameters(state)
-            alpha_x, beta_x = twiss_x.getAlpha(), twiss_x.getBeta()
-            alpha_y, beta_y = twiss_y.getAlpha(), twiss_y.getBeta()
-            eps_x, eps_y = twiss_x.getEmittance(), twiss_y.getEmittance()
-            mu_x, mu_y, _ = self.adaptor.computeBetatronPhase(state).toArray()
-            twiss.append([mu_x, mu_y, alpha_x, alpha_y, beta_x, beta_y, eps_x, eps_y])
-        return twiss
     
-    def moments(self, node_id):
-        """Return <xx>, <yy>, and <xy> moments at at node entrance."""
+    def tracked_twiss(self):
+        """Return Twiss parameters at each state in trajectory."""
+        return [compute_twiss(state, self.adaptor) for state in self.states]
+    
+    def twiss(self, node_id):
+        """Return Twiss parameters at node entrance."""
         state = self.trajectory.statesForElement(node_id)[0]
-        Sigma = state.getCovarianceMatrix()
-        sig_xx = Sigma.getElem(0, 0)
-        sig_yy = Sigma.getElem(2, 2)
-        sig_xy = Sigma.getElem(0, 2)
-        return [sig_xx, sig_yy, sig_xy]
+        return compute_twiss(state, self.adaptor)
     
+    def phases(self, node_id):
+        """Return phase advances (mod 2pi) from start to node entrance."""
+        return self.twiss(node_id)[:2]
+    
+    def beta_funcs(self, node_id):
+        """Return beta functions at node entrance."""
+        return self.twiss(node_id)[4:6]
+        
     def transfer_matrix(self, node_id):
-        """Return transfer matrix from start to node entrance."""
+        """Return transfer matrix elements from start to node entrance."""
         scenario = Scenario.newScenarioFor(self.sequence)
         algorithm = AlgorithmFactory.createTransferMapTracker(self.sequence)
         probe = ProbeFactory.getTransferMapProbe(self.sequence, algorithm)
@@ -184,9 +188,10 @@ class PhaseController:
         state = probe.getTrajectory().statesForElement(node_id)[0]
         transfer_matrix = state.getTransferMap().getFirstOrder()
         transfer_matrix = list_from_xal_matrix(transfer_matrix)
-        return [row[:4] for row in transfer_matrix[:4]]
+        transfer_matrix_elements = [row[:4] for row in transfer_matrix[:4]]
+        return transfer_matrix_elements
         
-    def get_max_betas(self, start='RTBT_Mag:QH02', stop='RTBT_Diag:WS24'):
+    def max_betas(self, start='RTBT_Mag:QH02', stop='RTBT_Diag:WS24'):
         """Return maximum x and y beta functions from start to stop node.
         
         Setting start=None starts tracks from the beginning of the lattice, and 
@@ -194,19 +199,23 @@ class PhaseController:
         """
         lo = None if start is None else self.trajectory.indicesForElement(start)[0]
         hi = None if stop is None else self.trajectory.indicesForElement(stop)[-1]
-        twiss = self.get_twiss()
         beta_xs, beta_ys = [], []
-        for (mu_x, mu_y, alpha_x, alpha_y, beta_x, beta_y, eps_x, eps_y) in twiss[lo:hi]:
+        for params in self.tracked_twiss()[lo:hi]:
+            mu_x, mu_y, alpha_x, alpha_y, beta_x, beta_y, eps_x, eps_y = params
             beta_xs.append(beta_x)
             beta_ys.append(beta_y)
         return max(beta_xs), max(beta_ys)
-    
-    def get_betas_at_target(self):
-        """Using current trajectory, return (beta_x, beta) at the target."""
-        return self.get_twiss()[-1][4:6]
 
     def set_ref_ws_phases(self, mu_x, mu_y, beta_lims=(40, 40), verbose=0):
-        """Set x and y phases at reference wire-scanner.
+        """Set x and y phases from start to the reference wire-scanner. 
+        
+        TODO: It's currently is assumed that the reference wire-scanner is
+        WS24. We therefore vary all but the last five quadrupoles to set the 
+        phase advances, then vary the last five quadrupoles to set the beta
+        functions at the target. If we want to choose a different wire-scanner, 
+        then we'll need to only change the magnets that wire-scanner. The 
+        downstream magnets should then be used to set the beta functions at the 
+        target.
 
         Parameters
         ----------
@@ -227,21 +236,21 @@ class PhaseController:
                 self.controller = controller
                 self.beta_lims = beta_lims
                 self.target_phases = [mu_x, mu_y]
+                self.ref_ws_id = controller.ref_ws_id
+                self.quad_ids = controller.ind_quad_ids[:-5]
                 
             def score(self, trial, variables):
                 fields = get_trial_vals(trial, variables)   
-                quad_ids = self.controller.ind_quad_ids[:-5]
-                self.controller.set_fields(quad_ids, fields, 'model')
+                self.controller.set_fields(self.quad_ids, fields, 'model')
                 self.controller.track()
-                calc_phases = self.controller.get_ref_ws_phases()
+                calc_phases = self.controller.phases(self.ref_ws_id)
                 residuals = subtract(calc_phases, self.target_phases)
                 return norm(residuals) + self.penalty_function()
             
             def penalty_function(self):
-                max_betas = self.controller.get_max_betas() 
                 penalty = 0.
-                for max_beta, beta_lim in zip(max_betas, self.beta_lims):
-                    penalty += step_func(max_beta - beta_lim)
+                for max_beta, beta_lim in zip(self.controller.max_betas(), self.beta_lims):
+                    penalty += clip(max_beta - beta_lim, 0)
                 return penalty**2
             
         scorer = MyScorer(self)
@@ -253,25 +262,17 @@ class PhaseController:
         fields = minimize(scorer, init_fields, var_names, bounds)
         if verbose > 0:
             print '  Desired phases : {:.3f}, {:.3f}'.format(mu_x, mu_y)
-            print '  Calc phases    : {:.3f}, {:.3f}'.format(*self.get_ref_ws_phases())
-            print '  Max betas (Q03 - WS24): {:.3f}, {:.3f}'.format(*self.get_max_betas())
-            print '  Betas at target: {:.3f}, {:.3f}'.format(*self.get_betas_at_target())
+            print '  Calc phases    : {:.3f}, {:.3f}'.format(*self.phases(self.ref_ws_id))
+            print '  Max betas (Q03 - WS24): {:.3f}, {:.3f}'.format(*self.max_betas())
+            print '  Betas at target: {:.3f}, {:.3f}'.format(*self.beta_funcs('RTBT:Tgt'))
         return fields
-        
-    def get_ref_ws_phases(self):
-        """Return x and y phases (mod 2pi) at reference wire-scanner."""
-        ws_state = self.trajectory.statesForElement(self.ref_ws_id)[0]
-        ws_phases = self.adaptor.computeBetatronPhase(ws_state)
-        return ws_phases.getx(), ws_phases.gety()
     
-    def set_betas_at_target(self, betas, max_beta=100., verbose=0):
-        """Vary quads after last wire-scanner to set betas at the target.
+    def constrain_size_on_target(self, max_beta_before_target=100., verbose=0):
+        """Vary quads after WS24 to constrain beam size on target.
         
         Parameters
         ----------
-        betas : (beta_x, beta_y)
-            The desired beta functions at the target.
-        max_beta : float
+        max_beta_before_target : float
             Maximum beta function to allow between ws24 and the target.
         verbose : int
             If greater than zero, print a before/after summary.
@@ -279,22 +280,20 @@ class PhaseController:
         class MyScorer(Scorer):
             def __init__(self, controller):
                 self.controller = controller
-                self.betas = betas
-                self.max_beta = max_beta
+                self.quad_ids = controller.ind_quad_ids[-5:]
                 
             def score(self, trial, variables):
                 fields = get_trial_vals(trial, variables)  
-                quad_ids = self.controller.ind_quad_ids[-5:]
-                self.controller.set_fields(quad_ids, fields, 'model')
+                self.controller.set_fields(self.quad_ids, fields, 'model')
                 self.controller.track()
-                residuals = subtract(self.betas, self.controller.get_betas_at_target())
+                residuals = subtract(self.controller.default_betas_at_target, 
+                                     self.controller.beta_funcs('RTBT:Tgt'))
                 return norm(residuals) + self.penalty_function()
                 
             def penalty_function(self):
-                max_betas = self.controller.get_max_betas('RTBT_Diag:WS24', None)
                 penalty = 0.
-                for max_beta in max_betas:
-                    penalty += step_func(max_beta - self.max_beta)            
+                for max_beta in self.controller.max_betas('RTBT_Diag:WS24', None):
+                    penalty += clip(max_beta - max_beta_before_target, 0)          
                 return penalty**2
             
         scorer = MyScorer(self)
@@ -304,8 +303,8 @@ class PhaseController:
         fields = minimize(scorer, init_fields, var_names, bounds)
         self.set_fields(self.ind_quad_ids[-5:], fields, 'model')
         if verbose > 0:
-            print '  Desired betas: {:.3f}, {:.3f}'.format(*betas)
-            print '  Calc betas   : {:.3f}, {:.3f}'.format(*self.get_betas_at_target())
+            print '  Desired betas: {:.3f}, {:.3f}'.format(*self.default_betas_at_target)
+            print '  Calc betas   : {:.3f}, {:.3f}'.format(*self.beta_funcs('RTBT:Tgt'))
             
     def get_phases_for_scan(self, phase_coverage=180.0, npts=3):
         """Create array of phases for scan. 
@@ -340,7 +339,7 @@ class PhaseController:
             return phases
         
         self.restore_default_optics('model')
-        mu_x0, mu_y0 = self.get_ref_ws_phases()
+        mu_x0, mu_y0 = self.phases(self.ref_ws_id)
         x_phases = get_phases(mu_x0)
         y_phases = get_phases(mu_y0, reverse=True)
         return [(mu_x, mu_y) for mu_x, mu_y in zip(x_phases, y_phases)]
@@ -408,33 +407,35 @@ class PhaseController:
         """
         if opt == 'model':
             for quad_id, field in zip(quad_ids, fields):
-                self.set_field(quad_id, field, opt)
+                self.set_field(quad_id, field, 'model')
         elif opt == 'live':
-            # Move the quad fields close enough to the desired values...
+            # Move all quad fields close enough to the desired values...
             stop, iters = False, 0
             while not stop and iters < max_iters:
                 stop, iters = True, iters + 1
                 for quad_id, field in zip(quad_ids, fields):
                     book = self.get_field(quad_id, 'book')                    
                     change_needed = field - book
-                    max_abs_change = max_frac_change * min(abs(field), abs(book))     
+                    max_abs_change = max_frac_change * min(abs(field), abs(book)) 
                     if abs(change_needed) > max_abs_change:
                         stop = False
-                        if change_needed > 0:
+                        if change_needed >= 0.0:
                             new_field = book + max_abs_change
                         else:
-                            new_field = book - max_abs_change
+                            new_field = book - max_abs_change                            
                         self.set_field(quad_id, new_field, 'book')
                         self.set_field(quad_id, new_field, 'live')
                 time.sleep(sleep_time)
             # ... and then set them to the desired values.
             for quad_id, field in zip(quad_ids, fields): 
-                self.set_field(quad_id, field, opt)
+                self.set_field(quad_id, field, 'book')
+                self.set_field(quad_id, field, 'live')
                 
-    def restore_default_optics(self, opt='model'):
+    def restore_default_optics(self, opt='model', **kws):
         """Reset quadrupole fields to design values."""
-        self.set_fields(self.ind_quad_ids, self.default_fields, opt)
+        self.set_fields(self.ind_quad_ids, self.default_fields, opt, **kws)
         
-    def sync_live_with_model(self):
+    def sync_live_with_model(self, **kws):
+        """Set the live quad fields to model values."""
         model_fields = self.get_fields(self.ind_quad_ids, 'model')
-        self.set_fields(self.ind_quad_ids, model_fields, 'live')
+        self.set_fields(self.ind_quad_ids, model_fields, 'live', **kws)

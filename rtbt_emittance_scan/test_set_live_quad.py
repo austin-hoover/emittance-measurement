@@ -4,12 +4,14 @@ the value to verify that it worked.
 """
 import time
 from lib.phase_controller import PhaseController, init_twiss
-from lib.helpers import loadRTBT
+from lib.helpers import load_sequence
+
 
 quad_id = 'RTBT_Mag:QH02'
 frac_change = 0.1
 
-sequence = loadRTBT()
+
+sequence = load_sequence('RTBT')
 controller = PhaseController(sequence)
 
 init_field = controller.get_field(quad_id, 'live')

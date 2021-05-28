@@ -49,9 +49,13 @@ def dot(A, x):
 
 
 # Other functions
-def step_func(x):
-    "Heaviside step function."
-    return x if x >= 0 else 0
+def clip(x, lo=None, hi=None):
+    "Enforce lo <= x <= hi."
+    if lo is not None and x < lo:
+        x = lo
+    elif hi is not None and x > hi:
+        x = hi
+    return x
 
 
 def radians(angle_in_degrees):

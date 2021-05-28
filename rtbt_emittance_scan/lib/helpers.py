@@ -11,13 +11,13 @@ from xal.extension.solver.ProblemFactory import getInverseSquareMinimizerProblem
 from xal.extension.solver.SolveStopperFactory import maxEvaluationsStopper
 from xal.extension.solver.algorithm import SimplexSearchAlgorithm
 
-from utils import subtract, norm, step_func, dot, put_angle_in_range
+from utils import subtract, norm, dot
 
 
-def loadRTBT():
+def load_sequence(sequence_name):
     """Load the RTBT sequence of the SNS accelerator."""
     accelerator = XMLDataManager.loadDefaultAccelerator()
-    return accelerator.getComboSequence('RTBT')
+    return accelerator.getComboSequence(sequence_name)
 
 
 def write_traj_to_file(data, positions, filename):
