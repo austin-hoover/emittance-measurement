@@ -9,9 +9,9 @@ Note: the script needs to be run with chief operator privileges.
 """
 import time
 from xal.ca import Channel, ChannelFactory
-from lib.helpers import loadRTBT
+from lib.helpers import load_sequence
 
-sequence = loadRTBT()
+sequence = load_sequence('RTBT')
 channel_factory = ChannelFactory.defaultFactory()
 
 file = open('field_limits/default_field_limits.dat', 'r')

@@ -8,9 +8,15 @@ Note: the script needs to be run with chief operator privileges.
 """
 from xal.ca import Channel, ChannelFactory
 from lib.phase_controller import PhaseController
-from lib.helpers import loadRTBT
+from lib.helpers import load_sequence
 
-sequence = loadRTBT()
+
+ILO = 0.0
+IHI = 1000.0
+BLO = 0.0
+BHI = 30.0
+
+sequence = load_sequence('RTBT')
 channel_factory = ChannelFactory.defaultFactory()
 controller = PhaseController(sequence)
 
@@ -25,13 +31,13 @@ for ps_id in controller.ind_ps_ids:
         print '  old = {:.3f}'.format(channel.getValFlt())
         file.write('{}, {}\n'.format(channel_id, channel.getValFlt()))
         if key in ['B.LOLO', 'B.LOW']:
-            channel.putVal(0.0)
+            channel.putVal(BLO)
         elif key in ['B.HIHI', 'B.HIGH']:
-            channel.putVal(30.0)
+            channel.putVal(BHI)
         elif key in ['I.LOLO', 'I.LOW']:
-            channel.putVal(0.0)
+            channel.putVal(ILO)
         elif key in ['I.HIHI', 'I.HIGH']:
-            channel.putVal(1000.0)
+            channel.putVal(IHI)
         print '  new = {:.3f}'.format(channel.getValFlt())
 file.close()
 
