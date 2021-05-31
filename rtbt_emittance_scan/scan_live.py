@@ -42,7 +42,7 @@ let i be the scan index.
 from lib.phase_controller import PhaseController, ws_ids
 from lib.phase_controller import init_twiss
 from lib.helpers import load_sequence, write_traj_to_file
-from lib.utils import delete_files_not_folders, radians
+from lib.utils import radians
 
 
 # Settings
@@ -58,7 +58,6 @@ field_set_kws = dict(max_frac_change=0.05, max_iters=100, sleep_time=0.1)
 
 # Setup
 #------------------------------------------------------------------------------
-delete_files_not_folders('_output/')
 sequence = load_sequence('RTBT')
 controller = PhaseController(sequence, ref_ws_id, init_twiss, kin_energy)
 
