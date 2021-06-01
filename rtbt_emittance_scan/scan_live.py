@@ -47,7 +47,7 @@ from lib.utils import radians
 
 
 # Settings
-scan_index = 0
+scan_index = 11
 ref_ws_id = 'RTBT_Diag:WS24' 
 phase_coverage = 180.0 # deg
 npts = 12
@@ -78,7 +78,7 @@ print '--------------------------'
 for i, (mux, muy) in enumerate(phases, start=1):
     print '{:<4} | {:.2f} | {:.2f}'.format(i, mux, muy)
 
-print 'Scan {}/{}.'.format(scan_index, npts)
+print 'Scan {}/{}.'.format(scan_index + 1, npts)
 print 'Setting phases at {}...'.format(ref_ws_id)
 mux, muy = phases[scan_index]
 controller.set_ref_ws_phases(mux, muy, beta_lims, verbose=1)

@@ -426,9 +426,7 @@ class PhaseController:
                     book = self.get_field(quad_id, 'book')                    
                     change_needed = field - book
                     max_abs_change = max_frac_change * abs(book) 
-
                     if abs(change_needed) > max_abs_change:
-                        print quad_id, max_frac_change, max_abs_change
                         stop = False
                         if change_needed >= 0.0:
                             new_field = book + max_abs_change
@@ -437,7 +435,6 @@ class PhaseController:
                         self.set_field(quad_id, new_field, 'book')
                         self.set_field(quad_id, new_field, 'live')
                 time.sleep(sleep_time)
-                print ''
             #... and then set them to the desired values.
             for quad_id, field in zip(quad_ids, fields): 
                 self.set_field(quad_id, field, 'book')
