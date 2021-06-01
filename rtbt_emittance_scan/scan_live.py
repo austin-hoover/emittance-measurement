@@ -39,6 +39,7 @@ let i be the scan index.
 * 'live_fields_i.dat':
     ID and field strength of every independent live quadrupole.
 """
+import time
 from lib.phase_controller import PhaseController, ws_ids
 from lib.phase_controller import init_twiss
 from lib.helpers import load_sequence, write_traj_to_file
@@ -88,7 +89,9 @@ max_betas_anywhere = controller.max_betas(stop=None)
 print '  Max betas anywhere: {:.3f}, {:.3f}.'.format(*max_betas_anywhere)
 
 print 'Syncing live quads with model...'
-controller.sync_live_with_model(**field_set_kws)
+quad_ids = controller.ind_quad_ids
+model_fields = controller.get_fields(quad_ids, 'model')
+controller.set_fields(quad_ids, model_fields, 'live', max_frac_change=0.01, sleep_time=0.5)
 
 # Save Twiss vs. position data.
 filename = '_output/twiss_{}.dat'.format(scan_index)
@@ -104,6 +107,7 @@ for ws_id in ws_ids:
 file.close()
 
 # Save model quadrupole strengths.
+time.sleep(1.0)
 file = open('_output/model_fields_{}.dat'.format(scan_index), 'w')
 for quad_id in controller.ind_quad_ids:
     field = controller.get_field(quad_id, 'model')
@@ -118,7 +122,7 @@ for quad_id in controller.ind_quad_ids:
 file.close()
     
 # Save phases at each scan index.
-file = open('output/phases.dat', 'w')
+file = open('_output/phases.dat', 'w')
 for (mux, muy) in phases:
     file.write('{}, {}\n'.format(mux, muy))
 file.close()

@@ -22,7 +22,7 @@ from xal.extension.solver.algorithm import SimplexSearchAlgorithm
 
 from utils import subtract, norm, clip, put_angle_in_range
 from helpers import get_trial_vals, minimize, list_from_xal_matrix
-from lib.utils import radians
+from lib.utils import radians, linspace
 
 
 # IDs of available wire-scanners in the RTBT
@@ -387,8 +387,16 @@ class PhaseController:
             self.book_channels[quad_id].putVal(node.toCAFromField(field))
         else:
             raise ValueError("opt must be in {'model', 'live', 'book'}")
+
+    def set_fields_live(self, quad_ids, fields):
+        for quad_id, field in zip(quad_ids, fields):
+            book = self.get_field(quad_id, 'book')
+            change_needed = field - book
+            max_abs_change = 0.01 * abs(book)
             
-    def set_fields(self, quad_ids, fields, opt='model', max_frac_change=0.05, 
+            
+        
+    def set_fields(self, quad_ids, fields, opt='model', max_frac_change=0.01, 
                    max_iters=100, sleep_time=0.1):
         """Set the fields of each quadrupole in the list.
         
@@ -411,13 +419,16 @@ class PhaseController:
         elif opt == 'live':
             # Move all quad fields close enough to the desired values...
             stop, iters = False, 0
+            print iters
             while not stop and iters < max_iters:
-                stop, iters = True, iters + 1
+                stop, iters = True, iters + 1                
                 for quad_id, field in zip(quad_ids, fields):
                     book = self.get_field(quad_id, 'book')                    
                     change_needed = field - book
-                    max_abs_change = max_frac_change * min(abs(field), abs(book)) 
+                    max_abs_change = max_frac_change * abs(book) 
+
                     if abs(change_needed) > max_abs_change:
+                        print quad_id, max_frac_change, max_abs_change
                         stop = False
                         if change_needed >= 0.0:
                             new_field = book + max_abs_change
@@ -426,8 +437,14 @@ class PhaseController:
                         self.set_field(quad_id, new_field, 'book')
                         self.set_field(quad_id, new_field, 'live')
                 time.sleep(sleep_time)
-            # ... and then set them to the desired values.
+                print ''
+            #... and then set them to the desired values.
             for quad_id, field in zip(quad_ids, fields): 
+                self.set_field(quad_id, field, 'book')
+                self.set_field(quad_id, field, 'live')
+
+        elif opt == 'live no step':
+            for quad_id, field in zip(quad_ids, fields):
                 self.set_field(quad_id, field, 'book')
                 self.set_field(quad_id, field, 'live')
                 
