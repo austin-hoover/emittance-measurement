@@ -8,8 +8,8 @@ from lib.helpers import load_sequence
 from lib.utils import multiply
 
 
-frac_change = 0.02
-field_set_kws = dict(max_frac_change=0.05, max_iters=100, sleep_time=0.1)
+frac_change = 0.03
+field_set_kws = dict(max_frac_change=0.01, sleep_time=0.5)
 
 
 sequence = load_sequence('RTBT')
@@ -22,15 +22,14 @@ controller.set_fields(quad_ids, target_fields, 'live', **field_set_kws)
 time.sleep(3.0)
 final_fields = controller.get_fields(quad_ids, 'live')
 
-
-#print 'quadrupole id | initial | target  |  final  | error'
-#print '------------------------------------------------------'
-#for i, quad_id in enumerate(quad_ids):
-#    print '{} | {:>7.4f} | {:>7.4f} | {:>7.4f} | {:>7.2e}'.format(
-#        quad_id, 
-#        init_fields[i], 
-#        target_fields[i], 
-#        final_fields[i],
-#        target_fields[i] - final_fields[i]
-#    ) 
+print 'quadrupole id | initial | target  |  final  | error'
+print '------------------------------------------------------'
+for i, quad_id in enumerate(quad_ids):
+    print '{} | {:>7.4f} | {:>7.4f} | {:>7.4f} | {:>7.2e}'.format(
+       quad_id, 
+       init_fields[i], 
+       target_fields[i], 
+       final_fields[i],
+       target_fields[i] - final_fields[i]
+   ) 
 exit()

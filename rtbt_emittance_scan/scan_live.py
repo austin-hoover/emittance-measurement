@@ -54,7 +54,7 @@ npts = 12
 beta_lims = (40, 40) # [m]
 max_beta_before_target = 100 # [m]
 kin_energy = 1.0 # [GeV]
-field_set_kws = dict(max_frac_change=0.05, max_iters=100, sleep_time=0.1)
+field_set_kws = dict(max_frac_change=0.01, sleep_time=0.5, max_iters=100)
 
 
 # Setup
@@ -91,7 +91,7 @@ print '  Max betas anywhere: {:.3f}, {:.3f}.'.format(*max_betas_anywhere)
 print 'Syncing live quads with model...'
 quad_ids = controller.ind_quad_ids
 model_fields = controller.get_fields(quad_ids, 'model')
-controller.set_fields(quad_ids, model_fields, 'live', max_frac_change=0.01, sleep_time=0.5)
+controller.set_fields(quad_ids, model_fields, 'live', **field_set_kws)
 
 # Save Twiss vs. position data.
 filename = '_output/twiss_{}.dat'.format(scan_index)
@@ -127,7 +127,11 @@ for (mux, muy) in phases:
     file.write('{}, {}\n'.format(mux, muy))
 file.close()
 
-# # Beam moments need to be measured using wire-scanner.
-# # ...
+# Restore optics to their default settings
+controller.restore_default_optics('live', **field_set_kws)
 
 exit()
+
+
+# Beam moments need to be measured using wire-scanner.
+# ...

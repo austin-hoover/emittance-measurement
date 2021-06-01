@@ -6,6 +6,7 @@ TODO: Double check initial Twiss parameters. Did they come from MADX?
 """
 import math
 import time
+import warnings
 
 from xal.ca import Channel, ChannelFactory
 from xal.smf import Accelerator, AcceleratorSeq 
@@ -387,18 +388,12 @@ class PhaseController:
             self.book_channels[quad_id].putVal(node.toCAFromField(field))
         else:
             raise ValueError("opt must be in {'model', 'live', 'book'}")
-
-    def set_fields_live(self, quad_ids, fields):
-        for quad_id, field in zip(quad_ids, fields):
-            book = self.get_field(quad_id, 'book')
-            change_needed = field - book
-            max_abs_change = 0.01 * abs(book)
-            
-            
         
     def set_fields(self, quad_ids, fields, opt='model', max_frac_change=0.01, 
-                   max_iters=100, sleep_time=0.1):
+                   max_iters=100, sleep_time=0.5):
         """Set the fields of each quadrupole in the list.
+        
+        Note that the book values are always kept equal to the live values. 
         
         Parameters
         ----------
@@ -410,13 +405,23 @@ class PhaseController:
             Whether to change the model, live or book value.
         max_frac_change : float
             Maximum fractional field change. This is to ensure that no errors 
-            are thrown due to live and book values being too far apart.
-        max_iters
+            are thrown when the book values are changed, which will occur if 
+            the change is beyond 5%. We found 1% to be a safe value.
+        max_iters : int
+            Maximum iterations when stepping the quads. This is just so the while
+            loop is guaranteed to terminate; it will never be approached.
+        sleep_time : float
+            Time to pause between field updates [seconds]. We tried 0.1 seconds and
+            it didn't work, but 0.5 seconds seemed to be a safe value.
         """
         if opt == 'model':
             for quad_id, field in zip(quad_ids, fields):
                 self.set_field(quad_id, field, 'model')
         elif opt == 'live':
+            if sleep_time < 0.5:
+                warnings.warn('sleep_time < 0.5 seconds... may trip MPS.')
+            if max_frac_change > 0.01:
+                warnings.warn('max_frac_change > 0.01... may trip MPS.')
             # Move all quad fields close enough to the desired values...
             stop, iters = False, 0
             print iters
@@ -437,11 +442,6 @@ class PhaseController:
                 time.sleep(sleep_time)
             #... and then set them to the desired values.
             for quad_id, field in zip(quad_ids, fields): 
-                self.set_field(quad_id, field, 'book')
-                self.set_field(quad_id, field, 'live')
-
-        elif opt == 'live no step':
-            for quad_id, field in zip(quad_ids, fields):
                 self.set_field(quad_id, field, 'book')
                 self.set_field(quad_id, field, 'live')
                 
