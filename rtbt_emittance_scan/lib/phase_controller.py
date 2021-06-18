@@ -35,6 +35,14 @@ init_twiss = dict(alpha_x=-1.378, alpha_y=0.645,
                   beta_x=6.243, beta_y=10.354, 
                   eps_x=20e-6, eps_y=20e-6)
 
+# Quad ids with independent power supplies
+rtbt_ind_quad_ids = ['RTBT_Mag:QH02', 'RTBT_Mag:QV03', 'RTBT_Mag:QH04', 
+                     'RTBT_Mag:QV05', 'RTBT_Mag:QH06', 'RTBT_Mag:QH12', 
+                     'RTBT_Mag:QV13', 'RTBT_Mag:QH14', 'RTBT_Mag:QV15', 
+                     'RTBT_Mag:QH16', 'RTBT_Mag:QV17', 'RTBT_Mag:QH18', 
+                     'RTBT_Mag:QV19', 'RTBT_Mag:QH26', 'RTBT_Mag:QV27', 
+                     'RTBT_Mag:QH28', 'RTBT_Mag:QV29', 'RTBT_Mag:QH30']
+
 
 def node_ids(nodes):
     """Return list of node ids from list of accelerator nodes."""
@@ -80,6 +88,8 @@ class PhaseController:
             Node id of reference wire-scanner.
         init_twiss : dict
             Dictionary containing 'ax', 'ay', 'bx', 'by', 'ex', 'ey'.
+        kin_energy : float
+            Beam kinetic energy in GeV.
         """
         self.ref_ws_id = ref_ws_id
         self.sequence = sequence
@@ -111,7 +121,7 @@ class PhaseController:
                 self.ind_quad_nodes.append(quad_node)
         self.ind_quad_ids = node_ids(self.ind_quad_nodes)
         self.ind_ps_ids = node_ids(self.ind_ps_nodes)
-        
+            
         # Create dictionary of shared power supplies. Each key is an 
         # independent quad id, and each value is a list of quad ids which share
         # power with the indepent quad. We need this because the quads in the 
@@ -128,7 +138,7 @@ class PhaseController:
         for quad_id, ps_node in zip(self.quad_ids, self.ps_nodes):
             channel = ps_node.findChannel(MagnetMainSupply.FIELD_BOOK_HANDLE)
             self.book_channels[quad_id] = channel
-        
+
         # Determine upper and lower bounds on power supplies.
         self.ps_lb, self.ps_ub = [], []
         for quad_node, ps_node in zip(self.ind_quad_nodes, self.ind_ps_nodes):
