@@ -124,7 +124,7 @@ file.close()
 # Save phases at each scan index.
 file = open('_output/phases.dat', 'w')
 for (mux, muy) in phases:
-    file.write('{}, {}\n'.format(mux, muy))
+    file.write('{} {}\n'.format(mux, muy))
 file.close()
 
 # Restore optics to their default settings
