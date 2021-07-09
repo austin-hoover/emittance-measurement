@@ -5,12 +5,14 @@ import sys
 from java.awt import BorderLayout
 from java.awt import Color
 from java.awt import Dimension
+from java.awt import Font
 from java.awt import GridLayout
 from java.awt.event import ActionListener
 from java.awt.event import WindowAdapter
 from javax.swing import BorderFactory
 from javax.swing import BoxLayout
 from javax.swing import GroupLayout
+from javax.swing import JButton
 from javax.swing import JComboBox
 from javax.swing import JFrame
 from javax.swing import JLabel
@@ -41,11 +43,11 @@ class GUI:
         time_panel.add(time_text.getTimeTextField(), BorderLayout.CENTER)
         self.frame.add(time_panel, BorderLayout.SOUTH)
 
-        # Add text fields on left panel
+        # Text fields panel
         #------------------------------------------------------------------------
-        self.left_panel = JPanel()  
-        layout = GroupLayout(self.left_panel)
-        self.left_panel.setLayout(layout)
+        self.text_fields_panel = JPanel()  
+        layout = GroupLayout(self.text_fields_panel)
+        self.text_fields_panel.setLayout(layout)
         layout.setAutoCreateContainerGaps(True)
         layout.setAutoCreateGaps(True)
         group_labels = layout.createParallelGroup()
@@ -103,7 +105,37 @@ class GUI:
         max_frac_change_text_field = JTextField('0.01', text_field_width)
         add_field(max_frac_change_label, max_frac_change_text_field)
 
+        # Fill left panel
+        self.left_panel = JPanel()
+        self.left_panel.setLayout(BoxLayout(self.left_panel, BoxLayout.Y_AXIS))
+        
+        label = JLabel('Settings')
+        font = label.getFont()
+        label.setFont(Font(font.name, font.BOLD, int(1.1 * font.size)));
+        self.left_panel.add(label)
+        
+        self.left_panel.add(self.text_fields_panel)
+        
+        label = JLabel('Actions')
+        label.setFont(Font(font.name, font.BOLD, int(1.1 * font.size)));
+        self.left_panel.add(label)
+        
         self.frame.add(self.left_panel, BorderLayout.WEST)
+        
+        
+        # Create buttons panel
+        #------------------------------------------------------------------------ 
+        self.buttons_panel = JPanel()
+        self.buttons_panel.setLayout(BoxLayout(self.buttons_panel, BoxLayout.Y_AXIS))
+        
+        self.calc_optics_button = JButton('Calculate model optics')  
+        self.buttons_panel.add(self.calc_optics_button)
+        
+        self.set_optics_button = JButton('Set live optics')
+        self.buttons_panel.add(self.set_optics_button)
+        
+        self.left_panel.add(self.buttons_panel)
+        
         
         # Create plotting panels
         #------------------------------------------------------------------------
@@ -122,6 +154,7 @@ class GUI:
         self.right_panel.add(self.phase_plot_panel)
         self.right_panel.add(self.bpm_plot_panel)
         self.frame.add(self.right_panel, BorderLayout.CENTER)
+        
 
     def launch(self):
         
@@ -132,6 +165,25 @@ class GUI:
         self.frame.addWindowListener(WindowCloser())
         self.frame.setSize(Dimension(1000, 800))
         self.frame.show()        
+        
+        
+        
+        
+ 
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
         
         
 class LinePlotPanel(JPanel):
