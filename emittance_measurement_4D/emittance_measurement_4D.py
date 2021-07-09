@@ -139,10 +139,12 @@ class LinePlotPanel(JPanel):
         etched_border = BorderFactory.createEtchedBorder()
         self.setBorder(etched_border)
         self.plot = FunctionGraphsJPanel()
-        self.plot.setLegendButtonVisible(True)
+        self.plot.setLegendButtonVisible(False)
         self.plot.setName(title)
         self.plot.setAxisNames(xlabel, ylabel)
         self.plot.setBorder(etched_border)
+        self.plot.setGraphBackGroundColor(Color.white)
+        self.plot.setGridLineColor(Color(245, 245, 245))
         self.add(self.plot)
         self.graph_data = BasicGraphData()
 
@@ -150,7 +152,6 @@ class LinePlotPanel(JPanel):
         self.plot.removeAllGraphData()
         self.graph_data.addPoint(x, y)   
             
-        
             
         
 gui = GUI()
