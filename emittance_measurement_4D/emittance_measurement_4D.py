@@ -1,27 +1,23 @@
-import sys
-import math
-import types
 import time
-import random
-import os
+import sys
 
-from java.lang import *
-from javax.swing import *
 from java.awt import BorderLayout
 from java.awt import Color
 from java.awt import Dimension
-from java.awt.event import WindowAdapter
-from java.beans import PropertyChangeListener
+from java.awt import GridLayout
 from java.awt.event import ActionListener
-from java.util import ArrayList
-from java.io import File
-from java.net import URL
+from java.awt.event import WindowAdapter
+from javax.swing import BorderFactory
+from javax.swing import BoxLayout
+from javax.swing import GroupLayout
+from javax.swing import JComboBox
+from javax.swing import JFrame
+from javax.swing import JLabel
+from javax.swing import JPanel
+from javax.swing import JTextField
 
-from xal.extension.application import XalDocument
-from xal.extension.application import ApplicationAdaptor
-from xal.extension.application.smf import AcceleratorApplication
-from xal.extension.application.smf import AcceleratorDocument
-from xal.extension.application.smf import AcceleratorWindow
+from xal.extension.widgets.plot import BasicGraphData
+from xal.extension.widgets.plot import FunctionGraphsJPanel
 from xal.smf import AcceleratorSeqCombo
 from xal.smf.data import XMLDataManager
 
@@ -30,130 +26,132 @@ from lib.phase_controller import PhaseController
 
 
 
-# Local Classes that are not subclasses of XAL Accelerator Framework
-#------------------------------------------------------------------------------
 
-class EmittMeas_Window:
-
-    def __init__(self, empty_document): 
-        # `empty_document` is the parent document for all controllers
-        self.empty_document = empty_document
-        self.frame = None
-        self.center_panel = JPanel(BorderLayout())
-        self.main_panel = JPanel(BorderLayout())
-        self.time_txt = DateAndTimeText()
-
-        # Add time and text panels
-        time_panel = JPanel(BorderLayout())
-        time_panel.add(self.time_txt.getTimeTextField(), BorderLayout.CENTER)
-        self.center_panel.add(self.main_panel, BorderLayout.CENTER)
-#         tmp_panel = JPanel(BorderLayout())
-#         tmp_panel.add(time_panel, BorderLayout.WEST)
-        self.center_panel.add(time_panel, BorderLayout.SOUTH)
-
-    def setFrame(self, xal_frame, main_panel):
-        self.frame = xal_frame
-        main_panel.add(self.center_panel, BorderLayout.CENTER)
-
-    def getMainPanel(self):
-        return self.main_panel
-
-    def getMessageTextField(self):
-        return self.message_text_field
-
+class GUI:
     
-class EmittMeas_Document:
-    """Put all logic and GUI in this class."""
     def __init__(self):
-        self.phase_controller = PhaseController(self)
         
-        self.empty_window = None
-        self.tabbed_pane = JTabbedPane()
-        self.tabbed_pane.add('RTBT Phase Controller', self.phase_controller.main_panel)
+        # Create frame
+        #------------------------------------------------------------------------
+        self.frame = JFrame("RTBT Phase Controller")
+        self.frame.getContentPane().setLayout(BorderLayout())
+        time_text = DateAndTimeText()
+        time_panel = JPanel(BorderLayout())
+        time_panel.add(time_text.getTimeTextField(), BorderLayout.CENTER)
+        self.frame.add(time_panel, BorderLayout.SOUTH)
 
-    def setWindow(self,empty_window):
-        self.empty_window = empty_window
-        self.empty_window.getMainPanel().add(self.tabbed_pane, BorderLayout.CENTER)
+        # Add text fields on left panel
+        #------------------------------------------------------------------------
+        self.left_panel = JPanel()  
+        layout = GroupLayout(self.left_panel)
+        self.left_panel.setLayout(layout)
+        layout.setAutoCreateContainerGaps(True)
+        layout.setAutoCreateGaps(True)
+        group_labels = layout.createParallelGroup()
+        group_fields = layout.createParallelGroup()
+        group_rows = layout.createSequentialGroup()
+        layout.setHorizontalGroup(layout.createSequentialGroup()
+                                  .addGroup(group_labels)
+                                  .addGroup(group_fields))
+        layout.setVerticalGroup(group_rows)
 
-    def getWindow(self):
-        return self.empty_window
+        def add_field(label, field):
+            group_labels.addComponent(label)
+            group_fields.addComponent(field)
+            group_rows.addGroup(
+                layout.createParallelGroup()
+                    .addComponent(label)
+                    .addComponent(
+                        field, 
+                        GroupLayout.PREFERRED_SIZE, 
+                        GroupLayout.DEFAULT_SIZE, 
+                        GroupLayout.PREFERRED_SIZE
+                    )
+            )
 
-    def getMessageTextField(self):
-        if(self.empty_window != None):
-            return self.empty_window.getMessageTextField()
-        else:
-            return None
+        text_field_width = 12
 
+        energy_label = JLabel('Energy [GeV]')
+        energy_text_field = JTextField('1.0', text_field_width)
+        add_field(energy_label, energy_text_field)
 
-# SUBCLASSES of XAL Accelerator Framework
-#------------------------------------------------------------------------------
-class EmittMeas_OpenXAL_Document(AcceleratorDocument):
-    def __init__(self,url = None):
-        self.main_panel = JPanel(BorderLayout())
+        ref_ws_id_label = JLabel('Ref. wire-scanner')
+        ws_ids = ['RTBT_Diag:WS20', 'RTBT_Diag:WS21', 
+                  'RTBT_Diag:WS23', 'RTBT_Diag:WS24']
+        ref_ws_id_dropdown = JComboBox(ws_ids);
+        ref_ws_id_dropdown.setSelectedIndex(3);
+        add_field(ref_ws_id_label, ref_ws_id_dropdown)
 
-        #==== set up accelerator 
-        if(not self.loadDefaultAccelerator()):
-            self.applySelectedAcceleratorWithDefaultPath("/default/main.xal")
+        phase_coverage_label = JLabel('Phase coverage [deg]')
+        phase_coverage_text_field = JTextField('180.0', text_field_width)
+        add_field(phase_coverage_label, phase_coverage_text_field)
 
-        self.empty_document = EmittMeas_Document()
-        self.empty_window = EmittMeas_Window(self.empty_document)
+        n_steps_label = JLabel('Total steps')
+        n_steps_text_field = JTextField('12', text_field_width)
+        add_field(n_steps_label, n_steps_text_field)
 
-        if(url != None):
-            self.setSource(url)
-            self.readEmittMeas_Document(url)
-            #super class method - will show "Save" menu active
-            if(url.getProtocol().find("jar") >= 0):
-                self.setHasChanges(False)
-            else:
-                self.setHasChanges(True)
+        max_beta_label = JLabel("<html>Max. &beta; [m/rad]<html>")
+        max_beta_text_field = JTextField('40.0', text_field_width)
+        add_field(max_beta_label, max_beta_text_field)
 
-    def makeMainWindow(self):
-        self.mainWindow = EmittMeas_OpenXAL_Window(self)
-        self.mainWindow.getContentPane().setLayout(BorderLayout())
-        self.mainWindow.getContentPane().add(self.main_panel, BorderLayout.CENTER)
-        self.empty_window.setFrame(self.mainWindow, self.main_panel)
-        self.empty_document.setWindow(self.empty_window)
-        self.mainWindow.setSize(Dimension(800, 600))
+        sleep_time_label = JLabel('Sleep time [s]')
+        sleep_time_text_field = JTextField('0.5', text_field_width)
+        add_field(sleep_time_label, sleep_time_text_field)
 
-    def saveDocumentAs(	self,url):
-        # here you save of the application to the XML file 
-        pass
+        max_frac_change_label = JLabel('Max. frac. field change')
+        max_frac_change_text_field = JTextField('0.01', text_field_width)
+        add_field(max_frac_change_label, max_frac_change_text_field)
 
-    def readEmittMeas_Document(self,url):
-        # here you put the initialization of the application from the XML file 
-        pass
+        self.frame.add(self.left_panel, BorderLayout.WEST)
+        
+        # Create plotting panels
+        #------------------------------------------------------------------------
+        self.beta_plot_panel = LinePlotPanel(xlabel='Position [m]', 
+                                             ylabel='[m/rad]', 
+                                             title='Model beta function vs. position')
+        self.phase_plot_panel = LinePlotPanel(xlabel='Position [m]', 
+                                              ylabel='Phase adv. mod 2pi', 
+                                              title='Model phase advance vs. position')
+        self.bpm_plot_panel = LinePlotPanel(xlabel='BPM', 
+                                            ylabel='Amplitude [mm]', 
+                                            title='BMP amplitudes')
+        self.right_panel = JPanel()
+        self.right_panel.setLayout(BoxLayout(self.right_panel, BoxLayout.Y_AXIS))
+        self.right_panel.add(self.beta_plot_panel)
+        self.right_panel.add(self.phase_plot_panel)
+        self.right_panel.add(self.bpm_plot_panel)
+        self.frame.add(self.right_panel, BorderLayout.CENTER)
 
+    def launch(self):
+        class WindowCloser(WindowAdapter):
+            def windowClosing(self, windowEvent):
+                sys.exit(1)
+        
+        self.frame.addWindowListener(WindowCloser())
+        self.frame.setSize(Dimension(1000, 800))
+        self.frame.show()
+        
+        
+class LinePlotPanel(JPanel):
 
-class EmittMeas_OpenXAL_Window(AcceleratorWindow):
-    def __init__(self,empty_openxal_document):
-        AcceleratorWindow.__init__(self,empty_openxal_document)
+    def __init__(self, xlabel='', ylabel='', title=''):
+        self.setLayout(GridLayout(1, 1))
+        etched_border = BorderFactory.createEtchedBorder()
+        self.setBorder(etched_border)
+        self.plot = FunctionGraphsJPanel()
+        self.plot.setLegendButtonVisible(True)
+        self.plot.setName(title)
+        self.plot.setAxisNames(xlabel, ylabel)
+        self.plot.setBorder(etched_border)
+        self.add(self.plot)
+        self.graph_data = BasicGraphData()
 
-    def getMainPanel(self):
-        return self.document.main_panel
-
-    
-class EmittMeas_OpenXAL_Main(ApplicationAdaptor):
-    def __init__(self):
-        ApplicationAdaptor.__init__(self)
-        script_dir = os.path.dirname(os.path.realpath(__file__))
-        self.setResourcesParentDirectoryWithPath(script_dir)
-
-    def readableDocumentTypes(self):
-        return ["empty",]
-
-    def writableDocumentTypes(self):
-        return self.readableDocumentTypes()
-
-    def newEmptyDocument(self, *args):
-        if len( args ) > 0:
-            return ApplicationAdaptor.newEmptyDocument(self,*args)
-        else:
-            return self.newDocument(None)
-
-    def newDocument(self,location):
-        return EmittMeas_OpenXAL_Document(location)
-
-    def applicationName(self):
-        return "4D Emittance Measurement"
-
-AcceleratorApplication.launch(EmittMeas_OpenXAL_Main())
+    def updateGraphData(self, x, y):
+        self.plot.removeAllGraphData()
+        self.graph_data.addPoint(x, y)   
+            
+        
+            
+        
+gui = GUI()
+gui.launch()

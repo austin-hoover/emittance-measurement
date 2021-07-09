@@ -1,95 +1,111 @@
-from java.awt import BorderLayout
-from java.awt import FlowLayout
-from java.awt import Color
-from java.awt.event import ActionEvent
-from java.awt.event import ActionListener
-from javax.swing import GroupLayout
-from javax.swing import JComboBox
-from javax.swing import JButton
-from javax.swing import JLabel
-from javax.swing import JPanel
-from javax.swing import JTabbedPane
-from javax.swing import JTextField
+from xal.ca import Channel
+from xal.ca import ChannelFactory
+from xal.extension.solver import Trial
+from xal.extension.solver import Variable
+from xal.extension.solver import Scorer
+from xal.extension.solver import Stopper
+from xal.extension.solver import Solver
+from xal.extension.solver import Problem
+from xal.extension.solver.ProblemFactory import getInverseSquareMinimizerProblem
+from xal.extension.solver.SolveStopperFactory import maxEvaluationsStopper
+from xal.extension.solver.algorithm import SimplexSearchAlgorithm
+from xal.model.probe import Probe
+from xal.model.probe.traj import Trajectory
+from xal.sim.scenario import AlgorithmFactory
+from xal.sim.scenario import ProbeFactory
+from xal.sim.scenario import Scenario
+from xal.smf import Accelerator
+from xal.smf import AcceleratorSeq 
+from xal.smf.data import XMLDataManager
+from xal.smf.impl import MagnetMainSupply
+from xal.tools.beam import Twiss
+from xal.tools.beam import PhaseVector
+from xal.tools.beam import CovarianceMatrix
+from xal.tools.beam.calc import SimpleSimResultsAdaptor
+from xal.tools.beam.calc import CalculationsOnBeams
+
+
+ws_ids = ['RTBT_Diag:WS02', 'RTBT_Diag:WS20', 'RTBT_Diag:WS21', 
+          'RTBT_Diag:WS23', 'RTBT_Diag:WS24']
+
+init_twiss = {
+    'alpha_x': -1.378, 
+    'alpha_y': 0.645,             
+    'beta_x': 6.243, 
+    'beta_y': 10.354, 
+    'eps_x': 20e-6, # arbitrary
+    'eps_y': 20e-6, # arbitrary
+}
+
+
+def node_ids(nodes):
+    """Return list of node ids from list of accelerator nodes."""
+    return [node.getId() for node in nodes]
+
+
+def compute_twiss(state, adaptor):
+    """Compute Twiss parameters from envelope trajectory state."""
+    twiss_x, twiss_y, _ = adaptor.computeTwissParameters(state)
+    alpha_x, beta_x = twiss_x.getAlpha(), twiss_x.getBeta()
+    alpha_y, beta_y = twiss_y.getAlpha(), twiss_y.getBeta()
+    eps_x, eps_y = twiss_x.getEmittance(), twiss_y.getEmittance()
+    mu_x, mu_y, _ = adaptor.computeBetatronPhase(state).toArray()
+    return mu_x, mu_y, alpha_x, alpha_y, beta_x, beta_y, eps_x, eps_y
 
 
 class PhaseController:
+
+    def __init__(self, ref_ws_id, kin_energy):
+        self.ref_ws_id = ref_ws_id
+        self.sequence = sequence
+        self.scenario = Scenario.newScenarioFor(sequence)
+#         self.scenario.setSynchronizationMode(Scenario.SYNC_MODE_LIVE)
+#         self.scenario.resync()
+        self.algorithm = AlgorithmFactory.createEnvelopeTracker(sequence)
+        self.algorithm.setUseSpacecharge(False)
+        self.probe = ProbeFactory.getEnvelopeProbe(sequence, self.algorithm)
+        self.probe.setBeamCurrent(0.0)
+        self.probe.setKineticEnergy(kin_energy * 1e9)
+        self.scenario.setProbe(self.probe)
+        self.init_twiss = init_twiss
+        self.track()
+
+    def initialize_envelope(self):
+        """Reset the envelope probe to the start of the lattice."""
+        self.scenario.resetProbe()
+        twissX = Twiss(init_twiss['alpha_x'], init_twiss['beta_x'], init_twiss['eps_x'])
+        twissY = Twiss(init_twiss['alpha_y'], init_twiss['beta_y'], init_twiss['eps_y'])
+        twissZ = Twiss(0, 1, 0)
+        Sigma = CovarianceMatrix().buildCovariance(twissX, twissY, twissZ)
+        self.probe.setCovariance(Sigma)
+        
+    def track(self):
+        """Return envelope trajectory through the lattice."""
+        self.initialize_envelope()
+        self.scenario.run()
+        self.trajectory = self.probe.getTrajectory()
+        self.adaptor = SimpleSimResultsAdaptor(self.trajectory) 
+        self.states = self.trajectory.getStatesViaIndexer()
+        self.positions = [state.getPosition() for state in self.states]
+        return self.trajectory
     
-    def __init__(self, emitt_meas_document):
-        self.emitt_meas_document = emitt_meas_document
-        self.main_panel = JPanel(BorderLayout())
+    def tracked_twiss(self):
+        """Return Twiss parameters at each state in trajectory."""
+        return [compute_twiss(state, self.adaptor) for state in self.states]
         
         
-        test_button = JButton('Test')
-        test_button.addActionListener(TestButtonListener(self))
-        self.main_panel.add(test_button, BorderLayout.EAST)
         
-#         energy_label = JLabel('Energy [GeV]')        
-#         self.energy_text_field = JTextField()
-#         self.energy_text_field.setForeground(Color.black)
-#         self.left_panel.add(self.energy_text_field)
-    
-#         label1 = JLabel('mylabel1')
-#         label2 = JLabel('mylabel2')
-#         textfield1 = JTextField()
-#         textfield2 = JTextField()
-                
-        panel = JPanel()  
-        layout = GroupLayout(panel)
-        panel.setLayout(layout);
-        layout.setAutoCreateContainerGaps(True)
-        layout.setAutoCreateGaps(True)
-        
-        group_labels = layout.createParallelGroup()
-        group_fields = layout.createParallelGroup()
-        group_rows = layout.createSequentialGroup()
-        
-        layout.setHorizontalGroup(layout.createSequentialGroup()
-            .addGroup(group_labels)
-            .addGroup(group_fields))
-        layout.setVerticalGroup(group_rows)
-                        
-        def add_field(label, field):
-            group_labels.addComponent(label)
-            group_fields.addComponent(field)
-            group_rows.addGroup(layout.createParallelGroup()
-                .addComponent(label)
-                .addComponent(field, GroupLayout.PREFERRED_SIZE, GroupLayout.DEFAULT_SIZE, GroupLayout.PREFERRED_SIZE))
-        
-        text_field_width = 12
-        
-        energy_label = JLabel('Energy [GeV]')
-        energy_text_field = JTextField('1.0', text_field_width)
-        add_field(energy_label, energy_text_field)
-        
-        ref_ws_id_label = JLabel('Ref. wire-scanner')
-        ws_ids = ['RTBT_Diag:WS20', 'RTBT_Diag:WS21', 'RTBT_Diag:WS23', 'RTBT_Diag:WS24']
-        ref_ws_id_dropdown = JComboBox(ws_ids);
-        ref_ws_id_dropdown.setSelectedIndex(3);
-        add_field(ref_ws_id_label, ref_ws_id_dropdown)
-        
-        phase_coverage_label = JLabel('Phase coverage [deg]')
-        phase_coverage_text_field = JTextField('180.0', text_field_width)
-        add_field(phase_coverage_label, phase_coverage_text_field)
-        
-        n_steps_label = JLabel('Total steps')
-        n_steps_text_field = JTextField('12', text_field_width)
-        add_field(n_steps_label, n_steps_text_field)
-        
-        max_beta_label = JLabel("<html>Max &beta; [m/rad]<html>")
-        max_beta_text_field = JTextField('40.0', text_field_width)
-        add_field(max_beta_label, max_beta_text_field)
-            
-        self.main_panel.add(panel, BorderLayout.WEST)
-
 
         
         
         
-class TestButtonListener(ActionListener):
-    def __init__(self, phase_controller):
-        self.phase_controller = phase_controller
+        
+        
+        
+# class TestButtonListener(ActionListener):
+#     def __init__(self, phase_controller):
+#         self.phase_controller = phase_controller
 
-    def actionPerformed(self, actionEvent):
-        return
-#         text = self.phase_controller.energy_text_field.getText()
-#         print text
+#     def actionPerformed(self, actionEvent):
+#         energy = float(self.phase_controller.energy_text_field.getText())
+#         print 'Energy = {}'.format(energy)
