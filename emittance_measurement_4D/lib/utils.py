@@ -19,7 +19,7 @@ def shape(array):
 def linspace(start, stop, num=10):
     if num < 2:
         return [start]
-    step = (stop - start) / (num - 1)
+    step = float(stop - start) / (num - 1)
     return [start + i*step for i in range(num)]
 
 

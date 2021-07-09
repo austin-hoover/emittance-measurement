@@ -1,3 +1,4 @@
+import math
 import time
 import sys
 
@@ -23,7 +24,7 @@ from xal.smf.data import XMLDataManager
 
 from lib.time_and_date_lib import DateAndTimeText
 from lib.phase_controller import PhaseController
-
+from lib.utils import linspace
 
 
 
@@ -123,13 +124,14 @@ class GUI:
         self.frame.add(self.right_panel, BorderLayout.CENTER)
 
     def launch(self):
+        
         class WindowCloser(WindowAdapter):
             def windowClosing(self, windowEvent):
                 sys.exit(1)
         
         self.frame.addWindowListener(WindowCloser())
         self.frame.setSize(Dimension(1000, 800))
-        self.frame.show()
+        self.frame.show()        
         
         
 class LinePlotPanel(JPanel):
@@ -138,21 +140,21 @@ class LinePlotPanel(JPanel):
         self.setLayout(GridLayout(1, 1))
         etched_border = BorderFactory.createEtchedBorder()
         self.setBorder(etched_border)
-        self.plot = FunctionGraphsJPanel()
-        self.plot.setLegendButtonVisible(False)
-        self.plot.setName(title)
-        self.plot.setAxisNames(xlabel, ylabel)
-        self.plot.setBorder(etched_border)
-        self.plot.setGraphBackGroundColor(Color.white)
-        self.plot.setGridLineColor(Color(245, 245, 245))
-        self.add(self.plot)
-        self.graph_data = BasicGraphData()
+        self.graph = FunctionGraphsJPanel()
+        self.graph.setLegendButtonVisible(False)
+        self.graph.setName(title)
+        self.graph.setAxisNames(xlabel, ylabel)
+        self.graph.setBorder(etched_border)
+        self.graph.setGraphBackGroundColor(Color.white)
+        self.graph.setGridLineColor(Color(245, 245, 245))
+        self.add(self.graph)
+        self.data = BasicGraphData()
 
-    def updateGraphData(self, x, y):
-        self.plot.removeAllGraphData()
-        self.graph_data.addPoint(x, y)   
+    def set_data(self, x, y):
+        self.graph.removeAllGraphData()
+        self.data.addPoint(x, y)  
+        self.graph.addGraphData(self.data)
             
             
-        
 gui = GUI()
 gui.launch()
