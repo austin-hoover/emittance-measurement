@@ -55,15 +55,16 @@ def compute_twiss(state, adaptor):
 
 class PhaseController:
 
-    def __init__(self, ref_ws_id, kin_energy):
+    def __init__(self, ref_ws_id='RTBT_Diag:WS24', kin_energy=1.0):
         self.ref_ws_id = ref_ws_id
-        self.sequence = sequence
-        self.scenario = Scenario.newScenarioFor(sequence)
-#         self.scenario.setSynchronizationMode(Scenario.SYNC_MODE_LIVE)
-#         self.scenario.resync()
-        self.algorithm = AlgorithmFactory.createEnvelopeTracker(sequence)
+        self.accelerator = XMLDataManager.loadDefaultAccelerator()
+        self.sequence = self.accelerator.getComboSequence('RTBT')
+        self.scenario = Scenario.newScenarioFor(self.sequence)
+        self.scenario.setSynchronizationMode(Scenario.SYNC_MODE_LIVE)
+        self.scenario.resync()
+        self.algorithm = AlgorithmFactory.createEnvelopeTracker(self.sequence)
         self.algorithm.setUseSpacecharge(False)
-        self.probe = ProbeFactory.getEnvelopeProbe(sequence, self.algorithm)
+        self.probe = ProbeFactory.getEnvelopeProbe(self.sequence, self.algorithm)
         self.probe.setBeamCurrent(0.0)
         self.probe.setKineticEnergy(kin_energy * 1e9)
         self.scenario.setProbe(self.probe)

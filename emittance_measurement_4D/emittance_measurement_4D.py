@@ -29,6 +29,14 @@ from lib.phase_controller import PhaseController
 from lib.utils import linspace
 
 
+COLOR_CYCLE = [
+    Color(0.0, 0.44705882, 0.69803922),
+    Color(0.83529412, 0.36862745, 0.0),
+    Color(0.0, 0.61960784, 0.45098039),
+    Color(0.8, 0.4745098, 0.65490196),
+    Color(0.94117647, 0.89411765, 0.25882353),
+    Color(0.3372549, 0.70588235, 0.91372549),
+]
 
 class GUI:
     
@@ -155,7 +163,27 @@ class GUI:
         self.right_panel.add(self.bpm_plot_panel)
         self.frame.add(self.right_panel, BorderLayout.CENTER)
         
+        
+        # Create phase controller
+        #------------------------------------------------------------------------
+        self.phase_controller = PhaseController()
+        self.update_plots()
+        
+        
+    def update_plots(self):
+        beta_x_list, beta_y_list = [], []
+        phases_x_list, phases_y_list = [], []
+        for params in self.phase_controller.tracked_twiss():
+            mu_x, mu_y, alpha_x, alpha_y, beta_x, beta_y, eps_x, eps_y = params
+            beta_x_list.append(beta_x)
+            beta_y_list.append(beta_y)
+            phases_x_list.append(mu_x)
+            phases_y_list.append(mu_y)
+        positions = self.phase_controller.positions
+        self.beta_plot_panel.set_data(positions, beta_x_list, beta_y_list)
+        self.phase_plot_panel.set_data(positions, phases_x_list, phases_y_list)
 
+        
     def launch(self):
         
         class WindowCloser(WindowAdapter):
@@ -200,12 +228,19 @@ class LinePlotPanel(JPanel):
         self.graph.setGraphBackGroundColor(Color.white)
         self.graph.setGridLineColor(Color(245, 245, 245))
         self.add(self.graph)
-        self.data = BasicGraphData()
+        self.data_beta_x = BasicGraphData()
+        self.data_beta_y = BasicGraphData()
+        for data, color in zip([self.data_beta_x, self.data_beta_y], COLOR_CYCLE):
+            data.setGraphColor(color)
+            data.setLineThick(3)
+            data.setGraphPointSize(0)
 
-    def set_data(self, x, y):
+    def set_data(self, positions, beta_x, beta_y):
         self.graph.removeAllGraphData()
-        self.data.addPoint(x, y)  
-        self.graph.addGraphData(self.data)
+        self.data_beta_x.addPoint(positions, beta_x)  
+        self.data_beta_y.addPoint(positions, beta_y)  
+        self.graph.addGraphData(self.data_beta_x)
+        self.graph.addGraphData(self.data_beta_y)
             
             
 gui = GUI()
