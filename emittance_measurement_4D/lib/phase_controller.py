@@ -70,7 +70,7 @@ class PhaseController:
         self.scenario.setProbe(self.probe)
         self.init_twiss = init_twiss
         self.track()
-
+        
     def initialize_envelope(self):
         """Reset the envelope probe to the start of the lattice."""
         self.scenario.resetProbe()

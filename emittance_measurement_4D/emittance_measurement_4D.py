@@ -18,6 +18,7 @@ from javax.swing import JFrame
 from javax.swing import JLabel
 from javax.swing import JPanel
 from javax.swing import JTextField
+from javax.swing.event import DocumentListener
 
 from xal.extension.widgets.plot import BasicGraphData
 from xal.extension.widgets.plot import FunctionGraphsJPanel
@@ -41,7 +42,8 @@ COLOR_CYCLE = [
 class GUI:
     
     def __init__(self):
-        
+        self.phase_controller = PhaseController()
+
         # Create frame
         #------------------------------------------------------------------------
         self.frame = JFrame("RTBT Phase Controller")
@@ -83,35 +85,39 @@ class GUI:
         text_field_width = 12
 
         energy_label = JLabel('Energy [GeV]')
-        energy_text_field = JTextField('1.0', text_field_width)
-        add_field(energy_label, energy_text_field)
+        self.energy_text_field = JTextField('1.0', text_field_width)
+        self.energy_text_field.addActionListener(
+            EnergyTextFieldListener(self.energy_text_field, self.phase_controller))
+        add_field(energy_label, self.energy_text_field)
 
         ref_ws_id_label = JLabel('Ref. wire-scanner')
         ws_ids = ['RTBT_Diag:WS20', 'RTBT_Diag:WS21', 
                   'RTBT_Diag:WS23', 'RTBT_Diag:WS24']
-        ref_ws_id_dropdown = JComboBox(ws_ids);
-        ref_ws_id_dropdown.setSelectedIndex(3);
-        add_field(ref_ws_id_label, ref_ws_id_dropdown)
+        self.ref_ws_id_dropdown = JComboBox(ws_ids)
+        self.ref_ws_id_dropdown.setSelectedIndex(3)
+        self.ref_ws_id_dropdown.addActionListener(
+            RefWsIdTextFieldListener(self.ref_ws_id_dropdown, self.phase_controller))
+        add_field(ref_ws_id_label, self.ref_ws_id_dropdown)
 
         phase_coverage_label = JLabel('Phase coverage [deg]')
-        phase_coverage_text_field = JTextField('180.0', text_field_width)
-        add_field(phase_coverage_label, phase_coverage_text_field)
+        self.phase_coverage_text_field = JTextField('180.0', text_field_width)
+        add_field(phase_coverage_label, self.phase_coverage_text_field)
 
         n_steps_label = JLabel('Total steps')
-        n_steps_text_field = JTextField('12', text_field_width)
-        add_field(n_steps_label, n_steps_text_field)
+        self.n_steps_text_field = JTextField('12', text_field_width)
+        add_field(n_steps_label, self.n_steps_text_field)
 
         max_beta_label = JLabel("<html>Max. &beta; [m/rad]<html>")
-        max_beta_text_field = JTextField('40.0', text_field_width)
-        add_field(max_beta_label, max_beta_text_field)
+        self.max_beta_text_field = JTextField('40.0', text_field_width)
+        add_field(max_beta_label, self.max_beta_text_field)
 
         sleep_time_label = JLabel('Sleep time [s]')
-        sleep_time_text_field = JTextField('0.5', text_field_width)
-        add_field(sleep_time_label, sleep_time_text_field)
+        self.sleep_time_text_field = JTextField('0.5', text_field_width)
+        add_field(sleep_time_label, self.sleep_time_text_field)
 
         max_frac_change_label = JLabel('Max. frac. field change')
-        max_frac_change_text_field = JTextField('0.01', text_field_width)
-        add_field(max_frac_change_label, max_frac_change_text_field)
+        self.max_frac_change_text_field = JTextField('0.01', text_field_width)
+        add_field(max_frac_change_label, self.max_frac_change_text_field)
 
         # Fill left panel
         self.left_panel = JPanel()
@@ -161,14 +167,8 @@ class GUI:
         self.right_panel.add(self.beta_plot_panel)
         self.right_panel.add(self.phase_plot_panel)
         self.right_panel.add(self.bpm_plot_panel)
-        self.frame.add(self.right_panel, BorderLayout.CENTER)
-        
-        
-        # Create phase controller
-        #------------------------------------------------------------------------
-        self.phase_controller = PhaseController()
-        self.update_plots()
-        
+        self.frame.add(self.right_panel, BorderLayout.CENTER)        
+    
         
     def update_plots(self):
         beta_x_list, beta_y_list = [], []
@@ -196,23 +196,30 @@ class GUI:
         
         
         
+class EnergyTextFieldListener(ActionListener):
+    
+    def __init__(self, text_field, phase_controller):
+        self.text_field = text_field
+        self.phase_controller = phase_controller
         
- 
+    def actionPerformed(self, event):
+        kin_energy = float(self.text_field.getText())
+        self.phase_controller.probe.setKineticEnergy(1e9 * kin_energy)
+        print 'Updated kin_energy to {:.3e} [eV]'.format(
+            self.phase_controller.probe.getKineticEnergy())
+
         
+class RefWsIdTextFieldListener(ActionListener):
+    
+    def __init__(self, dropdown, phase_controller):
+        self.dropdown = dropdown
+        self.phase_controller = phase_controller
         
+    def actionPerformed(self, event):
+        self.phase_controller.ref_ws_id = self.dropdown.getSelectedItem()
+        print 'Updated ref_ws_id to {}'.format(self.phase_controller.ref_ws_id)
         
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
+
         
 class LinePlotPanel(JPanel):
 
