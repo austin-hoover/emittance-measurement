@@ -33,8 +33,9 @@ from xal.smf import AcceleratorSeqCombo
 from xal.smf.data import XMLDataManager
 
 from lib.time_and_date_lib import DateAndTimeText
-from lib.phase_controller import PhaseController
+from lib.phase_controller import PhaseController, node_ids
 from lib import utils
+from lib.helpers import write_traj_to_file
 
 
 COLOR_CYCLE = [
@@ -51,10 +52,22 @@ ws_ids = ['RTBT_Diag:WS20', 'RTBT_Diag:WS21', 'RTBT_Diag:WS23', 'RTBT_Diag:WS24'
                 
 
 class GUI:
+    """Description here.
     
+    Attributes
+    ----------
+    phase_controller : PhaseController
+        This object calculates the optics needed to obtain a certain phase 
+        advance at the wire-scanner. It also changes the optics in the live
+        machine.
+    model_fields_list : List
+        Holds the model field strengths for each scan index. It is filled when 
+        the `Calculate model fields` button is pressed.
+    """
     def __init__(self, live=True):
         self.live = live
         self.phase_controller = PhaseController()
+        self.model_fields_list = []
 
         # Main frame
         #------------------------------------------------------------------------
@@ -80,12 +93,10 @@ class GUI:
         self.ref_ws_id_dropdown = JComboBox(ws_ids)
         self.energy_text_field = JTextField('1.0', text_field_width)
         self.phase_coverage_text_field = JTextField('180.0', text_field_width)
-        
         formatter = NumberFormat.getIntegerInstance()
         formatter.setGroupingUsed(False)
         self.n_steps_text_field = JFormattedTextField(formatter)
         self.n_steps_text_field.setValue(12)
-        
         self.max_beta_text_field = JTextField('40.0', text_field_width)
         self.calculate_model_optics_button = JButton('Calculate model optics for scan')
         
@@ -97,12 +108,12 @@ class GUI:
         
         # Build text fields panel
         self.model_calc_panel = AlignedLabeledComponentsPanel()
-           
         self.model_calc_panel.add_row(ref_ws_id_label, self.ref_ws_id_dropdown)
         self.model_calc_panel.add_row(energy_label, self.energy_text_field)
         self.model_calc_panel.add_row(phase_coverage_label, self.phase_coverage_text_field)
         self.model_calc_panel.add_row(n_steps_label, self.n_steps_text_field)
         self.model_calc_panel.add_row(max_beta_label, self.max_beta_text_field)
+    
     
         # Machine update panel
         #------------------------------------------------------------------------ 
@@ -114,16 +125,17 @@ class GUI:
         # Components        
         self.sleep_time_text_field = JTextField('0.5', text_field_width)
         self.max_frac_change_text_field = JTextField('0.01', text_field_width)
-        self.set_optics_button = JButton('Set live optics')
+        self.set_live_optics_button = JButton('Set live optics')
         self.quad_settings_table = JTable(QuadSettingsTableModel(self))
         self.quad_settings_table.setShowGrid(True)
         
         n_steps = int(self.n_steps_text_field.getText())
-        scan_indices = list(range(n_steps))
+        scan_indices = ['default'] + list(range(n_steps))
         self.scan_index_dropdown = JComboBox(scan_indices)
         
         # Action listeners
         self.n_steps_text_field.addActionListener(NStepsTextFieldListener(self))
+        self.set_live_optics_button.addActionListener(SetLiveOpticsButtonListener(self))
         
         # Build panel
         self.machine_update_panel = JPanel()
@@ -133,7 +145,7 @@ class GUI:
         temp_panel.add_row(max_frac_change_label, self.max_frac_change_text_field)  
         temp_panel.add_row(scan_index_label, self.scan_index_dropdown)
         self.machine_update_panel.add(temp_panel)
-        self.machine_update_panel.add(self.set_optics_button)
+        self.machine_update_panel.add(self.set_live_optics_button)
         self.machine_update_panel.add(self.quad_settings_table.getTableHeader())
         self.machine_update_panel.add(self.quad_settings_table)
         
@@ -161,6 +173,7 @@ class GUI:
         self.left_panel.add(self.machine_update_panel)
         
         self.frame.add(self.left_panel, BorderLayout.WEST)
+        
         
         # Plotting panels
         #------------------------------------------------------------------------
@@ -191,6 +204,7 @@ class GUI:
     def update_plots(self):
         betas_x, betas_y = [], []
         phases_x, phases_y = [], []
+        self.phase_controller.track()
         for params in self.phase_controller.tracked_twiss():
             mu_x, mu_y, alpha_x, alpha_y, beta_x, beta_y, eps_x, eps_y = params
             betas_x.append(beta_x)
@@ -200,6 +214,13 @@ class GUI:
         positions = self.phase_controller.positions
         self.beta_plot_panel.set_data(positions, [betas_x, betas_y])
         self.phase_plot_panel.set_data(positions, [phases_x, phases_y])
+        
+    def get_field_set_kws(self):
+        field_set_kws = {
+            'sleep_time': float(self.sleep_time_text_field.getText()),
+            'max_frac_change': float(self.max_frac_change_text_field.getText()),
+        }
+        return field_set_kws
 
     def launch(self):
 
@@ -212,13 +233,11 @@ class GUI:
             def windowClosing(self, event):
                 """Reset the real machine to its default state before closing window."""
                 if self.live:
+                    print 'Restoring machine to default state.'
                     self.phase_controller.restore_default_optics('live', **self.field_set_kws)
                 sys.exit(1)
 
-        field_set_kws = {
-            'sleep_time': float(self.sleep_time_text_field.getText()),
-            'max_frac_change': float(self.max_frac_change_text_field.getText()),
-        }
+        field_set_kws = self.get_field_set_kws()
         self.frame.addWindowListener(WindowCloser(self.phase_controller, field_set_kws, self.live))
         self.frame.show()   
         
@@ -230,6 +249,7 @@ class QuadSettingsTableModel(AbstractTableModel):
     def __init__(self, gui):
         self.gui = gui
         self.phase_controller = gui.phase_controller
+        self.quad_ids = self.phase_controller.ind_quad_ids
         self.column_names = ['Quad', 'Model [T/m]', 'Live [T/m]']
         self.nf4 = NumberFormat.getInstance()
         self.nf4.setMaximumFractionDigits(4)
@@ -237,7 +257,7 @@ class QuadSettingsTableModel(AbstractTableModel):
         self.nf3.setMaximumFractionDigits(3)
 
     def getValueAt(self, row, col):
-        quad_id = self.phase_controller.ind_quad_ids[row]
+        quad_id = self.quad_ids[row]
         if col == 0:
             return quad_id
         elif col == 1:
@@ -249,7 +269,7 @@ class QuadSettingsTableModel(AbstractTableModel):
         return len(self.column_names)
 
     def getRowCount(self):
-        return len(self.phase_controller.ind_quad_ids)
+        return len(self.quad_ids)
     
     def getColumnName(self, col):
         return self.column_names[col]
@@ -258,7 +278,7 @@ class QuadSettingsTableModel(AbstractTableModel):
 # Listeners
 #-------------------------------------------------------------------------------
 class EnergyTextFieldListener(ActionListener):
-    """Update the beam kinetic energy from the text field; retrack; replot."""
+
     def __init__(self, gui):
         self.gui = gui
         self.text_field = gui.energy_text_field
@@ -276,7 +296,7 @@ class EnergyTextFieldListener(ActionListener):
 
         
 class RefWsIdTextFieldListener(ActionListener):
-    """Update the reference wire-scanner ID from the text field."""
+    
     def __init__(self, gui):
         self.gui = gui
         self.dropdown = gui.ref_ws_id_dropdown
@@ -288,7 +308,7 @@ class RefWsIdTextFieldListener(ActionListener):
         
         
 class NStepsTextFieldListener(ActionListener):
-    """Update a dropdown menu based on the n_steps text field."""
+    
     def __init__(self, gui):
         self.gui = gui
     
@@ -296,22 +316,107 @@ class NStepsTextFieldListener(ActionListener):
         n_steps = float(self.gui.n_steps_text_field.getText())
         n_steps = int(n_steps)
         self.gui.scan_index_dropdown.removeAllItems()
+        self.gui.scan_index_dropdown.addItem('default')
         for scan_index in range(n_steps):
             self.gui.scan_index_dropdown.addItem(scan_index)
         
         
 class CalculateModelOpticsButtonListener(ActionListener):
-    """Calculate the model optics to obtain selected phase advances."""
+
+    def __init__(self, gui):
+        self.gui = gui
+        self.phase_controller = gui.phase_controller
+        self.ind_quad_ids = self.phase_controller.ind_quad_ids
+        
+    def actionPerformed(self, event):
+        """Calculate/store correct optics settings for each step in the scan.
+        
+        This also saves the following files:
+        """
+        self.gui.model_fields_list = []
+        
+        phase_coverage = float(self.gui.phase_coverage_text_field.getText())
+        n_steps = int(self.gui.n_steps_text_field.getText())        
+        max_beta = float(self.gui.max_beta_text_field.getText())
+        beta_lims = (max_beta, max_beta)
+        phases = self.phase_controller.get_phases_for_scan(phase_coverage, n_steps)
+        print 'index | mu_x  | mu_y [rad]'
+        print '---------------------'
+        file = open('_output/phases.dat', 'w')
+        for scan_index, (mu_x, mu_y) in enumerate(phases):
+            print '{:<5} | {:.3f} | {:.3f}'.format(scan_index, mu_x, mu_y)
+            file.write('{} {}\n'.format(mu_x, mu_y))
+        file.close()
+                
+        for scan_index, (mu_x, mu_y) in enumerate(phases):
+            
+            # Set model optics
+            print 'Scan index {}/{}.'.format(scan_index, n_steps - 1)
+            print 'Setting phases at {}...'.format(self.phase_controller.ref_ws_id)
+            self.phase_controller.set_ref_ws_phases(mu_x, mu_y, beta_lims, verbose=1)
+            print 'Setting betas at target...'
+            self.phase_controller.constrain_size_on_target(verbose=1)
+            max_betas_anywhere = self.phase_controller.max_betas(stop=None)
+            print '  Max betas anywhere: {:.3f}, {:.3f}.'.format(*max_betas_anywhere)
+            
+            # Save model Twiss vs. position data
+            filename = '_output/model_twiss_{}.dat'.format(scan_index)
+            write_traj_to_file(self.phase_controller.tracked_twiss(), self.phase_controller.positions, filename)
+
+            # Save transfer matrix at each wire-scanner
+            file = open('_output/model_transfer_mat_elems_{}.dat'.format(scan_index), 'w')
+            fstr = 16 * '{} ' + '\n'
+            for ws_id in ws_ids:
+                M = self.phase_controller.transfer_matrix(ws_id)
+                elements = [elem for row in M for elem in row]
+                file.write(fstr.format(*elements))
+            file.close()
+
+            # Save real space beam moments at each wire-scanner
+            file = open('_output/model_moments_{}.dat'.format(scan_index), 'w')
+            for ws_id in ws_ids:
+                mu_x, mu_y, alpha_x, alpha_y, beta_x, beta_y, eps_x, eps_y = self.phase_controller.twiss(ws_id)
+                moments = [eps_x * beta_x, eps_y * beta_y, 0.0]
+                file.write('{} {} {}\n'.format(*moments))
+            file.close()
+    
+            # Save model quadrupole strengths
+            file = open('_output/model_fields_{}.dat'.format(scan_index), 'w')
+            model_fields = []
+            for quad_id in self.ind_quad_ids:
+                field = self.phase_controller.get_field(quad_id)
+                model_fields.append(field)
+                file.write('{}, {}\n'.format(quad_id, field))
+            file.close()
+            self.gui.model_fields_list.append(model_fields)
+                    
+            print ''
+            
+        self.phase_controller.restore_default_optics('model')
+        
+        
+class SetLiveOpticsButtonListener(ActionListener):
+    
     def __init__(self, gui):
         self.gui = gui
         self.phase_controller = gui.phase_controller
         
-    def actionPerformed(self, event):
-        # 1. Get the phase advances from the GUI.
-        # 2. Run the solver.
-        # 3. Print the output.
-        raise NotImplementedError
-            
+    def actionPerformed(self, action):
+        print 'Syncing live quads with model...'
+        quad_ids = self.phase_controller.ind_quad_ids
+        field_set_kws = self.gui.get_field_set_kws()
+        scan_index = self.gui.scan_index_dropdown.getSelectedItem()
+        if scan_index == 'default':
+            self.phase_controller.restore_default_optics('model')
+#             self.phase_controller.restore_default_optics('live')
+        else:
+            scan_index = int(scan_index)
+            model_fields = self.gui.model_fields_list[scan_index]
+            self.phase_controller.set_fields(quad_ids, model_fields, 'model')
+#             self.phase_controller.set_fields(quad_ids, model_fields, 'live', **field_set_kws)
+        self.gui.quad_settings_table.getModel().fireTableDataChanged()
+        self.gui.update_plots()
+    
     
 # Plotting
 #-------------------------------------------------------------------------------
@@ -345,7 +450,6 @@ class LinePlotPanel(JPanel):
             self.graph.addGraphData(data)        
             
             
-
 # Miscellaneous
 #-------------------------------------------------------------------------------
 class AlignedLabeledComponentsPanel(JPanel):
@@ -383,9 +487,3 @@ class AlignedLabeledComponentsPanel(JPanel):
             
 gui = GUI()
 gui.launch()
-
-
-
-
-
-# When model or live quads are updated: call table.getModel().fireTableDataChanged()

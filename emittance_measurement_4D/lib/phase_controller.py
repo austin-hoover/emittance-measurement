@@ -315,11 +315,8 @@ class PhaseController:
             print '  Desired betas: {:.3f}, {:.3f}'.format(*self.default_betas_at_target)
             print '  Calc betas   : {:.3f}, {:.3f}'.format(*self.beta_funcs('RTBT:Tgt'))
             
-    def get_phases_for_scan(self, phase_coverage=180.0, npts=3):
+    def get_phases_for_scan(self, phase_coverage=180.0, n_steps=3):
         """Create array of phases for scan. 
-        
-        Note: this resets model optics to default settings in order to 
-        calculate the default phase advances around which to scan.
 
         Parameters
         ----------
@@ -327,31 +324,36 @@ class PhaseController:
             Range of phase advances to cover IN DEGREES. The phases are
             centered on the default phase. It is a pain because OpenXAL 
             computes the phases mod 2pi. 
-        npts : int
-            Total number of phases to include.
+        n_steps : int
+            The number of steps in the scan.
         """              
         def get_phases(phase, reverse=False):
             min_phase = put_angle_in_range(phase - 0.5 * radians(phase_coverage))
             max_phase = put_angle_in_range(phase + 0.5 * radians(phase_coverage))
-            # Difference between and max phase is always <= 180 degrees
+            # Difference between and max phase is always <= 180 degrees.
             abs_diff = abs(max_phase - min_phase)
             if abs_diff > math.pi:
                 abs_diff = 2*math.pi - abs_diff
-            # Return list of phases
-            step = abs_diff / (npts - 1)
+            # Return list of phases.
+            step = abs_diff / (n_steps - 1)
             phases = [min_phase]
-            for _ in range(npts - 1):
+            for _ in range(n_steps - 1):
                 phase = put_angle_in_range(phases[-1] + step)
                 phases.append(phase)
             if reverse:
                 phases = phases[::-1]
             return phases
         
+        # Get default phase advances without changing current state.
+        model_fields = self.get_fields(self.ind_quad_ids, 'model')
         self.restore_default_optics('model')
         mu_x0, mu_y0 = self.phases(self.ref_ws_id)
-        x_phases = get_phases(mu_x0)
-        y_phases = get_phases(mu_y0, reverse=True)
-        return [(mu_x, mu_y) for mu_x, mu_y in zip(x_phases, y_phases)]
+        self.set_fields(self.ind_quad_ids, model_fields, 'model')
+        
+        phases_x = get_phases(mu_x0)
+        phases_y = get_phases(mu_y0, reverse=True)
+        phases = [(mu_x, mu_y) for mu_x, mu_y in zip(phases_x, phases_y)]
+        return phases
 
     def get_field(self, quad_id, opt='model'):
         """Return quadrupole field strength [T/m].
