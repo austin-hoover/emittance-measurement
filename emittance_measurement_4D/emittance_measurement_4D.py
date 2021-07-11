@@ -4,7 +4,9 @@ import sys
 
 from java.awt import BorderLayout
 from java.awt import Color
+from java.awt import Component
 from java.awt import Dimension
+from java.awt import FlowLayout
 from java.awt import Font
 from java.awt import GridLayout
 from java.awt.event import ActionListener
@@ -67,103 +69,97 @@ class GUI:
         phase_coverage_label = JLabel('Phase coverage [deg]')
         n_steps_label = JLabel('Total steps')
         max_beta_label = JLabel("<html>Max. &beta; [m/rad]<html>")
-        sleep_time_label = JLabel('Sleep time [s]')
-        max_frac_change_label = JLabel('Max. frac. field change')
         
-        # Text fields / dropdown menus
-        text_field_width = 12 
+        # Components
+        text_field_width = 11
         self.ref_ws_id_dropdown = JComboBox(ws_ids)
         self.energy_text_field = JTextField('1.0', text_field_width)
         self.phase_coverage_text_field = JTextField('180.0', text_field_width)
         self.n_steps_text_field = JTextField('12', text_field_width)
         self.max_beta_text_field = JTextField('40.0', text_field_width)
-        self.sleep_time_text_field = JTextField('0.5', text_field_width)
-        self.max_frac_change_text_field = JTextField('0.01', text_field_width)
+        self.calculate_model_optics_button = JButton('Calculate model optics (all steps)')
         
-        # Add action listeners
-        self.energy_text_field.addActionListener(EnergyTextFieldListener(self.energy_text_field, self.phase_controller))
-        self.ref_ws_id_dropdown.addActionListener(RefWsIdTextFieldListener(self.ref_ws_id_dropdown, self.phase_controller))
+        # Action listeners
+        self.energy_text_field.addActionListener(EnergyTextFieldListener(self))
+        self.ref_ws_id_dropdown.addActionListener(RefWsIdTextFieldListener(self))
         self.ref_ws_id_dropdown.setSelectedIndex(3)
+        self.calculate_model_optics_button.addActionListener(CalculateModelOpticsButtonListener(self))
         
         # Build text fields panel
-        self.text_fields_panel = JPanel()  
-        layout = GroupLayout(self.text_fields_panel)
-        self.text_fields_panel.setLayout(layout)
-        layout.setAutoCreateContainerGaps(True)
-        layout.setAutoCreateGaps(True)
-        group_labels = layout.createParallelGroup()
-        group_fields = layout.createParallelGroup()
-        group_rows = layout.createSequentialGroup()
-        layout.setHorizontalGroup(layout.createSequentialGroup()
-                                  .addGroup(group_labels)
-                                  .addGroup(group_fields))
-        layout.setVerticalGroup(group_rows)
-
-        def add_field(label, field):
-            group_labels.addComponent(label)
-            group_fields.addComponent(field)
-            group_rows.addGroup(
-                layout.createParallelGroup()
-                    .addComponent(label)
-                    .addComponent(
-                        field, 
-                        GroupLayout.PREFERRED_SIZE, 
-                        GroupLayout.DEFAULT_SIZE, 
-                        GroupLayout.PREFERRED_SIZE
-                    )
-            )
+        self.text_fields_panel = AlignedLabeledTextFieldsPanel()
+           
+        self.text_fields_panel.add_row(ref_ws_id_label, self.ref_ws_id_dropdown)
+        self.text_fields_panel.add_row(energy_label, self.energy_text_field)
+        self.text_fields_panel.add_row(phase_coverage_label, self.phase_coverage_text_field)
+        self.text_fields_panel.add_row(n_steps_label, self.n_steps_text_field)
+        self.text_fields_panel.add_row(max_beta_label, self.max_beta_text_field)
     
-        add_field(ref_ws_id_label, self.ref_ws_id_dropdown)
-        add_field(energy_label, self.energy_text_field)
-        add_field(phase_coverage_label, self.phase_coverage_text_field)
-        add_field(n_steps_label, self.n_steps_text_field)
-        add_field(max_beta_label, self.max_beta_text_field)
-        add_field(sleep_time_label, self.sleep_time_text_field)
-        add_field(max_frac_change_label, self.max_frac_change_text_field)
+        # Lower panel
+        #------------------------------------------------------------------------ 
+        # Labels
+        sleep_time_label = JLabel('Sleep time [s]')
+        max_frac_change_label = JLabel('Max. frac. field change')
         
-        # Buttons panel
-        #------------------------------------------------------------------------               
-        # Create buttons
-        self.calc_optics_button = JButton('Calculate model optics')
+        # Components        
+        self.sleep_time_text_field = JTextField('0.5', text_field_width)
+        self.max_frac_change_text_field = JTextField('0.01', text_field_width)
         self.set_optics_button = JButton('Set live optics')
         
-        # Add action listeners
+        # Action listeners
         
         # Build buttons panel
         self.buttons_panel = JPanel()
         self.buttons_panel.setLayout(BoxLayout(self.buttons_panel, BoxLayout.Y_AXIS))
-        self.buttons_panel.add(self.calc_optics_button)        
+        
+        
+        temp_panel = JPanel()
+        temp_panel.add(sleep_time_label)
+        temp_panel.add(self.sleep_time_text_field)
+        temp_panel.add(max_frac_change_label)
+        temp_panel.add(self.max_frac_change_text_field)
+        self.buttons_panel.add(temp_panel)
         self.buttons_panel.add(self.set_optics_button)
+        self.buttons_panel.setAlignmentX(Component.LEFT_ALIGNMENT)
         
         # Build left panel
+        #------------------------------------------------------------------------    
         self.left_panel = JPanel()
         self.left_panel.setLayout(BoxLayout(self.left_panel, BoxLayout.Y_AXIS))
         
-        label = JLabel('Settings')
+        label = JLabel('Compute model')
         font = label.getFont()
         label.setFont(Font(font.name, font.BOLD, int(1.1 * font.size)));
         self.left_panel.add(label)
         
         self.left_panel.add(self.text_fields_panel)
         
-        label = JLabel('Actions')
+        panel = JPanel()
+        self.calculate_model_optics_button.setAlignmentX(Component.LEFT_ALIGNMENT)
+        panel.add(self.calculate_model_optics_button)
+        self.left_panel.add(panel)
+        
+        label = JLabel('Update machine')
         label.setFont(Font(font.name, font.BOLD, int(1.1 * font.size)));
         self.left_panel.add(label)
         
-        self.left_panel.add(self.buttons_panel)
+#         self.left_panel.add(self.buttons_panel)
         
         self.frame.add(self.left_panel, BorderLayout.WEST)
         
         # Plotting panels
         #------------------------------------------------------------------------
-        self.beta_plot_panel = LinePlotPanel(xlabel='Position [m]', 
-                                             ylabel='[m/rad]', 
-                                             title='Model beta function vs. position',
-                                             n_lines=2)
-        self.phase_plot_panel = LinePlotPanel(xlabel='Position [m]', 
-                                              ylabel='Phase adv. mod 2pi', 
-                                              title='Model phase advance vs. position',
-                                              n_lines=2)
+        self.beta_plot_panel = LinePlotPanel(
+            xlabel='Position [m]', 
+            ylabel='[m/rad]', 
+            title='Model beta function vs. position',
+            n_lines=2
+        )
+        self.phase_plot_panel = LinePlotPanel(
+            xlabel='Position [m]', 
+            ylabel='Phase adv. mod 2pi', 
+            title='Model phase advance vs. position',
+            n_lines=2
+        )
         self.bpm_plot_panel = LinePlotPanel(xlabel='BPM', 
                                             ylabel='Amplitude [mm]', 
                                             title='BMP amplitudes',
@@ -176,7 +172,6 @@ class GUI:
         self.frame.add(self.right_panel, BorderLayout.CENTER)   
         self.update_plots()
     
-        
     def update_plots(self):
         betas_x, betas_y = [], []
         phases_x, phases_y = [], []
@@ -190,15 +185,14 @@ class GUI:
         self.beta_plot_panel.set_data(positions, [betas_x, betas_y])
         self.phase_plot_panel.set_data(positions, [phases_x, phases_y])
 
-        
     def launch(self):
-    
+
         class WindowCloser(WindowAdapter):
             def __init__(self, phase_controller, field_set_kws, live=True):
                 self.phase_controller = phase_controller
                 self.field_set_kws = field_set_kws
                 self.live = live
-
+                
             def windowClosing(self, event):
                 """Reset the real machine to its default state before closing window."""
                 if self.live:
@@ -212,37 +206,74 @@ class GUI:
         self.frame.addWindowListener(WindowCloser(self.phase_controller, field_set_kws, self.live))
         self.frame.show()        
         
+
+
+class AlignedLabeledTextFieldsPanel(JPanel):
+    
+    def __init__(self):
+        JPanel.__init__(self)
+        self.layout = GroupLayout(self)
+        self.setLayout(self.layout)
+        self.layout.setAutoCreateContainerGaps(True)
+        self.layout.setAutoCreateGaps(True)
+        self.group_labels = self.layout.createParallelGroup()
+        self.group_fields = self.layout.createParallelGroup()
+        self.group_rows = self.layout.createSequentialGroup()
+        self.layout.setHorizontalGroup(self.layout.createSequentialGroup()
+                                  .addGroup(self.group_labels)
+                                  .addGroup(self.group_fields))
+        self.layout.setVerticalGroup(self.group_rows)
+
+    def add_row(self, label, field):
+        self.group_labels.addComponent(label)
+        self.group_fields.addComponent(field)
+        self.group_rows.addGroup(
+            self.layout.createParallelGroup()
+                .addComponent(label)
+                .addComponent(
+                    field, 
+                    GroupLayout.PREFERRED_SIZE, 
+                    GroupLayout.DEFAULT_SIZE, 
+                    GroupLayout.PREFERRED_SIZE
+                )
+        )
+        
         
 class EnergyTextFieldListener(ActionListener):
     """Update the beam kinetic energy from the text field; retrack; replot."""
-    def __init__(self, text_field, phase_controller):
-        self.text_field = text_field
-        self.phase_controller = phase_controller
+    def __init__(self, gui):
+        self.gui = gui
+        self.text_field = gui.energy_text_field
+        self.phase_controller = gui.phase_controller
         
     def actionPerformed(self, event):
         kin_energy = float(self.text_field.getText())
+        if kin_energy < 0:
+            raise ValueError('Kinetic energy must be postive.')
         self.phase_controller.set_kin_energy(kin_energy)
         self.phase_controller.track()
-        print 'Updated kin_energy to {:.3e} [eV]'.format(
+        self.gui.update_plots()
+        print 'Updated kinetic energy to {:.3e} [eV]'.format(
             self.phase_controller.probe.getKineticEnergy())
 
         
 class RefWsIdTextFieldListener(ActionListener):
-    """Update the reference wire-scanner ID from the text field; retrack; replot."""
-    def __init__(self, dropdown, phase_controller):
-        self.dropdown = dropdown
-        self.phase_controller = phase_controller
+    """Update the reference wire-scanner ID from the text field."""
+    def __init__(self, gui):
+        self.gui = gui
+        self.dropdown = gui.ref_ws_id_dropdown
+        self.phase_controller = gui.phase_controller
         
     def actionPerformed(self, event):
         self.phase_controller.ref_ws_id = self.dropdown.getSelectedItem()
-        self.phase_controller.track()
         print 'Updated ref_ws_id to {}'.format(self.phase_controller.ref_ws_id)
         
         
 class CalculateModelOpticsButtonListener(ActionListener):
     """Calculate the model optics to obtain selected phase advances."""
-    def __init__(self, phase_controller):
-        self.phase_controller = phase_controller
+    def __init__(self, gui):
+        self.gui = gui
+        self.phase_controller = gui.phase_controller
         
     def actionPerformed(self, event):
         # 1. Get the phase advances from the GUI.

@@ -153,30 +153,7 @@ class PhaseController:
     def initialize_envelope(self):
         """Reset the envelope probe to the start of the lattice."""
         self.scenario.resetProbe()
-        self.probe.setKinEnergy(1e9 * self.kin_energy)
-        twissX = Twiss(init_twiss['alpha_x'], init_twiss['beta_x'], init_twiss['eps_x'])
-        twissY = Twiss(init_twiss['alpha_y'], init_twiss['beta_y'], init_twiss['eps_y'])
-        twissZ = Twiss(0, 1, 0)
-        Sigma = CovarianceMatrix().buildCovariance(twissX, twissY, twissZ)
-        self.probe.setCovariance(Sigma)
-        
-    def track(self):
-        """Return envelope trajectory through the lattice."""
-        self.initialize_envelope()
-        self.scenario.run()
-        self.trajectory = self.probe.getTrajectory()
-        self.adaptor = SimpleSimResultsAdaptor(self.trajectory) 
-        self.states = self.trajectory.getStatesViaIndexer()
-        self.positions = [state.getPosition() for state in self.states]
-        return self.trajectory
-    
-    def tracked_twiss(self):
-        """Return Twiss parameters at each state in trajectory."""
-        return [compute_twiss(state, self.adaptor) for state in self.states]
-
-    def initialize_envelope(self):
-        """Reset the envelope probe to the start of the lattice."""
-        self.scenario.resetProbe()
+        self.probe.setKineticEnergy(1e9 * self.kin_energy)
         twissX = Twiss(init_twiss['alpha_x'], init_twiss['beta_x'], init_twiss['eps_x'])
         twissY = Twiss(init_twiss['alpha_y'], init_twiss['beta_y'], init_twiss['eps_y'])
         twissZ = Twiss(0, 1, 0)
