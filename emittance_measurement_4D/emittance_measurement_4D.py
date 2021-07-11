@@ -38,6 +38,9 @@ COLOR_CYCLE = [
     Color(0.94117647, 0.89411765, 0.25882353),
     Color(0.3372549, 0.70588235, 0.91372549),
 ]
+
+
+ws_ids = ['RTBT_Diag:WS20', 'RTBT_Diag:WS21', 'RTBT_Diag:WS23', 'RTBT_Diag:WS24']
                 
 
 class GUI:
@@ -46,7 +49,7 @@ class GUI:
         self.live = live
         self.phase_controller = PhaseController()
 
-        # Create frame
+        # Main frame
         #------------------------------------------------------------------------
         self.frame = JFrame("RTBT Phase Controller")
         self.frame.setSize(Dimension(1000, 800))
@@ -58,6 +61,31 @@ class GUI:
 
         # Text fields panel
         #------------------------------------------------------------------------
+        # Labels
+        ref_ws_id_label = JLabel('Ref. wire-scanner')
+        energy_label = JLabel('Energy [GeV]')
+        phase_coverage_label = JLabel('Phase coverage [deg]')
+        n_steps_label = JLabel('Total steps')
+        max_beta_label = JLabel("<html>Max. &beta; [m/rad]<html>")
+        sleep_time_label = JLabel('Sleep time [s]')
+        max_frac_change_label = JLabel('Max. frac. field change')
+        
+        # Text fields / dropdown menus
+        text_field_width = 12 
+        self.ref_ws_id_dropdown = JComboBox(ws_ids)
+        self.energy_text_field = JTextField('1.0', text_field_width)
+        self.phase_coverage_text_field = JTextField('180.0', text_field_width)
+        self.n_steps_text_field = JTextField('12', text_field_width)
+        self.max_beta_text_field = JTextField('40.0', text_field_width)
+        self.sleep_time_text_field = JTextField('0.5', text_field_width)
+        self.max_frac_change_text_field = JTextField('0.01', text_field_width)
+        
+        # Add action listeners
+        self.energy_text_field.addActionListener(EnergyTextFieldListener(self.energy_text_field, self.phase_controller))
+        self.ref_ws_id_dropdown.addActionListener(RefWsIdTextFieldListener(self.ref_ws_id_dropdown, self.phase_controller))
+        self.ref_ws_id_dropdown.setSelectedIndex(3)
+        
+        # Build text fields panel
         self.text_fields_panel = JPanel()  
         layout = GroupLayout(self.text_fields_panel)
         self.text_fields_panel.setLayout(layout)
@@ -84,45 +112,30 @@ class GUI:
                         GroupLayout.PREFERRED_SIZE
                     )
             )
-
-        text_field_width = 12
-
-        energy_label = JLabel('Energy [GeV]')
-        self.energy_text_field = JTextField('1.0', text_field_width)
-        self.energy_text_field.addActionListener(
-            EnergyTextFieldListener(self.energy_text_field, self.phase_controller))
-        add_field(energy_label, self.energy_text_field)
-
-        ref_ws_id_label = JLabel('Ref. wire-scanner')
-        ws_ids = ['RTBT_Diag:WS20', 'RTBT_Diag:WS21', 
-                  'RTBT_Diag:WS23', 'RTBT_Diag:WS24']
-        self.ref_ws_id_dropdown = JComboBox(ws_ids)
-        self.ref_ws_id_dropdown.setSelectedIndex(3)
-        self.ref_ws_id_dropdown.addActionListener(
-            RefWsIdTextFieldListener(self.ref_ws_id_dropdown, self.phase_controller))
+    
         add_field(ref_ws_id_label, self.ref_ws_id_dropdown)
-
-        phase_coverage_label = JLabel('Phase coverage [deg]')
-        self.phase_coverage_text_field = JTextField('180.0', text_field_width)
+        add_field(energy_label, self.energy_text_field)
         add_field(phase_coverage_label, self.phase_coverage_text_field)
-
-        n_steps_label = JLabel('Total steps')
-        self.n_steps_text_field = JTextField('12', text_field_width)
         add_field(n_steps_label, self.n_steps_text_field)
-
-        max_beta_label = JLabel("<html>Max. &beta; [m/rad]<html>")
-        self.max_beta_text_field = JTextField('40.0', text_field_width)
         add_field(max_beta_label, self.max_beta_text_field)
-
-        sleep_time_label = JLabel('Sleep time [s]')
-        self.sleep_time_text_field = JTextField('0.5', text_field_width)
         add_field(sleep_time_label, self.sleep_time_text_field)
-
-        max_frac_change_label = JLabel('Max. frac. field change')
-        self.max_frac_change_text_field = JTextField('0.01', text_field_width)
         add_field(max_frac_change_label, self.max_frac_change_text_field)
-
-        # Fill left panel
+        
+        # Buttons panel
+        #------------------------------------------------------------------------               
+        # Create buttons
+        self.calc_optics_button = JButton('Calculate model optics')
+        self.set_optics_button = JButton('Set live optics')
+        
+        # Add action listeners
+        
+        # Build buttons panel
+        self.buttons_panel = JPanel()
+        self.buttons_panel.setLayout(BoxLayout(self.buttons_panel, BoxLayout.Y_AXIS))
+        self.buttons_panel.add(self.calc_optics_button)        
+        self.buttons_panel.add(self.set_optics_button)
+        
+        # Build left panel
         self.left_panel = JPanel()
         self.left_panel.setLayout(BoxLayout(self.left_panel, BoxLayout.Y_AXIS))
         
@@ -137,24 +150,11 @@ class GUI:
         label.setFont(Font(font.name, font.BOLD, int(1.1 * font.size)));
         self.left_panel.add(label)
         
-        self.frame.add(self.left_panel, BorderLayout.WEST)
-        
-        
-        # Create buttons panel
-        #------------------------------------------------------------------------ 
-        self.buttons_panel = JPanel()
-        self.buttons_panel.setLayout(BoxLayout(self.buttons_panel, BoxLayout.Y_AXIS))
-        
-        self.calc_optics_button = JButton('Calculate model optics')  
-        self.buttons_panel.add(self.calc_optics_button)
-        
-        self.set_optics_button = JButton('Set live optics')
-        self.buttons_panel.add(self.set_optics_button)
-        
         self.left_panel.add(self.buttons_panel)
         
+        self.frame.add(self.left_panel, BorderLayout.WEST)
         
-        # Create plotting panels
+        # Plotting panels
         #------------------------------------------------------------------------
         self.beta_plot_panel = LinePlotPanel(xlabel='Position [m]', 
                                              ylabel='[m/rad]', 
@@ -178,7 +178,6 @@ class GUI:
     
         
     def update_plots(self):
-        # Model values
         betas_x, betas_y = [], []
         phases_x, phases_y = [], []
         for params in self.phase_controller.tracked_twiss():
@@ -213,7 +212,6 @@ class GUI:
         self.frame.addWindowListener(WindowCloser(self.phase_controller, field_set_kws, self.live))
         self.frame.show()        
         
-    
         
 class EnergyTextFieldListener(ActionListener):
     """Update the beam kinetic energy from the text field; retrack; replot."""
