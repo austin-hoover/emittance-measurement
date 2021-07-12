@@ -454,3 +454,45 @@ class PhaseController:
         """Set the live quad fields to model values."""
         model_fields = self.get_fields(self.ind_quad_ids, 'model')
         self.set_fields(self.ind_quad_ids, model_fields, 'live', **kws)
+        
+        
+    def get_init_twiss(self):
+        """Get Twiss parameters at RTBT entrance using the ring."""
+        # Load SNS ring
+        kin_energy = 1e9 * self.kin_energy
+        accelerator = XMLDataManager.loadDefaultAccelerator()
+        sequence = accelerator.getComboSequence('Ring')
+        scenario = Scenario.newScenarioFor(sequence)
+        algorithm = AlgorithmFactory.createTransferMapTracker(sequence)
+        probe = ProbeFactory.getTransferMapProbe(sequence, algorithm)
+        probe.setKineticEnergy(1e9 * self.kin_energy)
+        scenario.setProbe(probe)
+        scenario.run()
+        trajectory = probe.getTrajectory()
+
+        # Get ring Twiss parameters at injection point
+        calculator = CalculationsOnRings(trajectory)
+        twiss_x, twiss_y, twiss_z = calculator.ringMatchedTwiss()
+        alpha_x, beta_x = twiss_x.getAlpha(), twiss_x.getBeta()
+        alpha_y, beta_y = twiss_y.getAlpha(), twiss_y.getBeta()
+
+        # Get Twiss parameters at RTBT entrance
+        scenario = Scenario.newScenarioFor(sequence)
+        algorithm = AlgorithmFactory.createEnvelopeTracker(sequence)
+        algorithm.setUseSpacecharge(False)
+        probe = ProbeFactory.getEnvelopeProbe(sequence, algorithm)
+        probe.setBeamCurrent(0.0)
+        probe.setKineticEnergy(1e9 * self.kin_energy)
+        twiss_x.setTwiss(alpha_x, beta_x, 20e-6)
+        twiss_y.setTwiss(alpha_y, beta_y, 20e-6)
+        twiss_z.setTwiss(0, 1, 0)
+        Sigma = CovarianceMatrix().buildCovariance(twiss_x, twiss_y, twiss_z)
+        probe.setCovariance(Sigma)
+        scenario.setProbe(probe)
+        scenario.run()
+        trajectory = probe.getTrajectory()
+        adaptor = SimpleSimResultsAdaptor(trajectory) 
+        stop_node_id = 'Begin_Of_Ring3' # same as 'Begin_Of_RTBT'
+        state = trajectory.statesForElement(stop_node_id)[0]
+        twiss_x, twiss_y, _ = adaptor.computeTwissParameters(state)
+        return twiss_x.getAlpha(), twiss_y.getAlpha(), twiss_x.getBeta(), twiss_y.getBeta()
