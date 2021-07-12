@@ -1,4 +1,17 @@
-"""
+"""Short description will go here.
+
+Some more detail will go here.
+
+To do
+-----
+* Make sure SetLiveOptics dumps the necessary files.
+* Make sure to uncomment the lines in SetLiveOptics that actually set the live optics.
+* Currently, the initial Twiss parameters are hard-coded from RTBT madx file. I'm 
+  worried that a deviation in beam energy from 1 GeV, or just a modification of 
+  the ring optics to set the tunes (SCBD painting), could change these parameters.
+  Maybe we can track the parameters in the ring (using OpenXAL model) to the exact
+  start of the RTBT.
+
 Important variables
 -------------------
 ref_ws_id : str
