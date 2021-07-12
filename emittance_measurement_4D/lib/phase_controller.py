@@ -217,15 +217,7 @@ class PhaseController:
 
     def set_ref_ws_phases(self, mu_x, mu_y, beta_lims=(40, 40), verbose=0):
         """Set x and y phases from start to the reference wire-scanner. 
-        
-        TODO: It's currently is assumed that the reference wire-scanner is
-        WS24. We therefore vary all but the last five quadrupoles to set the 
-        phase advances, then vary the last five quadrupoles to set the beta
-        functions at the target. If we want to choose a different wire-scanner, 
-        then we'll need to only change the magnets that wire-scanner. The 
-        downstream magnets should then be used to set the beta functions at the 
-        target.
-
+    
         Parameters
         ----------
         mu_x, mu_y : float

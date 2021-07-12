@@ -1,3 +1,20 @@
+"""
+Important variables
+-------------------
+ref_ws_id : str
+    ID of the wirescanner at which the phase advance will be measured. Options: 
+    {'RTBT_Diag:WS20', 'RTBT_Diag:WS21', 'RTBT_Diag:WS23', 'RTBT_Diag:WS24'}.
+phase_coverage : float
+    The horizontal and vertical phases are varied by this many degrees during
+    the scan. For example, suppose phase_coverage == T and the default phase
+    advances are mux and muy. Then the horizontal phase is varied in the range
+    (mux - T, mux + T) and the vertical phase is varied in the range 
+    (muy + T, muy - T). Ideally, phase_coverage is equal to 180 degrees.
+n_steps : int
+    Total number of steps in the scan.
+    `x_phases = numpy.linspace(mux_min, mux_max, n_steps)`,
+    `y_phases = numpy.linspace(muy_max, muy_min, n_steps)`.
+"""
 import math
 import time
 import sys
@@ -47,25 +64,23 @@ COLOR_CYCLE = [
     Color(0.3372549, 0.70588235, 0.91372549),
 ]
 
-
 ws_ids = ['RTBT_Diag:WS20', 'RTBT_Diag:WS21', 'RTBT_Diag:WS23', 'RTBT_Diag:WS24']
                 
 
 class GUI:
-    """Description here.
+    """Graphical user interface for phase controller.
     
     Attributes
     ----------
     phase_controller : PhaseController
         This object calculates the optics needed to obtain a certain phase 
-        advance at the wire-scanner. It also changes the optics in the live
-        machine.
+        advance at the wire-scanner. It also updates the live machine to 
+        reflect the model.
     model_fields_list : List
         Holds the model field strengths for each scan index. It is filled when 
         the `Calculate model fields` button is pressed.
     """
-    def __init__(self, live=True):
-        self.live = live
+    def __init__(self):
         self.phase_controller = PhaseController()
         self.model_fields_list = []
 
@@ -178,21 +193,39 @@ class GUI:
         # Plotting panels
         #------------------------------------------------------------------------
         self.beta_plot_panel = LinePlotPanel(
-            xlabel='Position [m]', 
-            ylabel='[m/rad]', 
+            xlabel='Position [m]', ylabel='[m/rad]', 
             title='Model beta function vs. position',
-            n_lines=2
+            n_lines=2, 
         )
         self.phase_plot_panel = LinePlotPanel(
-            xlabel='Position [m]', 
-            ylabel='Phase adv. mod 2pi', 
+            xlabel='Position [m]', ylabel='Phase adv. mod 2pi', 
             title='Model phase advance vs. position',
-            n_lines=2
+            n_lines=2,
         )
-        self.bpm_plot_panel = LinePlotPanel(xlabel='BPM', 
-                                            ylabel='Amplitude [mm]', 
-                                            title='BMP amplitudes',
-                                            n_lines=2)
+        self.bpm_plot_panel = LinePlotPanel(
+            xlabel='BPM', ylabel='Amplitude [mm]', title='BMP amplitudes',
+            n_lines=2, lw=2, ms=5, 
+        )
+        for plot_panel in [self.beta_plot_panel, self.phase_plot_panel, self.bpm_plot_panel]:
+            plot_panel.set_xlim(0.0, 175.0, 25.0)
+            plot_panel.set_ylim(0.0, 175.0, 25.0)
+        
+        # Get BPM positions
+        self.bpms = self.phase_controller.sequence.getNodesOfType('BPM')
+        self.bpm_positions = []
+        rtbt1_length = 69.7 # length of 'RTBT1' sequence [m]
+        in_second_half = False
+        for node in self.phase_controller.sequence.getNodes():
+            if node.getId() == 'Begin_Of_RTBT2':
+                in_second_half = True
+            if node not in self.bpms:
+                continue
+            position = node.getPosition()
+            if in_second_half:
+                position += rtbt1_length
+            self.bpm_positions.append(position)
+        
+        # Add the plots to the panel
         self.right_panel = JPanel()
         self.right_panel.setLayout(BoxLayout(self.right_panel, BoxLayout.Y_AXIS))
         self.right_panel.add(self.beta_plot_panel)
@@ -200,7 +233,12 @@ class GUI:
         self.right_panel.add(self.bpm_plot_panel)
         self.frame.add(self.right_panel, BorderLayout.CENTER)   
         self.update_plots()
-    
+        
+    def read_bpms(self):
+        x_avgs = list([bpm.getXAvg() for bpm in self.bpms])
+        y_avgs = list([bpm.getYAvg() for bpm in self.bpms])
+        return x_avgs, y_avgs
+        
     def update_plots(self):
         betas_x, betas_y = [], []
         phases_x, phases_y = [], []
@@ -214,6 +252,8 @@ class GUI:
         positions = self.phase_controller.positions
         self.beta_plot_panel.set_data(positions, [betas_x, betas_y])
         self.phase_plot_panel.set_data(positions, [phases_x, phases_y])
+        x_avgs, y_avgs = self.read_bpms()
+        self.bpm_plot_panel.set_data(self.bpm_positions, [x_avgs, y_avgs])
         
     def get_field_set_kws(self):
         field_set_kws = {
@@ -223,22 +263,20 @@ class GUI:
         return field_set_kws
 
     def launch(self):
-
+        """Launce the GUI."""
         class WindowCloser(WindowAdapter):
-            def __init__(self, phase_controller, field_set_kws, live=True):
+            def __init__(self, phase_controller, field_set_kws):
                 self.phase_controller = phase_controller
                 self.field_set_kws = field_set_kws
-                self.live = live
                 
             def windowClosing(self, event):
                 """Reset the real machine to its default state before closing window."""
-                if self.live:
-                    print 'Restoring machine to default state.'
-                    self.phase_controller.restore_default_optics('live', **self.field_set_kws)
+                print 'Restoring machine to default state.'
+                self.phase_controller.restore_default_optics('live', **self.field_set_kws)
                 sys.exit(1)
 
         field_set_kws = self.get_field_set_kws()
-        self.frame.addWindowListener(WindowCloser(self.phase_controller, field_set_kws, self.live))
+        self.frame.addWindowListener(WindowCloser(self.phase_controller, field_set_kws))
         self.frame.show()   
         
         
@@ -331,7 +369,22 @@ class CalculateModelOpticsButtonListener(ActionListener):
     def actionPerformed(self, event):
         """Calculate/store correct optics settings for each step in the scan.
         
-        This also saves the following files:
+        Output files
+        ------------
+        
+        Let w = [WS20, WS21, WS23, WS24] be a list of the RTBT wire-scanners.
+        Let i be the scan index. The following files are produced for each i:
+        - 'model_transfer_matr_elems_i.dat': 
+             The jth row in the file gives the 16 transfer matrix elements from 
+             s = 0 to wire-scanner w[j]. The elements are written in the order: 
+             [M11, M12, M13, M14, M21, M22, M23, M24, M31, M32, M33, M34, M41, 
+             M42, M43, M44].
+        - 'model_moments_i.dat': 
+             The jth row in the file gives [Sigma_11, Sigma_33, Sigma_13] at 
+             wire-scanner w[j], where Sigma_mn is the (m, n) entry in the 
+             transverse covariance matrix.
+        - 'model_fields_i.dat':
+             Node ID and field strength of the independent quadrupoles [T/m].
         """
         self.gui.model_fields_list = []
         
@@ -406,6 +459,7 @@ class SetLiveOpticsButtonListener(ActionListener):
         quad_ids = self.phase_controller.ind_quad_ids
         field_set_kws = self.gui.get_field_set_kws()
         scan_index = self.gui.scan_index_dropdown.getSelectedItem()
+        print field_set_kws
         if scan_index == 'default':
             self.phase_controller.restore_default_optics('model')
 #             self.phase_controller.restore_default_optics('live')
@@ -422,7 +476,8 @@ class SetLiveOpticsButtonListener(ActionListener):
 #-------------------------------------------------------------------------------
 class LinePlotPanel(JPanel):
     """Class for 2D line plots."""
-    def __init__(self, xlabel='', ylabel='', title='', n_lines=2):
+    def __init__(self, xlabel='', ylabel='', title='', n_lines=2, 
+                 lw=3, ms=0):
         self.setLayout(GridLayout(1, 1))
         etched_border = BorderFactory.createEtchedBorder()
         self.setBorder(etched_border)
@@ -438,8 +493,8 @@ class LinePlotPanel(JPanel):
         self.data_list = [BasicGraphData() for _ in range(n_lines)]
         for data, color in zip(self.data_list, COLOR_CYCLE):
             data.setGraphColor(color)
-            data.setLineThick(3)
-            data.setGraphPointSize(0)
+            data.setLineThick(lw)
+            data.setGraphPointSize(ms)
 
     def set_data(self, x, y_list):
         if len(utils.shape(y_list)) == 1:
@@ -447,7 +502,13 @@ class LinePlotPanel(JPanel):
         self.graph.removeAllGraphData()
         for data, y in zip(self.data_list, y_list):
             data.addPoint(x, y)  
-            self.graph.addGraphData(data)        
+            self.graph.addGraphData(data) 
+            
+    def set_xlim(self, xmin, xmax, xstep):
+        self.graph.setLimitsAndTicksX(xmin, xmax, xstep)
+        
+    def set_ylim(self, ymin, ymax, ystep):
+        self.graph.setLimitsAndTicksX(ymin, ymax, ystep)
             
             
 # Miscellaneous
