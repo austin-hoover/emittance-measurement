@@ -39,7 +39,7 @@ from javax.swing import JPanel
 from javax.swing import JTable
 from javax.swing import JTextField
 from javax.swing import JFormattedTextField
-from javax.swing.event import DocumentListener
+from javax.swing.event import CellEditorListener
 from javax.swing.table import AbstractTableModel
 from java.text import NumberFormat
 from java.text import DecimalFormat
@@ -65,6 +65,7 @@ COLOR_CYCLE = [
 ]
 
 ws_ids = ['RTBT_Diag:WS20', 'RTBT_Diag:WS21', 'RTBT_Diag:WS23', 'RTBT_Diag:WS24']
+ws_positions = [111.74436, 116.965, 129.0394, 134.75916]
                 
 
 class GUI:
@@ -97,6 +98,8 @@ class GUI:
         # Model calculation panel
         #------------------------------------------------------------------------
         # Labels
+        init_twiss_label = JLabel('Initial Twiss')
+        init_twiss_label.setAlignmentX(10)
         ref_ws_id_label = JLabel('Ref. wire-scanner')
         energy_label = JLabel('Energy [GeV]')
         phase_coverage_label = JLabel('Phase coverage [deg]')
@@ -106,6 +109,8 @@ class GUI:
         # Components
         text_field_width = 11
         self.ref_ws_id_dropdown = JComboBox(ws_ids)
+        self.init_twiss_table = JTable(InitTwissTableModel(self))
+        self.init_twiss_table.setShowGrid(True)
         self.energy_text_field = JTextField('1.0', text_field_width)
         self.phase_coverage_text_field = JTextField('180.0', text_field_width)
         formatter = NumberFormat.getIntegerInstance()
@@ -119,16 +124,26 @@ class GUI:
         self.energy_text_field.addActionListener(EnergyTextFieldListener(self))
         self.ref_ws_id_dropdown.addActionListener(RefWsIdTextFieldListener(self))
         self.ref_ws_id_dropdown.setSelectedIndex(3)
-        self.calculate_model_optics_button.addActionListener(CalculateModelOpticsButtonListener(self))
+        self.calculate_model_optics_button.addActionListener(CalculateModelOpticsButtonListener(self))               
+        self.init_twiss_table.getCellEditor(0, 0).addCellEditorListener(TwissTableListener(self))
         
-        # Build text fields panel
-        self.model_calc_panel = AlignedLabeledComponentsPanel()
-        self.model_calc_panel.add_row(ref_ws_id_label, self.ref_ws_id_dropdown)
-        self.model_calc_panel.add_row(energy_label, self.energy_text_field)
-        self.model_calc_panel.add_row(phase_coverage_label, self.phase_coverage_text_field)
-        self.model_calc_panel.add_row(n_steps_label, self.n_steps_text_field)
-        self.model_calc_panel.add_row(max_beta_label, self.max_beta_text_field)
-    
+        # Build panel
+        self.model_calc_panel1 = AlignedLabeledComponentsPanel()
+        self.model_calc_panel1.add_row(ref_ws_id_label, self.ref_ws_id_dropdown)
+        self.model_calc_panel2 = AlignedLabeledComponentsPanel()
+        self.model_calc_panel2.add_row(energy_label, self.energy_text_field)
+        self.model_calc_panel2.add_row(phase_coverage_label, self.phase_coverage_text_field)
+        self.model_calc_panel2.add_row(n_steps_label, self.n_steps_text_field)
+        self.model_calc_panel2.add_row(max_beta_label, self.max_beta_text_field)
+        self.model_calc_panel = JPanel()
+        
+        self.model_calc_panel.add(init_twiss_label)
+        self.model_calc_panel.add(self.init_twiss_table.getTableHeader())
+        self.model_calc_panel.add(self.init_twiss_table)
+        self.model_calc_panel.setLayout(BoxLayout(self.model_calc_panel, BoxLayout.Y_AXIS))
+        self.model_calc_panel.add(self.model_calc_panel1)
+        self.model_calc_panel.add(self.model_calc_panel2)
+        
     
         # Machine update panel
         #------------------------------------------------------------------------ 
@@ -195,20 +210,17 @@ class GUI:
         self.beta_plot_panel = LinePlotPanel(
             xlabel='Position [m]', ylabel='[m/rad]', 
             title='Model beta function vs. position',
-            n_lines=2, 
+            n_lines=2, grid='y',
         )
         self.phase_plot_panel = LinePlotPanel(
             xlabel='Position [m]', ylabel='Phase adv. mod 2pi', 
             title='Model phase advance vs. position',
-            n_lines=2,
+            n_lines=2, grid='y',
         )
         self.bpm_plot_panel = LinePlotPanel(
             xlabel='BPM', ylabel='Amplitude [mm]', title='BMP amplitudes',
-            n_lines=2, lw=2, ms=5, 
+            n_lines=2, lw=2, ms=5, grid='y',
         )
-        for plot_panel in [self.beta_plot_panel, self.phase_plot_panel, self.bpm_plot_panel]:
-            plot_panel.set_xlim(0.0, 175.0, 25.0)
-            plot_panel.set_ylim(0.0, 175.0, 25.0)
         
         # Get BPM positions
         self.bpms = self.phase_controller.sequence.getNodesOfType('BPM')
@@ -254,6 +266,9 @@ class GUI:
         self.phase_plot_panel.set_data(positions, [phases_x, phases_y])
         x_avgs, y_avgs = self.read_bpms()
         self.bpm_plot_panel.set_data(self.bpm_positions, [x_avgs, y_avgs])
+        for plot_panel in [self.beta_plot_panel, self.phase_plot_panel, self.bpm_plot_panel]:
+            for ws_position in ws_positions:
+                plot_panel.graph.addVerticalLine(ws_position, Color(225, 225, 225))
         
     def get_field_set_kws(self):
         field_set_kws = {
@@ -311,6 +326,39 @@ class QuadSettingsTableModel(AbstractTableModel):
     
     def getColumnName(self, col):
         return self.column_names[col]
+    
+    
+class InitTwissTableModel(AbstractTableModel):
+    
+    def __init__(self, gui):
+        self.gui = gui
+        self.phase_controller = gui.phase_controller
+        self.column_names = ["<html>&alpha;<SUB>x</SUB> [m/rad]<html>",
+                             "<html>&alpha;<SUB>y</SUB> [m/rad]<html>", 
+                             "<html>&beta;<SUB>x</SUB> [m/rad]<html>", 
+                             "<html>&beta;<SUB>y</SUB> [m/rad]<html>"]
+
+    def getValueAt(self, row, col):
+        if col == 0:
+            return self.phase_controller.init_twiss['alpha_x']
+        elif col == 1:
+            return self.phase_controller.init_twiss['alpha_y']
+        elif col == 2:
+            return self.phase_controller.init_twiss['beta_x']
+        elif col == 3:
+            return self.phase_controller.init_twiss['beta_y']
+        
+    def getColumnCount(self):
+        return len(self.column_names)
+
+    def getRowCount(self):
+        return 1
+    
+    def getColumnName(self, col):
+        return self.column_names[col]
+    
+    def isCellEditable(self, row, col):
+        return True
         
     
 # Listeners
@@ -357,8 +405,26 @@ class NStepsTextFieldListener(ActionListener):
         self.gui.scan_index_dropdown.addItem('default')
         for scan_index in range(n_steps):
             self.gui.scan_index_dropdown.addItem(scan_index)
-        
-        
+            
+             
+class TwissTableListener(CellEditorListener):
+    def __init__(self, gui):
+        self.gui = gui
+        self.phase_controller = gui.phase_controller
+        self.table = gui.init_twiss_table
+        self.cell_editor = self.table.getCellEditor(0, 0)
+
+    def editingStopped(self, event):
+        value = float(self.cell_editor.getCellEditorValue())
+        col = self.table.getSelectedColumn()
+        key = ['alpha_x', 'alpha_y', 'beta_x', 'beta_y'][col]
+        self.phase_controller.init_twiss[key] = value
+        self.table.getModel().fireTableDataChanged()
+        self.phase_controller.track()
+        self.gui.update_plots()
+        print 'Updated initial Twiss:', self.phase_controller.init_twiss
+
+
 class CalculateModelOpticsButtonListener(ActionListener):
 
     def __init__(self, gui):
@@ -477,7 +543,7 @@ class SetLiveOpticsButtonListener(ActionListener):
 class LinePlotPanel(JPanel):
     """Class for 2D line plots."""
     def __init__(self, xlabel='', ylabel='', title='', n_lines=2, 
-                 lw=3, ms=0):
+                 lw=3, ms=0, grid=True):
         self.setLayout(GridLayout(1, 1))
         etched_border = BorderFactory.createEtchedBorder()
         self.setBorder(etched_border)
@@ -486,8 +552,12 @@ class LinePlotPanel(JPanel):
         self.graph.setName(title)
         self.graph.setAxisNames(xlabel, ylabel)
         self.graph.setBorder(etched_border)
-        self.graph.setGraphBackGroundColor(Color.white)
+        self.graph.setGraphBackGroundColor(Color.white)   
         self.graph.setGridLineColor(Color(245, 245, 245))
+        if grid == 'y' or not grid:
+            self.graph.setGridLinesVisibleX(False)
+        if grid == 'x' or not grid:
+            self.graph.setGridLinesVisibleY(False)
         self.add(self.graph)
         self.n_lines = n_lines
         self.data_list = [BasicGraphData() for _ in range(n_lines)]
@@ -495,7 +565,7 @@ class LinePlotPanel(JPanel):
             data.setGraphColor(color)
             data.setLineThick(lw)
             data.setGraphPointSize(ms)
-
+    
     def set_data(self, x, y_list):
         if len(utils.shape(y_list)) == 1:
             y_list = [y_list]

@@ -50,8 +50,6 @@ init_twiss = {
     'alpha_y': 0.645,             
     'beta_x': 6.243, 
     'beta_y': 10.354, 
-    'eps_x': 20e-6, # arbitrary
-    'eps_y': 20e-6, # arbitrary
 }
 
 # Quadrupoles with independent power supplies
@@ -154,8 +152,9 @@ class PhaseController:
         """Reset the envelope probe to the start of the lattice."""
         self.scenario.resetProbe()
         self.probe.setKineticEnergy(1e9 * self.kin_energy)
-        twissX = Twiss(init_twiss['alpha_x'], init_twiss['beta_x'], init_twiss['eps_x'])
-        twissY = Twiss(init_twiss['alpha_y'], init_twiss['beta_y'], init_twiss['eps_y'])
+        eps_x = eps_y = 20e-6 # arbitrary
+        twissX = Twiss(self.init_twiss['alpha_x'], self.init_twiss['beta_x'], eps_x)
+        twissY = Twiss(self.init_twiss['alpha_y'], self.init_twiss['beta_y'], eps_y)
         twissZ = Twiss(0, 1, 0)
         Sigma = CovarianceMatrix().buildCovariance(twissX, twissY, twissZ)
         self.probe.setCovariance(Sigma)
