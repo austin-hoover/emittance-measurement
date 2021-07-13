@@ -207,10 +207,10 @@ class GUI:
         temp_panel = JPanel()
         temp_panel.add(self.calculate_model_optics_button)
         
-        progress_bar = JProgressBar(0, int(self.n_steps_text_field.getText()))
-        progress_bar.setValue(0)
-        progress_bar.setStringPainted(True)
-        temp_panel.add(progress_bar)
+        self.progress_bar = JProgressBar(0, int(self.n_steps_text_field.getText()))
+        self.progress_bar.setValue(0)
+        self.progress_bar.setStringPainted(True)
+        temp_panel.add(self.progress_bar)
         
         panel.add(temp_panel)
         self.left_panel.add(panel)
@@ -494,7 +494,7 @@ class CalculateModelOpticsButtonListener(ActionListener):
                 
         for scan_index, (mu_x, mu_y) in enumerate(phases):
             
-            # Set model optics
+            # Set model optics.
             print 'Scan index {}/{}.'.format(scan_index, n_steps - 1)
             print 'Setting phases at {}...'.format(self.phase_controller.ref_ws_id)
             self.phase_controller.set_ref_ws_phases(mu_x, mu_y, beta_lims, verbose=1)
@@ -503,11 +503,11 @@ class CalculateModelOpticsButtonListener(ActionListener):
             max_betas_anywhere = self.phase_controller.max_betas(stop=None)
             print '  Max betas anywhere: {:.3f}, {:.3f}.'.format(*max_betas_anywhere)
             
-            # Save model Twiss vs. position data
+            # Save model Twiss vs. position data.
             filename = '_output/model_twiss_{}.dat'.format(scan_index)
             write_traj_to_file(self.phase_controller.tracked_twiss(), self.phase_controller.positions, filename)
 
-            # Save transfer matrix at each wire-scanner
+            # Save transfer matrix at each wire-scanner.
             file = open('_output/model_transfer_mat_elems_{}.dat'.format(scan_index), 'w')
             fstr = 16 * '{} ' + '\n'
             for ws_id in ws_ids:
@@ -516,7 +516,7 @@ class CalculateModelOpticsButtonListener(ActionListener):
                 file.write(fstr.format(*elements))
             file.close()
 
-            # Save real space beam moments at each wire-scanner
+            # Save real space beam moments at each wire-scanner.
             file = open('_output/model_moments_{}.dat'.format(scan_index), 'w')
             for ws_id in ws_ids:
                 mu_x, mu_y, alpha_x, alpha_y, beta_x, beta_y, eps_x, eps_y = self.phase_controller.twiss(ws_id)
@@ -524,7 +524,7 @@ class CalculateModelOpticsButtonListener(ActionListener):
                 file.write('{} {} {}\n'.format(*moments))
             file.close()
     
-            # Save model quadrupole strengths
+            # Save model quadrupole strengths.
             file = open('_output/model_fields_{}.dat'.format(scan_index), 'w')
             model_fields = []
             for quad_id in self.ind_quad_ids:
@@ -533,6 +533,9 @@ class CalculateModelOpticsButtonListener(ActionListener):
                 file.write('{}, {}\n'.format(quad_id, field))
             file.close()
             self.gui.model_fields_list.append(model_fields)
+            
+            # Update the GUI progress bar.
+            self.gui.progress_bar.setValue(scan_index + 1)
                     
             print ''
             
