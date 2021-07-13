@@ -6,11 +6,8 @@ To do
 -----
 * Make sure SetLiveOptics dumps the necessary files.
 * Make sure to uncomment the lines in SetLiveOptics that actually set the live optics.
-* Currently, the initial Twiss parameters are hard-coded from RTBT madx file. I'm 
-  worried that a deviation in beam energy from 1 GeV, or just a modification of 
-  the ring optics to set the tunes (SCBD painting), could change these parameters.
-  Maybe we can track the parameters in the ring (using OpenXAL model) to the exact
-  start of the RTBT.
+* Get progress bar working.
+* Formatting
 
 Important variables
 -------------------
@@ -49,6 +46,7 @@ from javax.swing import JComboBox
 from javax.swing import JFrame
 from javax.swing import JLabel
 from javax.swing import JPanel
+from javax.swing import JProgressBar
 from javax.swing import JTable
 from javax.swing import JTextField
 from javax.swing import JFormattedTextField
@@ -77,8 +75,8 @@ COLOR_CYCLE = [
     Color(0.3372549, 0.70588235, 0.91372549),
 ]
 
-ws_ids = ['RTBT_Diag:WS20', 'RTBT_Diag:WS21', 'RTBT_Diag:WS23', 'RTBT_Diag:WS24']
-ws_positions = [111.74436, 116.965, 129.0394, 134.75916]
+ws_ids = ['RTBT_Diag:WS02', 'RTBT_Diag:WS20', 'RTBT_Diag:WS21', 'RTBT_Diag:WS23', 'RTBT_Diag:WS24']
+ws_positions = [27.336298, 111.74436, 116.965, 129.0394, 134.75916]
                 
 
 class GUI:
@@ -112,7 +110,7 @@ class GUI:
         #------------------------------------------------------------------------
         # Labels
         init_twiss_label = JLabel('Initial Twiss')
-        init_twiss_label.setAlignmentX(10)
+        init_twiss_label.setAlignmentX(0)
         ref_ws_id_label = JLabel('Ref. wire-scanner')
         energy_label = JLabel('Energy [GeV]')
         phase_coverage_label = JLabel('Phase coverage [deg]')
@@ -131,12 +129,12 @@ class GUI:
         self.n_steps_text_field = JFormattedTextField(formatter)
         self.n_steps_text_field.setValue(12)
         self.max_beta_text_field = JTextField('40.0', text_field_width)
-        self.calculate_model_optics_button = JButton('Calculate model optics for scan')
+        self.calculate_model_optics_button = JButton('Calculate model optics')
         
         # Action listeners
         self.energy_text_field.addActionListener(EnergyTextFieldListener(self))
-        self.ref_ws_id_dropdown.addActionListener(RefWsIdTextFieldListener(self))
-        self.ref_ws_id_dropdown.setSelectedIndex(3)
+        self.ref_ws_id_dropdown.addActionListener(RefWsIdDropdownListener(self))
+        self.ref_ws_id_dropdown.setSelectedIndex(4)
         self.calculate_model_optics_button.addActionListener(CalculateModelOpticsButtonListener(self))               
         self.init_twiss_table.getCellEditor(0, 0).addCellEditorListener(TwissTableListener(self))
         
@@ -205,8 +203,16 @@ class GUI:
         
         self.left_panel.add(self.model_calc_panel)
         
-        panel = JPanel()
-        panel.add(self.calculate_model_optics_button)
+        panel = JPanel()        
+        temp_panel = JPanel()
+        temp_panel.add(self.calculate_model_optics_button)
+        
+        progress_bar = JProgressBar(0, int(self.n_steps_text_field.getText()))
+        progress_bar.setValue(0)
+        progress_bar.setStringPainted(True)
+        temp_panel.add(progress_bar)
+        
+        panel.add(temp_panel)
         self.left_panel.add(panel)
         
         label = JLabel('Update machine')
@@ -279,9 +285,12 @@ class GUI:
         self.phase_plot_panel.set_data(positions, [phases_x, phases_y])
         x_avgs, y_avgs = self.read_bpms()
         self.bpm_plot_panel.set_data(self.bpm_positions, [x_avgs, y_avgs])
+        
+        ref_ws_index = ws_ids.index(self.ref_ws_id_dropdown.getSelectedItem())
         for plot_panel in [self.beta_plot_panel, self.phase_plot_panel, self.bpm_plot_panel]:
-            for ws_position in ws_positions:
-                plot_panel.graph.addVerticalLine(ws_position, Color(225, 225, 225))
+            for i, ws_position in enumerate(ws_positions):
+                color = Color(150, 150, 150) if i == ref_ws_index else Color(225, 225, 225)
+                plot_panel.graph.addVerticalLine(ws_position, color)
         
     def get_field_set_kws(self):
         field_set_kws = {
@@ -305,7 +314,7 @@ class GUI:
 
         field_set_kws = self.get_field_set_kws()
         self.frame.addWindowListener(WindowCloser(self.phase_controller, field_set_kws))
-        self.frame.show()   
+        self.frame.show() 
         
         
 # Tables
@@ -388,13 +397,14 @@ class EnergyTextFieldListener(ActionListener):
         if kin_energy < 0:
             raise ValueError('Kinetic energy must be postive.')
         self.phase_controller.set_kin_energy(kin_energy)
+        self.gui.init_twiss_table.getModel().fireTableDataChanged()
         self.phase_controller.track()
         self.gui.update_plots()
         print 'Updated kinetic energy to {:.3e} [eV]'.format(
             self.phase_controller.probe.getKineticEnergy())
 
         
-class RefWsIdTextFieldListener(ActionListener):
+class RefWsIdDropdownListener(ActionListener):
     
     def __init__(self, gui):
         self.gui = gui
@@ -403,6 +413,8 @@ class RefWsIdTextFieldListener(ActionListener):
         
     def actionPerformed(self, event):
         self.phase_controller.ref_ws_id = self.dropdown.getSelectedItem()
+        if hasattr(self.gui, 'right_panel'):
+            self.gui.update_plots()
         print 'Updated ref_ws_id to {}'.format(self.phase_controller.ref_ws_id)
         
         

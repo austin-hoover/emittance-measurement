@@ -16,7 +16,7 @@ from xal.tools.beam.calc import SimpleSimResultsAdaptor
 from xal.tools.beam.calc import CalculationsOnBeams, CalculationsOnRings
 
 
-kin_energy
+kin_energy = 0.95e9
 
 # Load SNS ring
 accelerator = XMLDataManager.loadDefaultAccelerator()
@@ -63,3 +63,9 @@ twiss_x, twiss_y, _ = adaptor.computeTwissParameters(state)
 
 print 'alpha_x, alpha_y =', twiss_x.getAlpha(), twiss_y.getAlpha()
 print 'beta_x, beta_y =', twiss_x.getBeta(), twiss_y.getBeta()
+
+
+
+
+for node in accelerator.getComboSequence('RTBT').getNodes():
+    print node.getId(), node.getPosition()

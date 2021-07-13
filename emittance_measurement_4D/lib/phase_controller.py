@@ -27,6 +27,7 @@ from xal.tools.beam import PhaseVector
 from xal.tools.beam import CovarianceMatrix
 from xal.tools.beam.calc import SimpleSimResultsAdaptor
 from xal.tools.beam.calc import CalculationsOnBeams
+from xal.tools.beam.calc import CalculationsOnRings
 
 # Local
 from utils import subtract
@@ -45,12 +46,12 @@ ws_ids = ['RTBT_Diag:WS02', 'RTBT_Diag:WS20', 'RTBT_Diag:WS21',
           'RTBT_Diag:WS23', 'RTBT_Diag:WS24']
 
 # Twiss parameters at RTBT entrance
-init_twiss = {
-    'alpha_x': -1.378, 
-    'alpha_y': 0.645,             
-    'beta_x': 6.243, 
-    'beta_y': 10.354, 
-}
+# init_twiss = {
+#     'alpha_x': -1.378, 
+#     'alpha_y': 0.645,             
+#     'beta_x': 6.243, 
+#     'beta_y': 10.354, 
+# }
 
 # Quadrupoles with independent power supplies
 rtbt_ind_quad_ids = ['RTBT_Mag:QH02', 'RTBT_Mag:QV03', 'RTBT_Mag:QH04', 
@@ -80,7 +81,6 @@ class PhaseController:
 
     def __init__(self, ref_ws_id='RTBT_Diag:WS24', kin_energy=1.0):
         self.ref_ws_id = ref_ws_id
-        self.kin_energy = kin_energy
         self.accelerator = XMLDataManager.loadDefaultAccelerator()
         self.sequence = self.accelerator.getComboSequence('RTBT')
         self.scenario = Scenario.newScenarioFor(self.sequence)
@@ -90,9 +90,8 @@ class PhaseController:
         self.algorithm.setUseSpacecharge(False)
         self.probe = ProbeFactory.getEnvelopeProbe(self.sequence, self.algorithm)
         self.probe.setBeamCurrent(0.0)
-        self.probe.setKineticEnergy(self.kin_energy * 1e9)
+        self.set_kin_energy(kin_energy)
         self.scenario.setProbe(self.probe)
-        self.init_twiss = init_twiss
         self.track()
         
          # Get node for each RTBT quad and quad power supply.
@@ -147,6 +146,7 @@ class PhaseController:
         """Set the probe kinetic energy [GeV]."""
         self.kin_energy = kin_energy
         self.probe.setKineticEnergy(1e9 * kin_energy)
+        self.calc_init_twiss()
         
     def initialize_envelope(self):
         """Reset the envelope probe to the start of the lattice."""
@@ -456,8 +456,8 @@ class PhaseController:
         self.set_fields(self.ind_quad_ids, model_fields, 'live', **kws)
         
         
-    def get_init_twiss(self):
-        """Get Twiss parameters at RTBT entrance using the ring."""
+    def calc_init_twiss(self):
+        """Calculate Twiss parameters at RTBT entrance using the ring."""
         # Load SNS ring
         kin_energy = 1e9 * self.kin_energy
         accelerator = XMLDataManager.loadDefaultAccelerator()
@@ -494,5 +494,10 @@ class PhaseController:
         adaptor = SimpleSimResultsAdaptor(trajectory) 
         stop_node_id = 'Begin_Of_Ring3' # same as 'Begin_Of_RTBT'
         state = trajectory.statesForElement(stop_node_id)[0]
-        twiss_x, twiss_y, _ = adaptor.computeTwissParameters(state)
-        return twiss_x.getAlpha(), twiss_y.getAlpha(), twiss_x.getBeta(), twiss_y.getBeta()
+        twiss_x, twiss_y, twiss_z = adaptor.computeTwissParameters(state)
+        self.init_twiss = {
+            'alpha_x': twiss_x.getAlpha(),
+            'alpha_y': twiss_y.getAlpha(),
+            'beta_x': twiss_x.getBeta(),
+            'beta_y': twiss_y.getBeta(),
+        }
