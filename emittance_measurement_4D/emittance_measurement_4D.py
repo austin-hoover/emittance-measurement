@@ -528,7 +528,7 @@ class CalculateModelOpticsButtonListener(ActionListener):
             file = open('_output/model_fields_{}.dat'.format(scan_index), 'w')
             model_fields = []
             for quad_id in self.ind_quad_ids:
-                field = self.phase_controller.get_field(quad_id)
+                field = self.phase_controller.get_field(quad_id, 'model')
                 model_fields.append(field)
                 file.write('{}, {}\n'.format(quad_id, field))
             file.close()
@@ -547,12 +547,13 @@ class SetLiveOpticsButtonListener(ActionListener):
     def __init__(self, gui):
         self.gui = gui
         self.phase_controller = gui.phase_controller
+        self.ind_quad_ids = self.phase_controller.ind_quad_ids
         
     def actionPerformed(self, action):
-        print 'Syncing live quads with model...'
         quad_ids = self.phase_controller.ind_quad_ids
         field_set_kws = self.gui.get_field_set_kws()
         scan_index = self.gui.scan_index_dropdown.getSelectedItem()
+        print 'Syncing live quads with model...'
         print field_set_kws
         if scan_index == 'default':
             self.phase_controller.restore_default_optics('model')
@@ -564,6 +565,22 @@ class SetLiveOpticsButtonListener(ActionListener):
 #             self.phase_controller.set_fields(quad_ids, model_fields, 'live', **field_set_kws)
         self.gui.quad_settings_table.getModel().fireTableDataChanged()
         self.gui.update_plots()
+        
+        # Save live quad strengths.
+        file = open('_output/live_fields_{}.dat'.format(scan_index), 'w')
+        for quad_id in self.ind_quad_ids:
+            field = self.phase_controller.get_field(quad_id, 'live')
+            file.write('{}, {}\n'.format(quad_id, field))
+        file.close()
+        
+        # Save transfer matrix at each wire-scanner.
+        file = open('_output/model_transfer_mat_elems_{}.dat'.format(scan_index), 'w')
+        fstr = 16 * '{} ' + '\n'
+        for ws_id in ws_ids:
+            M = self.phase_controller.transfer_matrix(ws_id)
+            elements = [elem for row in M for elem in row]
+            file.write(fstr.format(*elements))
+        file.close()
     
     
 # Plotting

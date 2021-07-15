@@ -45,7 +45,7 @@ from lib.utils import linspace
 ws_ids = ['RTBT_Diag:WS02', 'RTBT_Diag:WS20', 'RTBT_Diag:WS21', 
           'RTBT_Diag:WS23', 'RTBT_Diag:WS24']
 
-# Twiss parameters at RTBT entrance
+# Twiss parameters at RTBT entrance (OLD)
 # init_twiss = {
 #     'alpha_x': -1.378, 
 #     'alpha_y': 0.645,             
