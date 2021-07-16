@@ -318,9 +318,9 @@ class PhaseController:
         n_steps : int
             The number of steps in the scan.
         """              
-        def get_phases(phase, reverse=False):
-            min_phase = put_angle_in_range(phase - 0.5 * radians(phase_coverage))
-            max_phase = put_angle_in_range(phase + 0.5 * radians(phase_coverage))
+        def phase_range(center_phase, n_steps, reverse=False):
+            min_phase = put_angle_in_range(center_phase - 0.5 * radians(phase_coverage))
+            max_phase = put_angle_in_range(center_phase + 0.5 * radians(phase_coverage))
             # Difference between and max phase is always <= 180 degrees.
             abs_diff = abs(max_phase - min_phase)
             if abs_diff > math.pi:
@@ -341,8 +341,9 @@ class PhaseController:
         mu_x0, mu_y0 = self.phases(self.ref_ws_id)
         self.set_fields(self.ind_quad_ids, model_fields, 'model')
         
-        phases_x = get_phases(mu_x0)
-        phases_y = get_phases(mu_y0, reverse=True)
+#         phases_x = get_phases(mu_x0, n_steps)
+#         phases_y = get_phases(mu_y0, n_steps, reverse=True)
+        phases_x = get(phases(mu_))
         phases = [(mu_x, mu_y) for mu_x, mu_y in zip(phases_x, phases_y)]
         return phases
 
@@ -459,42 +460,24 @@ class PhaseController:
     def calc_init_twiss(self):
         """Calculate Twiss parameters at RTBT entrance using the ring."""
         # Load SNS ring
-        kin_energy = 1e9 * self.kin_energy
         accelerator = XMLDataManager.loadDefaultAccelerator()
         sequence = accelerator.getComboSequence('Ring')
         scenario = Scenario.newScenarioFor(sequence)
+        
+        # Sync with live machine.
+#         scenario.setSynchronizationMode(Scenario.SYNC_MODE_LIVE)
+#         scenario.resync()
+        
+        # Get matched Twiss at RTBT entrance
         algorithm = AlgorithmFactory.createTransferMapTracker(sequence)
         probe = ProbeFactory.getTransferMapProbe(sequence, algorithm)
         probe.setKineticEnergy(1e9 * self.kin_energy)
         scenario.setProbe(probe)
         scenario.run()
         trajectory = probe.getTrajectory()
-
-        # Get ring Twiss parameters at injection point
         calculator = CalculationsOnRings(trajectory)
-        twiss_x, twiss_y, twiss_z = calculator.ringMatchedTwiss()
-        alpha_x, beta_x = twiss_x.getAlpha(), twiss_x.getBeta()
-        alpha_y, beta_y = twiss_y.getAlpha(), twiss_y.getBeta()
-
-        # Get Twiss parameters at RTBT entrance
-        scenario = Scenario.newScenarioFor(sequence)
-        algorithm = AlgorithmFactory.createEnvelopeTracker(sequence)
-        algorithm.setUseSpacecharge(False)
-        probe = ProbeFactory.getEnvelopeProbe(sequence, algorithm)
-        probe.setBeamCurrent(0.0)
-        probe.setKineticEnergy(1e9 * self.kin_energy)
-        twiss_x.setTwiss(alpha_x, beta_x, 20e-6)
-        twiss_y.setTwiss(alpha_y, beta_y, 20e-6)
-        twiss_z.setTwiss(0, 1, 0)
-        Sigma = CovarianceMatrix().buildCovariance(twiss_x, twiss_y, twiss_z)
-        probe.setCovariance(Sigma)
-        scenario.setProbe(probe)
-        scenario.run()
-        trajectory = probe.getTrajectory()
-        adaptor = SimpleSimResultsAdaptor(trajectory) 
-        stop_node_id = 'Begin_Of_Ring3' # same as 'Begin_Of_RTBT'
-        state = trajectory.statesForElement(stop_node_id)[0]
-        twiss_x, twiss_y, twiss_z = adaptor.computeTwissParameters(state)
+        state = trajectory.statesForElement('Begin_Of_Ring3')[0]
+        twiss_x, twiss_y, twiss_z = calculator.computeMatchedTwissAt(state)
         self.init_twiss = {
             'alpha_x': twiss_x.getAlpha(),
             'alpha_y': twiss_y.getAlpha(),
