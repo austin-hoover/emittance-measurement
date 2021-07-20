@@ -505,7 +505,9 @@ class CalculateModelOpticsButtonListener(ActionListener):
             
             # Save model Twiss vs. position data.
             filename = '_output/model_twiss_{}.dat'.format(scan_index)
-            write_traj_to_file(self.phase_controller.tracked_twiss(), self.phase_controller.positions, filename)
+            write_traj_to_file(self.phase_controller.tracked_twiss(), 
+                               self.phase_controller.positions, 
+                               filename)
 
             # Save transfer matrix at each wire-scanner.
             file = open('_output/model_transfer_mat_elems_{}.dat'.format(scan_index), 'w')
