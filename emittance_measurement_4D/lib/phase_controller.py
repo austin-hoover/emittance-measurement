@@ -45,14 +45,6 @@ from lib.utils import linspace
 ws_ids = ['RTBT_Diag:WS02', 'RTBT_Diag:WS20', 'RTBT_Diag:WS21', 
           'RTBT_Diag:WS23', 'RTBT_Diag:WS24']
 
-# Twiss parameters at RTBT entrance (OLD)
-# init_twiss = {
-#     'alpha_x': -1.378, 
-#     'alpha_y': 0.645,             
-#     'beta_x': 6.243, 
-#     'beta_y': 10.354, 
-# }
-
 # Quadrupoles with independent power supplies
 rtbt_ind_quad_ids = ['RTBT_Mag:QH02', 'RTBT_Mag:QV03', 'RTBT_Mag:QH04', 
                      'RTBT_Mag:QV05', 'RTBT_Mag:QH06', 'RTBT_Mag:QH12', 
@@ -214,9 +206,61 @@ class PhaseController:
             beta_ys.append(beta_y)
         return max(beta_xs), max(beta_ys)
 
-    def set_ref_ws_phases(self, mu_x, mu_y, beta_lims=(40, 40), verbose=0):
-        """Set x and y phases from start to the reference wire-scanner. 
+#     def set_ref_ws_phases(self, mu_x, mu_y, beta_lims=(40, 40), verbose=0):
+#         """Set x and y phases from start to the reference wire-scanner. 
     
+#         Parameters
+#         ----------
+#         mu_x, mu_y : float
+#             The desired phase advances at the reference wire-scanner [rad].
+#         beta_lims : (xmax, ymax)
+#             Maximum beta functions to allow from QH02 to WS24.
+#         verbose : int
+#             If greater than zero, print a before/after summary.
+            
+#         Returns
+#         -------
+#         fields : list[float]
+#             The correct field strengths for the independent quadrupoles.
+#         """        
+#         class MyScorer(Scorer):
+#             def __init__(self, controller):
+#                 self.controller = controller
+#                 self.beta_lims = beta_lims
+#                 self.target_phases = [mu_x, mu_y]
+#                 self.ref_ws_id = controller.ref_ws_id
+#                 self.quad_ids = controller.ind_quad_ids[:-5]
+                
+#             def score(self, trial, variables):
+#                 fields = get_trial_vals(trial, variables)   
+#                 self.controller.set_fields(self.quad_ids, fields, 'model')
+#                 self.controller.track()
+#                 calc_phases = self.controller.phases(self.ref_ws_id)
+#                 residuals = subtract(calc_phases, self.target_phases)
+#                 return norm(residuals) + self.penalty_function()
+            
+#             def penalty_function(self):
+#                 penalty = 0.
+#                 for max_beta, beta_lim in zip(self.controller.max_betas(), self.beta_lims):
+#                     penalty += clip(max_beta - beta_lim, 0)
+#                 return penalty**2
+            
+#         scorer = MyScorer(self)
+#         var_names = self.ind_quad_ids
+#         bounds = (self.ps_lb[:-5], self.ps_ub[:-5])
+#         init_fields = self.default_fields[:-5]    
+#         self.restore_default_optics()
+#         fields = minimize(scorer, init_fields, var_names, bounds)
+#         if verbose > 0:
+#             print '  Desired phases : {:.3f}, {:.3f}'.format(mu_x, mu_y)
+#             print '  Calc phases    : {:.3f}, {:.3f}'.format(*self.phases(self.ref_ws_id))
+#             print '  Max betas (Q03 - WS24): {:.3f}, {:.3f}'.format(*self.max_betas())
+#             print '  Betas at target: {:.3f}, {:.3f}'.format(*self.beta_funcs('RTBT:Tgt'))
+#         return fields
+
+    def set_ref_ws_phases(self, mu_x, mu_y, beta_lims=(40, 40), verbose=0):
+        """Set x and y phases from start to the reference wire-scanner.
+
         Parameters
         ----------
         mu_x, mu_y : float
@@ -229,15 +273,16 @@ class PhaseController:
         Returns
         -------
         fields : list[float]
-            The correct field strengths for the independent quadrupoles.
+            The correct field strengths for the independent quadrupoles that 
+            were varied. 
         """        
         class MyScorer(Scorer):
-            def __init__(self, controller):
+            def __init__(self, controller, quad_ids):
                 self.controller = controller
+                self.quad_ids = quad_ids
                 self.beta_lims = beta_lims
                 self.target_phases = [mu_x, mu_y]
                 self.ref_ws_id = controller.ref_ws_id
-                self.quad_ids = controller.ind_quad_ids[:-5]
                 
             def score(self, trial, variables):
                 fields = get_trial_vals(trial, variables)   
@@ -253,11 +298,13 @@ class PhaseController:
                     penalty += clip(max_beta - beta_lim, 0)
                 return penalty**2
             
-        scorer = MyScorer(self)
-        var_names = ['B02', 'B03', 'B04', 'B05', 'B06', 'B12', 'B13', 
-                     'B14', 'B15', 'B16', 'B17', 'B18', 'B19']
-        bounds = (self.ps_lb[:-5], self.ps_ub[:-5])
-        init_fields = self.default_fields[:-5]    
+        lo = self.ind_quad_ids.index('RTBT_Mag:QH18')
+        hi = self.ind_quad_ids.index('RTBT_Mag:QV19')
+        quad_ids = self.ind_quad_ids[lo : hi + 1]
+        scorer = MyScorer(self, self.ind_quad_ids[lo : hi + 1])
+        var_names = self.ind_quad_ids[lo : hi + 1]
+        bounds = (self.ps_lb[lo : hi + 1], self.ps_ub[lo : hi + 1])
+        init_fields = self.default_fields[lo : hi + 1]    
         self.restore_default_optics()
         fields = minimize(scorer, init_fields, var_names, bounds)
         if verbose > 0:
@@ -305,47 +352,6 @@ class PhaseController:
         if verbose > 0:
             print '  Desired betas: {:.3f}, {:.3f}'.format(*self.default_betas_at_target)
             print '  Calc betas   : {:.3f}, {:.3f}'.format(*self.beta_funcs('RTBT:Tgt'))
-            
-    def get_phases_for_scan(self, phase_coverage=180.0, n_steps=3):
-        """Create array of phases for scan. 
-
-        Parameters
-        ----------
-        phase_coverages : float
-            Range of phase advances to cover IN DEGREES. The phases are
-            centered on the default phase. It is a pain because OpenXAL 
-            computes the phases mod 2pi. 
-        n_steps : int
-            The number of steps in the scan.
-        """              
-        def phase_range(center_phase, n_steps, reverse=False):
-            min_phase = put_angle_in_range(center_phase - 0.5 * radians(phase_coverage))
-            max_phase = put_angle_in_range(center_phase + 0.5 * radians(phase_coverage))
-            # Difference between and max phase is always <= 180 degrees.
-            abs_diff = abs(max_phase - min_phase)
-            if abs_diff > math.pi:
-                abs_diff = 2*math.pi - abs_diff
-            # Return list of phases.
-            step = abs_diff / (n_steps - 1)
-            phases = [min_phase]
-            for _ in range(n_steps - 1):
-                phase = put_angle_in_range(phases[-1] + step)
-                phases.append(phase)
-            if reverse:
-                phases = phases[::-1]
-            return phases
-        
-        # Get default phase advances without changing current state.
-        model_fields = self.get_fields(self.ind_quad_ids, 'model')
-        self.restore_default_optics('model')
-        mu_x0, mu_y0 = self.phases(self.ref_ws_id)
-        self.set_fields(self.ind_quad_ids, model_fields, 'model')
-        
-#         phases_x = get_phases(mu_x0, n_steps)
-#         phases_y = get_phases(mu_y0, n_steps, reverse=True)
-        phases_x = get(phases(mu_))
-        phases = [(mu_x, mu_y) for mu_x, mu_y in zip(phases_x, phases_y)]
-        return phases
 
     def get_field(self, quad_id, opt='model'):
         """Return quadrupole field strength [T/m].
@@ -464,9 +470,9 @@ class PhaseController:
         sequence = accelerator.getComboSequence('Ring')
         scenario = Scenario.newScenarioFor(sequence)
         
-        # Sync with live machine.
-#         scenario.setSynchronizationMode(Scenario.SYNC_MODE_LIVE)
-#         scenario.resync()
+        # Sync model with live machine.
+        scenario.setSynchronizationMode(Scenario.SYNC_MODE_LIVE)
+        scenario.resync()
         
         # Get matched Twiss at RTBT entrance
         algorithm = AlgorithmFactory.createTransferMapTracker(sequence)
@@ -484,3 +490,48 @@ class PhaseController:
             'beta_x': twiss_x.getBeta(),
             'beta_y': twiss_y.getBeta(),
         }
+        
+    def get_phases_for_scan(self, phase_coverage=180.0, n_steps=3):
+        """Create array of phases for scan. 
+        
+        In the first{second} half of the scan, the horizontal{vertical} phase is 
+        varied while the {vertical}{horizontal} phase is held fixed.
+        
+        Example: mux = [1, 2, 3, 2, 2, 2], 
+                 muy = [5, 5, 5, 4, 5, 6]
+
+        Parameters
+        ----------
+        phase_coverages : float
+            Range of phase advances to cover IN DEGREES. The phases are
+            centered on the default phase. It is a pain because OpenXAL 
+            computes the phases mod 2pi. 
+        n_steps : int
+            The number of steps in the scan. It should be an even number >= 6.
+        """              
+        def lin_phase_range(center_phase, n_steps):
+            min_phase = put_angle_in_range(center_phase - 0.5 * radians(phase_coverage))
+            max_phase = put_angle_in_range(center_phase + 0.5 * radians(phase_coverage))
+            # Difference between and max phase is always <= 180 degrees.
+            abs_diff = abs(max_phase - min_phase)
+            if abs_diff > math.pi:
+                abs_diff = 2*math.pi - abs_diff
+            # Return list of phases.
+            step = abs_diff / (n_steps - 1)
+            phases = [min_phase]
+            for _ in range(n_steps - 1):
+                phase = put_angle_in_range(phases[-1] + step)
+                phases.append(phase)
+            return phases
+        
+        # Get default phase advances without changing current state.
+        model_fields = self.get_fields(self.ind_quad_ids, 'model')
+        self.restore_default_optics('model')
+        mu_x0, mu_y0 = self.phases(self.ref_ws_id)
+        self.set_fields(self.ind_quad_ids, model_fields, 'model')
+    
+        n = int(n_steps) // 2
+        phases_x = lin_phase_range(mu_x0, n) + n * [mu_x0]
+        phases_y = n * [mu_y0] + lin_phase_range(mu_y0, n)
+        phases = [(mu_x, mu_y) for mu_x, mu_y in zip(phases_x, phases_y)]
+        return phases
