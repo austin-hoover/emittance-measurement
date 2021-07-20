@@ -66,16 +66,16 @@ def minimize(scorer, x, var_names, bounds, maxiters=1000, tol=1e-8):
         the size of x or be a scalar; in the latter case the bound will be the 
         same for all variables.
     """ 
-    n = len(x)
-    if n != len(var_names):
+    n_vars = len(x)
+    if n_vars != len(var_names):
         raise ValueError('Parameter list and variable name list have different length.')
     
     lb, ub = bounds
     if type(lb) in [float, int]:
-        lb = n * [lb]
+        lb = n_vars * [lb]
     if type(ub) in [float, int]:
-        ub = n * [ub]
-    for i in range(n):
+        ub = n_vars * [ub]
+    for i in range(n_vars):
         if x[i] < lb[i] or x[i] > ub[i]:
             raise ValueError('Initial guess is outside bounds.')
             
