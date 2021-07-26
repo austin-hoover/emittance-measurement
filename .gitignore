@@ -3,3 +3,4 @@
 .jython_cache
 *.dat
 *$py.class
+__pycache__
