@@ -178,18 +178,44 @@ class PhaseController:
         """Return beta functions at node entrance."""
         return self.twiss(node_id)[4:6]
         
-    def transfer_matrix(self, node_id):
-        """Return transfer matrix elements from start to node entrance."""
+    def transfer_matrix(self, start_node_id=None, stop_node_id=None):
+        """Return transfer matrix elements from start to node entrance.
+        
+        The node ids can be out of order.
+        """
+        if start_node_id is None:
+            start_node_id = self.sequence.getNodes()[0].getId()
+        if stop_node_id is None:
+            stop_node_id = self.ref_ws_id     
+            
+        # Check if the nodes are in order. If they are not, flip them and
+        # remember to take the inverse at the end.
+        reverse = False
+        node_ids = [node.getId() for node in self.sequence.getNodes()]
+        if node_ids.index(start_node_id) > node_ids.index(stop_node_id):
+            start_node_id, stop_node_id = stop_node_id, start_node_id
+            reverse = True
+            
         scenario = Scenario.newScenarioFor(self.sequence)
         algorithm = AlgorithmFactory.createTransferMapTracker(self.sequence)
         probe = ProbeFactory.getTransferMapProbe(self.sequence, algorithm)
         scenario.setProbe(probe)
         scenario.run()
-        state = probe.getTrajectory().statesForElement(node_id)[0]
-        transfer_matrix = state.getTransferMap().getFirstOrder()
-        transfer_matrix = list_from_xal_matrix(transfer_matrix)
-        transfer_matrix_elements = [row[:4] for row in transfer_matrix[:4]]
-        return transfer_matrix_elements
+        trajectory = probe.getTrajectory()
+        
+        # Get transfer matrix from upstream to downstream node.
+        state1 = trajectory.stateForElement(start_node_id)
+        state2 = trajectory.stateForElement(stop_node_id)
+        M1 = state1.getTransferMap().getFirstOrder()
+        M2 = state2.getTransferMap().getFirstOrder()
+        M = M2.times(M1.inverse())
+        if reverse:
+            M = M.inverse()
+            
+        # Return a 4x4 list.
+        M = list_from_xal_matrix(M)
+        M = [row[:4] for row in M[:4]]
+        return M
         
     def max_betas(self, start='RTBT_Mag:QH02', stop='RTBT_Diag:WS24'):
         """Return maximum x and y beta functions from start to stop node.

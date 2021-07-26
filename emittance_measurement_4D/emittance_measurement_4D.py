@@ -75,7 +75,8 @@ COLOR_CYCLE = [
     Color(0.3372549, 0.70588235, 0.91372549),
 ]
 
-ws_ids = ['RTBT_Diag:WS02', 'RTBT_Diag:WS20', 'RTBT_Diag:WS21', 'RTBT_Diag:WS23', 'RTBT_Diag:WS24']
+ws_ids = ['RTBT_Diag:WS02', 'RTBT_Diag:WS20', 'RTBT_Diag:WS21', 
+          'RTBT_Diag:WS23', 'RTBT_Diag:WS24']
 ws_positions = [27.336298, 111.74436, 116.965, 129.0394, 134.75916]
                 
 
@@ -112,6 +113,7 @@ class GUI:
         init_twiss_label = JLabel('Initial Twiss')
         init_twiss_label.setAlignmentX(0)
         ref_ws_id_label = JLabel('Ref. wire-scanner')
+        rec_point_label = JLabel('Reconstruction point')
         energy_label = JLabel('Energy [GeV]')
         phase_coverage_label = JLabel('Phase coverage [deg]')
         n_steps_label = JLabel('Total steps')
@@ -120,10 +122,13 @@ class GUI:
         # Components
         text_field_width = 11
         self.ref_ws_id_dropdown = JComboBox(ws_ids)
+        nodes = self.phase_controller.sequence.getNodes()
+        node_ids = [node.getId() for node in nodes]
+        self.rec_point_dropdown = JComboBox(node_ids)
         self.init_twiss_table = JTable(InitTwissTableModel(self))
         self.init_twiss_table.setShowGrid(True)
         self.energy_text_field = JTextField('1.0', text_field_width)
-        self.phase_coverage_text_field = JTextField('180.0', text_field_width)
+        self.phase_coverage_text_field = JTextField('30.0', text_field_width)
         formatter = NumberFormat.getIntegerInstance()
         formatter.setGroupingUsed(False)
         self.n_steps_text_field = JFormattedTextField(formatter)
@@ -141,6 +146,7 @@ class GUI:
         # Build panel
         self.model_calc_panel1 = AlignedLabeledComponentsPanel()
         self.model_calc_panel1.add_row(ref_ws_id_label, self.ref_ws_id_dropdown)
+        self.model_calc_panel1.add_row(rec_point_label, self.rec_point_dropdown)
         self.model_calc_panel2 = AlignedLabeledComponentsPanel()
         self.model_calc_panel2.add_row(energy_label, self.energy_text_field)
         self.model_calc_panel2.add_row(phase_coverage_label, self.phase_coverage_text_field)
@@ -479,6 +485,7 @@ class CalculateModelOpticsButtonListener(ActionListener):
         """
         self.gui.model_fields_list = []
         
+        rec_node_id = self.gui.rec_point_dropdown.getSelectedItem()
         phase_coverage = float(self.gui.phase_coverage_text_field.getText())
         n_steps = int(self.gui.n_steps_text_field.getText())        
         max_beta = float(self.gui.max_beta_text_field.getText())
@@ -513,7 +520,7 @@ class CalculateModelOpticsButtonListener(ActionListener):
             file = open('_output/model_transfer_mat_elems_{}.dat'.format(scan_index), 'w')
             fstr = 16 * '{} ' + '\n'
             for ws_id in ws_ids:
-                M = self.phase_controller.transfer_matrix(ws_id)
+                M = self.phase_controller.transfer_matrix(rec_node_id, ws_id)
                 elements = [elem for row in M for elem in row]
                 file.write(fstr.format(*elements))
             file.close()
@@ -521,7 +528,8 @@ class CalculateModelOpticsButtonListener(ActionListener):
             # Save real space beam moments at each wire-scanner.
             file = open('_output/model_moments_{}.dat'.format(scan_index), 'w')
             for ws_id in ws_ids:
-                mu_x, mu_y, alpha_x, alpha_y, beta_x, beta_y, eps_x, eps_y = self.phase_controller.twiss(ws_id)
+                (mu_x, mu_y, alpha_x, alpha_y, 
+                 beta_x, beta_y, eps_x, eps_y) = self.phase_controller.twiss(ws_id)
                 moments = [eps_x * beta_x, eps_y * beta_y, 0.0]
                 file.write('{} {} {}\n'.format(*moments))
             file.close()
@@ -552,6 +560,7 @@ class SetLiveOpticsButtonListener(ActionListener):
         self.ind_quad_ids = self.phase_controller.ind_quad_ids
         
     def actionPerformed(self, action):
+        rec_node_id = self.gui.rec_point_dropdown.getSelectedItem()
         quad_ids = self.phase_controller.ind_quad_ids
         field_set_kws = self.gui.get_field_set_kws()
         scan_index = self.gui.scan_index_dropdown.getSelectedItem()
@@ -579,7 +588,7 @@ class SetLiveOpticsButtonListener(ActionListener):
         file = open('_output/model_transfer_mat_elems_{}.dat'.format(scan_index), 'w')
         fstr = 16 * '{} ' + '\n'
         for ws_id in ws_ids:
-            M = self.phase_controller.transfer_matrix(ws_id)
+            M = self.phase_controller.transfer_matrix(rec_node_id, ws_id)
             elements = [elem for row in M for elem in row]
             file.write(fstr.format(*elements))
         file.close()
