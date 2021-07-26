@@ -517,7 +517,7 @@ class CalculateModelOpticsButtonListener(ActionListener):
                                filename)
 
             # Save transfer matrix at each wire-scanner.
-            file = open('_output/model_transfer_mat_elems_{}.dat'.format(scan_index), 'w')
+            file = open('_output/model_transfer_mat_elems_{}_{}.dat'.format(scan_index, rec_node_id), 'w')
             fstr = 16 * '{} ' + '\n'
             for ws_id in ws_ids:
                 M = self.phase_controller.transfer_matrix(rec_node_id, ws_id)
@@ -585,13 +585,21 @@ class SetLiveOpticsButtonListener(ActionListener):
         file.close()
         
         # Save transfer matrix at each wire-scanner.
-        file = open('_output/model_transfer_mat_elems_{}.dat'.format(scan_index), 'w')
+        file = open('_output/model_transfer_mat_elems_{}_{}.dat'.format(scan_index, rec_node_id), 'w')
         fstr = 16 * '{} ' + '\n'
         for ws_id in ws_ids:
             M = self.phase_controller.transfer_matrix(rec_node_id, ws_id)
             elements = [elem for row in M for elem in row]
             file.write(fstr.format(*elements))
         file.close()
+        
+        # Save expected Twiss parameters at reconstruction location.
+        file = open('_output/model_twiss_{}.dat'.format(rec_node_id), 'w')
+        (mu_x, mu_y, alpha_x, alpha_y, 
+         beta_x, beta_y, eps_x, eps_y) = self.phase_controller.twiss(rec_node_id)
+        file.write('{} {} {} {}'.format(alpha_x, alpha_y, beta_x, beta_y))
+        file.close()
+ 
     
     
 # Plotting
