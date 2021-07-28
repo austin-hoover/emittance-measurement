@@ -25,7 +25,6 @@ from xal.smf.impl import MagnetMainSupply
 from xal.tools.beam import Twiss
 from xal.tools.beam import PhaseVector
 from xal.tools.beam import CovarianceMatrix
-from xal.tools.beam.calc import SimpleSimResultsAdaptor
 from xal.tools.beam.calc import CalculationsOnBeams
 from xal.tools.beam.calc import CalculationsOnRings
 
@@ -40,6 +39,7 @@ from helpers import list_from_xal_matrix
 from lib.utils import radians
 from lib.utils import linspace
 
+# 953.95 MeV is the design energy in OpenXAL!
 
 # Available RTBT wire-scanners
 ws_ids = ['RTBT_Diag:WS02', 'RTBT_Diag:WS20', 'RTBT_Diag:WS21', 
@@ -59,13 +59,13 @@ def node_ids(nodes):
     return [node.getId() for node in nodes]
 
 
-def compute_twiss(state, adaptor):
+def compute_twiss(state, calculator):
     """Compute Twiss parameters from envelope trajectory state."""
-    twiss_x, twiss_y, _ = adaptor.computeTwissParameters(state)
+    twiss_x, twiss_y, _ = calculator.computeTwissParameters(state)
     alpha_x, beta_x = twiss_x.getAlpha(), twiss_x.getBeta()
     alpha_y, beta_y = twiss_y.getAlpha(), twiss_y.getBeta()
     eps_x, eps_y = twiss_x.getEmittance(), twiss_y.getEmittance()
-    mu_x, mu_y, _ = adaptor.computeBetatronPhase(state).toArray()
+    mu_x, mu_y, _ = calculator.computeBetatronPhase(state).toArray()
     return mu_x, mu_y, alpha_x, alpha_y, beta_x, beta_y, eps_x, eps_y
 
 
@@ -156,19 +156,19 @@ class PhaseController:
         self.initialize_envelope()
         self.scenario.run()
         self.trajectory = self.probe.getTrajectory()
-        self.adaptor = SimpleSimResultsAdaptor(self.trajectory) 
+        self.calculator = CalculationsOnBeams(self.trajectory)
         self.states = self.trajectory.getStatesViaIndexer()
         self.positions = [state.getPosition() for state in self.states]
         return self.trajectory
     
     def tracked_twiss(self):
         """Return Twiss parameters at each state in trajectory."""
-        return [compute_twiss(state, self.adaptor) for state in self.states]
+        return [compute_twiss(state, self.calculator) for state in self.states]
     
     def twiss(self, node_id):
         """Return Twiss parameters at node entrance."""
         state = self.trajectory.statesForElement(node_id)[0]
-        return compute_twiss(state, self.adaptor)
+        return compute_twiss(state, self.calculator)
     
     def phases(self, node_id):
         """Return phase advances (mod 2pi) from start to node entrance."""
@@ -495,11 +495,9 @@ class PhaseController:
         accelerator = XMLDataManager.loadDefaultAccelerator()
         sequence = accelerator.getComboSequence('Ring')
         scenario = Scenario.newScenarioFor(sequence)
-        
         # Sync model with live machine.
         scenario.setSynchronizationMode(Scenario.SYNC_MODE_LIVE)
         scenario.resync()
-        
         # Get matched Twiss at RTBT entrance
         algorithm = AlgorithmFactory.createTransferMapTracker(sequence)
         probe = ProbeFactory.getTransferMapProbe(sequence, algorithm)
