@@ -48,7 +48,7 @@ def get_trial_vals(trial, variables):
     return [trial_point.getValue(var) for var in variables]
 
 
-def minimize(scorer, x, var_names, bounds, maxiters=1000, tol=1e-8):
+def minimize(scorer, x, var_names, bounds, maxiters=1000, tol=1e-8, verbose=0):
     """Minimize a multivariate function using the simplex algorithm.
     
     To do: ensure initial guess is within bounds.
@@ -85,27 +85,7 @@ def minimize(scorer, x, var_names, bounds, maxiters=1000, tol=1e-8):
     problem = getInverseSquareMinimizerProblem(variables, scorer, tol)
     solver.solve(problem)
     trial = solver.getScoreBoard().getBestSolution()
-    return get_trial_vals(trial, variables)
-    
-
-def least_squares(A, b, x=None, bounds=None, verbose=0):
-    """Return the least-squares solution to the equation A.x = b.
-    
-    This will be used if we want to reconstruct the beam emittances from 
-    within the app.
-    """ 
-    class MyScorer(Scorer):
-        def __init__(self, A, b):
-            self.A, self.b = A, b
-        def score(self, trial, variables):
-            x = get_trial_vals(trial, variables)
-            residuals = subtract(dot(A, x), b)
-            return norm(residuals)
-    
-    if bounds is None:
-        bounds = (-float('inf'), float('inf'))
-    n = len(A[0])
-    var_names = ['v{}'.format(i) for i in range(n)]
-    x = [random.random() for _ in range(n)] if x is None else x
-    scorer = MyScorer(A, b)
-    return minimize(scorer, x, var_names, bounds)
+    result = get_trial_vals(trial, variables)
+    if verbose > 0:
+        print solver.getScoreBoard()
+    return result

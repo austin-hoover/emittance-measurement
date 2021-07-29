@@ -1,7 +1,7 @@
 """
 For each PTA output file, get the PV logger id, load the machine snapshot, 
 change the beam energy if necessary, and compute the transfer matrices 
-from the RTBT entrance to each wire-scanner. 
+from the RTBT entrance to each wire-scanner.
 """
 import collections
 from pprint import pprint 
@@ -15,6 +15,7 @@ from xal.service.pvlogger.sim import PVLoggerDataSource
 from xal.smf import Accelerator
 from xal.smf import AcceleratorSeq 
 from xal.smf.data import XMLDataManager
+from xal.tools.beam.calc import CalculationsOnRings
 
 
 ws_ids = ['RTBT_Diag:WS02', 'RTBT_Diag:WS20', 'RTBT_Diag:WS21', 
@@ -77,7 +78,7 @@ def list_from_xal_matrix(matrix):
         M.append(row)
     return M
 
-def transfer_matrix_elements(kin_energy, stop_node_id):
+def transfer_matrix_elements(sequence, kin_energy, stop_node_id):
     """Return 16 transfer matrix elements from 'Begin_Of_RTBT1' to stop_node_id."""
     algorithm = AlgorithmFactory.createTransferMapTracker(sequence)
     probe = ProbeFactory.getTransferMapProbe(sequence, algorithm)
@@ -91,6 +92,7 @@ def transfer_matrix_elements(kin_energy, stop_node_id):
     M = [row[:4] for row in M[:4]]
     elements = [elem for row in M for elem in row]
     return elements
+    
 
 for filename, info in info_dict.items():
     # None of the files from May have a PVLoggerID. I'll assume that the machine
@@ -100,14 +102,30 @@ for filename, info in info_dict.items():
     # Load model from machine snapshot.
     pvl_data_source = PVLoggerDataSource(info.pvl_id)
     scenario = pvl_data_source.setModelSource(sequence, scenario)
+    scenario.resync()
     # Save transfer matrix
     filename = filename.split('/')[-1]
     print filename
     file = open('data/transfer_matrix/model_transfer_mat_elems_default_Begin_Of_RTBT1_{}.dat'.format(filename), 'w')
     fstr = 16 * '{} ' + '\n'
     for ws_id in ws_ids:
-        elements = transfer_matrix_elements(info.kin_energy, ws_id)
+        elements = transfer_matrix_elements(sequence, info.kin_energy, ws_id)
         file.write(fstr.format(*elements))
     file.close()
+    
+    ring = accelerator.getComboSequence('Ring')
+    ring_scenario = Scenario.newScenarioFor(ring)
+    ring_scenario = pvl_data_source.setModelSource(ring, ring_scenario)
+    ring_scenario.resync()
+    ring_tracker = AlgorithmFactory.createTransferMapTracker(ring)
+    ring_probe = ProbeFactory.getTransferMapProbe(ring, ring_tracker)
+    ring_probe.setKineticEnergy(info.kin_energy)
+    ring_scenario.setProbe(ring_probe)
+    ring_scenario.run()
+    ring_trajectory = ring_probe.getTrajectory()
+    ring_calculator = CalculationsOnRings(ring_trajectory)
+    ring_state = ring_trajectory.statesForElement('Begin_Of_Ring3')[0]
+    twiss_x, twiss_y, twiss_z = ring_calculator.computeMatchedTwissAt(ring_state)
+    print 'alpha_x, alpha_y, beta_x, beta_y =', twiss_x.getAlpha(), twiss_y.getAlpha(), twiss_x.getBeta(), twiss_y.getBeta()
 
 exit()

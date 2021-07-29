@@ -116,3 +116,13 @@ def save_array(array, filename):
             string += '\n'
         file.write(string)
     file.close()
+    
+    
+def load_array(filename):
+    file = open(filename, 'r')
+    array = []
+    for line in file:
+        line = line.rstrip()
+        array.append([float(token) for token in line.split()])
+    file.close()
+    return array
