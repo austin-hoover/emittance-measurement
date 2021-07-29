@@ -4,3 +4,4 @@
 *.dat
 *$py.class
 __pycache__
+*.png
