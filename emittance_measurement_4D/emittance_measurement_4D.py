@@ -42,7 +42,6 @@ from lib.analysis_panel import AnalysisPanel
 from lib.phase_controller_panel import PhaseControllerPanel
                 
 
-    
 class GUI:
     """Graphical user interface for phase controller.
     
@@ -93,7 +92,7 @@ class GUI:
         return field_set_kws
 
     def launch(self):
-        """Launce the GUI."""
+        """Launch the GUI."""
         class WindowCloser(WindowAdapter):
             def __init__(self, phase_controller, field_set_kws):
                 self.phase_controller = phase_controller
