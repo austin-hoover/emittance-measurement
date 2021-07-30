@@ -11,7 +11,7 @@ from xal.extension.solver.ProblemFactory import getInverseSquareMinimizerProblem
 from xal.extension.solver.SolveStopperFactory import maxEvaluationsStopper
 from xal.extension.solver.algorithm import SimplexSearchAlgorithm
 
-from utils import subtract, norm, dot
+from utils import subtract, norm
 
 
 def load_sequence(sequence_name):

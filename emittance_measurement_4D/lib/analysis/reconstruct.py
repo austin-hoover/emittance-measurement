@@ -1,6 +1,6 @@
 """Reconstruct the covariance matrix from measurement data."""
+import math
 from pprint import pprint
-from math import sqrt
 from Jama import Matrix
 
 import sys
@@ -37,6 +37,17 @@ def to_vec(Sigma):
     s33, s34 = Sigma[2][2:]
     s44 = Sigma[3][3]
     return np.array([s11, s22, s12, s33, s44, s34, s13, s23, s14, s24])
+
+
+def get_sig_xy(sig_xx, sig_yy, sig_uu, diag_wire_angle):
+    """Compute cov(x, y) from horizontal, vertical, and diagonal wires.
+    
+    Diagonal wire angle should be in radians.
+    """
+    phi = utils.radians(90.0) + diag_wire_angle
+    sin, cos = math.sin(phi), math.cos(phi)
+    sig_xy = (sig_uu - sig_xx*(cos**2) - sig_yy*(sin**2)) / (2 * sin * cos)
+    return sig_xy
 
 
 def reconstruct(transfer_mats, moments, **lsq_kws):
@@ -164,9 +175,10 @@ class Measurement:
     Each measurement is a collection of wire scans at a single machine setting.
     """
     def __init__(self, filename):
+        self.filename = filename
         self.profiles = dict()
         self.pvloggerid = None
-        self.filename = filename
+        self.node_ids = None
         self.read_pta_file()
         
     def read_pta_file(self):
@@ -187,14 +199,15 @@ class Measurement:
 
         # Read the lines
         profiles = dict()
-        for ws_id in sorted(list(lines)):
+        self.node_ids = sorted(list(lines))
+        for node_id in sorted(list(self.node_ids)):
             # Split lines into three sections:
             #     stats: statistical signal parameters;
             #     raw: wire positions and raw signal amplitudes;
             #     fit: wire positions and Gaussian fit amplitudes.
             # There is one blank line after each section.
             sep = ''
-            lines_stats, lines_raw, lines_fit = utils.split_list(lines[ws_id], sep)[:3]
+            lines_stats, lines_raw, lines_fit = utils.split_list(lines[node_id], sep)[:3]
 
             # Remove headers and dashed lines beneath headers.
             lines_stats = lines_stats[2:]
@@ -223,7 +236,7 @@ class Measurement:
                 ystats[name] = Stat(name, s_yrms, s_yfit)
                 ustats[name] = Stat(name, s_urms, s_ufit)
 
-            self.profiles[ws_id] = Profile(
+            self.profiles[node_id] = Profile(
                 [xpos, ypos, upos], 
                 [xraw, yraw, uraw], 
                 [xfit, yfit, ufit], 
