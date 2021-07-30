@@ -39,7 +39,6 @@ from helpers import list_from_xal_matrix
 from lib.utils import radians
 from lib.utils import linspace
 
-# 953.95 MeV is the design energy in OpenXAL!
 
 # Available RTBT wire-scanners
 ws_ids = ['RTBT_Diag:WS02', 'RTBT_Diag:WS20', 'RTBT_Diag:WS21', 
@@ -107,7 +106,7 @@ class PhaseController:
         # independent quad id, and each value is a list of quad ids which share
         # power with the indepent quad. We need this because the quads in the 
         # online model can be changed independently.
-        self.shared_power = {}
+        self.shared_power = dict()
         for quad_id, ps_id in zip(self.quad_ids, self.ps_ids):
             for ind_quad_id, ind_ps_id in zip(self.ind_quad_ids, self.ind_ps_ids):
                 if ps_id == ind_ps_id and quad_id != ind_quad_id:

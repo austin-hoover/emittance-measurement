@@ -4,7 +4,8 @@ from math import sqrt
 from Jama import Matrix
 
 import sys
-from least_squares import lsq_linear
+from .least_squares import lsq_linear
+from .. import utils
 
 
 def load_array(filename):
@@ -72,8 +73,159 @@ def reconstruct(transfer_mats, moments, **lsq_kws):
     Sigma = Matrix(to_mat(moment_vec))
     return Sigma
 
-#     print 'eps_x = {} [mm mrad]'.format(eps_x)
-#     print 'eps_y = {} [mm mrad]'.format(eps_y)
-#     print 'eps_1 = {} [mm mrad]'.format(eps_1)
-#     print 'eps_2 = {} [mm mrad]'.format(eps_2)
-#     print 'eps_4D = {} [mm^2 mrad^2]'.format(eps_1 * eps_2)
+
+# Read PTA files
+#-------------------------------------------------------------------------------
+def string_to_float_list(string):
+    """Convert string to list of floats.
+    
+    '1 2 3' -> [1.0, 2.0, 3.0])
+    """
+    return [float(token) for token in string.split()]
+
+
+
+class Stat:
+    """Container for a signal parameter.
+    
+    Attributes
+    ----------
+    name : str
+        Parameter name.
+    rms : float
+        Parameter value from rms calculation.
+    fit : float
+        Parameter value from Gaussian fit.
+    """
+    def __init__(self, name, rms, fit):
+        self.name, self.rms, self.fit = name, rms, fit
+
+        
+class Signal:
+    """Container for profile signal.
+    
+    Attributes
+    ----------
+    pos : list
+        Wire positions.
+    raw : list
+        Raw signal amplitudes at each position.
+    fit : list
+        Gaussian fit amplitudes at each position.
+    stats : dict
+        Each key is a different statistical parameter: ('Area' or 'Mean' or ...). 
+        Each value is a Stat object that holds the parameter name, rms value, 
+        and Gaussian fit value.
+    """
+    def __init__(self, pos, raw, fit, stats):
+        self.pos, self.raw, self.fit, self.stats = pos, raw, fit, stats
+        
+        
+class Profile:
+    """Stores data from single wire-scanner.
+    
+    Attributes
+    ----------
+    hor, ver, dia : Signal
+        Signal object for horizontal, vertical and diagonal wire.
+    """
+    def __init__(self, pos, raw, fit=None, stats=None):
+        """Constructor.
+        
+        Parameters
+        ----------
+        pos : [xpos, ypos, upos]
+            Position lists for each wire.
+        raw : [xraw, yraw, uraw]
+            List of raw signal amplitudes for each wire.
+        fit : [xfit, yfit, ufit]
+            List of Gaussian fit amplitudes for each wire.
+        stats : [xstats, ystats, ustats]
+            List of stats dictionaries for each wire.
+        """
+        xpos, ypos, upos = pos
+        xraw, yraw, uraw = raw
+        if fit is None:
+            xfit = yfit = ufit = None
+        else:
+            xfit, yfit, ufit = fit
+        if stats is None:
+            xstats = ystats = ustats = None
+        else:
+            xstats, ystats, ustats = stats   
+        self.hor = Signal(xpos, xraw, xfit, xstats)
+        self.ver = Signal(ypos, yraw, yfit, ystats)
+        self.dia = Signal(upos, uraw, ufit, ustats)   
+        
+        
+class Measurement:
+    """Holds data for one measurement.
+    
+    Each measurement is a collection of wire scans at a single machine setting.
+    """
+    def __init__(self, filename):
+        self.profiles = dict()
+        self.pvloggerid = None
+        self.filename = filename
+        self.read_pta_file()
+        
+    def read_pta_file(self):
+        # Collect lines corresponding to each wire-scanner
+        file = open(self.filename, 'r')
+        lines = dict()
+        ws_id = None
+        for line in file:
+            line = line.rstrip()
+            if line.startswith('RTBT_Diag'):
+                ws_id = line
+                continue
+            if ws_id is not None:
+                lines.setdefault(ws_id, []).append(line)
+            if line.startswith('PVLoggerID'):
+                self.pvloggerid = int(line.split('=')[1])
+        file.close()
+
+        # Read the lines
+        profiles = dict()
+        for ws_id in sorted(list(lines)):
+            # Split lines into three sections:
+            #     stats: statistical signal parameters;
+            #     raw: wire positions and raw signal amplitudes;
+            #     fit: wire positions and Gaussian fit amplitudes.
+            # There is one blank line after each section.
+            sep = ''
+            lines_stats, lines_raw, lines_fit = utils.split_list(lines[ws_id], sep)[:3]
+
+            # Remove headers and dashed lines beneath headers.
+            lines_stats = lines_stats[2:]
+            lines_raw = lines_raw[2:]
+            lines_fit = lines_fit[2:]   
+
+            # The columns of the following array are ['pos', 'yraw', 'uraw', 'xraw', 
+            # 'xpos', 'ypos', 'upos']. (NOTE: This is not the order that is written
+            # in the file header.)
+            data_arr_raw = [string_to_float_list(line) for line in lines_raw]
+            pos, yraw, uraw, xraw, xpos, ypos, upos = utils.transpose_list(data_arr_raw)
+
+            # This next array is the same, but it contains 'yfit', 'ufit', 'xfit', 
+            # instead of 'yraw', 'uraw', 'xraw'.
+            data_arr_fit = [string_to_float_list(line) for line in lines_fit]
+            pos, yfit, ufit, xfit, xpos, ypos, upos = utils.transpose_list(data_arr_fit)
+
+            # Get statistical signal parameters. (Headers don't give true ordering.)
+            xstats, ystats, ustats = dict(), dict(), dict()
+            for line in lines_stats:
+                tokens = line.split()
+                name = tokens[0]
+                vals = [float(val) for val in tokens[1:]]
+                s_yfit, s_yrms, s_ufit, s_urms, s_xfit, s_xrms = vals
+                xstats[name] = Stat(name, s_xrms, s_xfit)
+                ystats[name] = Stat(name, s_yrms, s_yfit)
+                ustats[name] = Stat(name, s_urms, s_ufit)
+
+            self.profiles[ws_id] = Profile(
+                [xpos, ypos, upos], 
+                [xraw, yraw, uraw], 
+                [xfit, yfit, ufit], 
+                [xstats, ystats, ustats],
+            )

@@ -2,6 +2,25 @@ import math
 import os
 
 
+def split_list(items, token):
+    """Split `items` into sublists, excluding `token`.
+
+    Example:
+    >>> items = ['cat', 'dog', 'x', 'tree', 'bark']
+    >>> split_list(items, 'x')
+    [['cat', 'dog'], ['tree', 'bark']]
+    """
+    indices = [i for i, item in enumerate(items) if item == token]
+    sublists = []
+    if items[0] != token:
+        sublists.append(items[:indices[0]])
+    for lo, hi in zip(indices[:-1], indices[1:]):
+        sublists.append(items[lo + 1:hi])
+    if items[-1] != token:
+        sublists.append(items[indices[-1] + 1:])
+    return sublists
+
+
 def list_to_string(items):
     """Example: [1, 2, 3] -> '1 2 3'."""
     string = ''
@@ -47,19 +66,8 @@ def norm(vec):
     return math.sqrt(sum([elem**2 for elem in vec]))
 
 
-def dot(A, x):
-    """Apply matrix `A` to vector `x`."""
-    l, m, n = len(A), len(A[0]), len(x)
-    if m != n:
-        print('Shapes are incorrect.')
-        return
-    result = []
-    for i in range(l):
-        value = 0.
-        for j in range(n):
-            value += A[i][j] * x[j]
-        result.append(value)
-    return result
+def transpose_list(X):
+    return [list(x) for x in zip(*X)]
 
 
 # Other functions
