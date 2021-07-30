@@ -1,3 +1,6 @@
+"""
+To do: add flag telling if the live machine has been changed.
+"""
 import math
 import time
 import warnings
@@ -486,7 +489,6 @@ class PhaseController:
         """Set the live quad fields to model values."""
         model_fields = self.get_fields(self.ind_quad_ids, 'model')
         self.set_fields(self.ind_quad_ids, model_fields, 'live', **kws)
-        
         
     def calc_init_twiss(self):
         """Calculate Twiss parameters at RTBT entrance using the ring."""

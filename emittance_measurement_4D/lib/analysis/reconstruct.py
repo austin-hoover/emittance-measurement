@@ -1,4 +1,5 @@
 """Reconstruct the covariance matrix from measurement data."""
+from datetime import datetime
 import math
 from pprint import pprint
 from Jama import Matrix
@@ -176,12 +177,21 @@ class Measurement:
     """
     def __init__(self, filename):
         self.filename = filename
+        self.timestamp = None
         self.profiles = dict()
         self.pvloggerid = None
         self.node_ids = None
         self.read_pta_file()
         
     def read_pta_file(self):
+        
+        # Store the timestamp on the file.
+        date, time = self.filename.split('WireAnalysisFmt-')[-1].split('_')
+        time = time.split('.pta')[0]
+        year, month, day = [int(token) for token in date.split('.')]
+        hour, minute, second = [int(token) for token in time.split('.')]
+        self.timestamp = datetime(year, month, day, hour, minute, second)
+        
         # Collect lines corresponding to each wire-scanner
         file = open(self.filename, 'r')
         lines = dict()
