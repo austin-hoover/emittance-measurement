@@ -79,8 +79,8 @@ class PhaseController:
         self.accelerator = XMLDataManager.loadDefaultAccelerator()
         self.sequence = self.accelerator.getComboSequence('RTBT')
         self.scenario = Scenario.newScenarioFor(self.sequence)
-        self.scenario.setSynchronizationMode(Scenario.SYNC_MODE_LIVE)
-        self.scenario.resync()
+#         self.scenario.setSynchronizationMode(Scenario.SYNC_MODE_LIVE)
+#         self.scenario.resync()
         self.algorithm = AlgorithmFactory.createEnvelopeTracker(self.sequence)
         self.algorithm.setUseSpacecharge(False)
         self.probe = ProbeFactory.getEnvelopeProbe(self.sequence, self.algorithm)
@@ -500,8 +500,8 @@ class PhaseController:
         sequence = accelerator.getComboSequence('Ring')
         scenario = Scenario.newScenarioFor(sequence)
         # Sync model with live machine.
-        scenario.setSynchronizationMode(Scenario.SYNC_MODE_LIVE)
-        scenario.resync()
+#         scenario.setSynchronizationMode(Scenario.SYNC_MODE_LIVE)
+#         scenario.resync()
         # Get matched Twiss at RTBT entrance
         algorithm = AlgorithmFactory.createTransferMapTracker(sequence)
         probe = ProbeFactory.getTransferMapProbe(sequence, algorithm)

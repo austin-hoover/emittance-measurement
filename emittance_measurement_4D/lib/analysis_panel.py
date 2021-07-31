@@ -9,6 +9,8 @@ from java.awt import Dimension
 from java.awt import FlowLayout
 from java.awt import Font
 from java.awt import GridLayout
+from java.awt import GridBagLayout
+from java.awt import GridBagConstraints
 from java.awt.event import ActionListener
 from java.awt.event import WindowAdapter
 from javax.swing import BorderFactory
@@ -44,6 +46,7 @@ from xal.smf.data import XMLDataManager
 
 # Local
 import analysis
+import plotting as plt
 import utils
 import xal_helpers
 
@@ -58,13 +61,13 @@ class AnalysisPanel(JPanel):
         JPanel.__init__(self)
         self.setLayout(BorderLayout())
         self.kin_energy = kin_energy
-        self.start_fresh()
+        self.clear_data()
         self.build_panel()
         
-    def start_fresh(self):
+    def clear_data(self):
         self.measurements = []
-        self.moments_dict, self.moments_list = dict(), []
-        self.tmats_dict, self.tmats_list = dict(), []
+        self.moments_dict = dict()
+        self.tmats_dict = dict()
         
     def build_panel(self):
         print 'Kinetic energy is hard coded. Do not delete this message until this is fixed.'
@@ -84,18 +87,87 @@ class AnalysisPanel(JPanel):
         self.reconstruct_covariance_button.addActionListener(
             ReconstructCovarianceButtonListener(self))
         
-        # Add components to panel.
-        self.panel1 = JPanel()
-        self.panel1.add(self.load_files_button)
-        self.panel1.add(self.clear_files_button)
+        # Add components.
+        # -----------------------------------
         
-        self.panel2 = JPanel()
-        self.panel2.add(self.reconstruct_covariance_button)
+        # The top panel will have buttons to load and clear files, as well as plots of 
+        # the beam profiles at each wire-scanner at a selected scan index.
+        self.temp_panel = JPanel()
+        self.temp_panel.add(self.load_files_button)
+        self.temp_panel.add(self.clear_files_button)
         
-        self.add(self.panel1, BorderLayout.WEST)
-        self.add(self.panel2)
-    
+        self.profile_plots_panel = JPanel()
+        self.profile_plots_panel.setLayout(BoxLayout(self.profile_plots_panel, BoxLayout.X_AXIS))
+#         self.profile_plots_panel.setPreferredSize()
+        n_lines = 1
+        self.profile_plot_panels = [
+            plt.LinePlotPanel(xlabel='x [mm]', n_lines=n_lines, grid='y'),
+            plt.LinePlotPanel(xlabel='y [mm]', n_lines=n_lines, grid='y'),
+            plt.LinePlotPanel(xlabel='u [mm]', n_lines=n_lines, grid='y'),
+        ]
+        for panel in self.profile_plot_panels:
+            self.profile_plots_panel.add(panel)
+        
+        self.top_panel = JPanel()
+        self.top_panel.add(self.temp_panel, BorderLayout.NORTH)
 
+
+        # The bottom left panel reconstructs the covariance matrix and 
+        # prints a table of results.
+        self.bottom_left_panel = JPanel()
+        self.bottom_left_panel.setLayout(BoxLayout(self.bottom_left_panel, BoxLayout.Y_AXIS))
+        self.bottom_left_panel.add(self.reconstruct_covariance_button)
+        self.bottom_left_panel.add(JTextField('[Parameter table]'))
+        
+        
+        # The bottom right panel plots the ellipse defined by x^T Sigma x = 1.   
+        self.bottom_right_panel = JPanel()
+        self.bottom_right_panel.setLayout(GridBagLayout())
+        self.bottom_right_panel.setPreferredSize(Dimension(400, 400))
+        
+        constraints = GridBagConstraints()
+        constraints.fill = GridBagConstraints.BOTH
+        constraints.gridwidth = 1
+        constraints.gridheight = 1
+        constraints.weightx = 0.5
+        constraints.weighty = 0.5
+        
+        plots = dict()
+        dim_to_int = {'x':0, 'xp':1, 'y':2, 'yp':3}
+        dims = ['x', 'xp', 'y', 'yp']
+        xdims = dims[:-1]
+        ydims = dims[1:]
+        for ydim in ydims:
+            for xdim in xdims:
+                i = dim_to_int[ydim] - 1
+                j = dim_to_int[xdim]
+                if j <= i:
+                    plot = FunctionGraphsJPanel()
+                    constraints.gridx = j
+                    constraints.gridy = i
+                    if j == 0:
+                        plot.setAxisNameY(ydim)
+                    if i == 2:
+                        plot.setAxisNameX(xdim)
+                    self.bottom_right_panel.add(plot, constraints)
+                    key = ''.join([xdim, ',', ydim])
+                    plots[key] = plot
+        
+        
+        self.bottom_panel = JPanel()
+        self.bottom_panel.setLayout(BorderLayout())
+        self.bottom_panel.setPreferredSize(Dimension(1200, 600))
+        self.bottom_panel.add(self.bottom_left_panel, BorderLayout.WEST)
+        self.bottom_panel.add(self.bottom_right_panel)
+        
+        
+#         self.add(self.top_panel, BorderLayout.NORTH)
+        self.add(self.profile_plots_panel)
+        self.add(self.bottom_panel, BorderLayout.SOUTH)
+
+        
+        for panel in self.profile_plot_panels:
+            panel.set_data(utils.linspace(0, 1, 10), utils.linspace(0, 1, 10))
 
 class LoadFilesButtonListener(ActionListener):
     
@@ -155,19 +227,10 @@ class LoadFilesButtonListener(ActionListener):
                     tmats_dict[meas_node_id] = []
                 tmats_dict[meas_node_id].append(tmat)
         print 'All files have been analyzed.'
-                
-        # Form list of transfer matrices and measured moments.
-        moments_list, tmats_list = [], []
-        for measurement in measurements:
-            for meas_node_id in measurement.node_ids:
-                moments_list.extend(moments_dict[meas_node_id])
-                tmats_list.extend(tmats_dict[meas_node_id])
             
-        # Save everything.
+        # Save data.
         self.panel.measurements = measurements
-        self.panel.moments_list = moments_list
         self.panel.moments_dict = moments_dict
-        self.panel.tmats_list = tmats_list
         self.panel.tmats_dict = tmats_dict
         
         
@@ -177,7 +240,7 @@ class ClearFilesButtonListener(ActionListener):
         self.panel = panel
     
     def actionPerformed(self, event):
-        self.panel.start_fresh()        
+        self.panel.clear_data()        
         print 'Cleared data.'
               
             
@@ -189,10 +252,17 @@ class ReconstructCovarianceButtonListener(ActionListener):
     def actionPerformed(self, event):
         if not self.panel.measurements:
             raise ValueError('No wire-scanner files have been loaded.')
-        tmats_list = self.panel.tmats_list
-        moments_list = self.panel.moments_list
+
+        # Form list of transfer matrices and measured moments.
+        ACTIVE_NODE_IDS = measurement.node_ids # Read this from GUI later.
+        moments_list, tmats_list = [], []
+        for measurement in measurements:
+            for meas_node_id in ACTIVE_NODE_IDS:
+                moments_list.extend(moments_dict[meas_node_id])
+                tmats_list.extend(tmats_dict[meas_node_id])
+            
+        # Reconstruct and print results.
         Sigma = analysis.reconstruct(tmats_list, moments_list, verbose=2, solver='lsmr')
         beam_stats = analysis.BeamStats(Sigma)
-        
         print ''
         beam_stats.print_all()

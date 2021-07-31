@@ -29,20 +29,10 @@ from xal.extension.widgets.plot import BasicGraphData
 from xal.extension.widgets.plot import FunctionGraphsJPanel
 
 # Local
+import plotting as plt
 from phase_controller import PhaseController
 import utils
 import xal_helpers
-
-
-# 'Colorblind' color cycle
-COLOR_CYCLE = [
-    Color(0.0, 0.44705882, 0.69803922),
-    Color(0.83529412, 0.36862745, 0.0),
-    Color(0.0, 0.61960784, 0.45098039),
-    Color(0.8, 0.4745098, 0.65490196),
-    Color(0.94117647, 0.89411765, 0.25882353),
-    Color(0.3372549, 0.70588235, 0.91372549),
-]
 
 # Node id of each wire-scanner.
 RTBT_WS_IDS = ['RTBT_Diag:WS02', 'RTBT_Diag:WS20', 'RTBT_Diag:WS21', 
@@ -72,7 +62,6 @@ class PhaseControllerPanel(JPanel):
         init_twiss_label = JLabel('Initial Twiss')
         init_twiss_label.setAlignmentX(0)
         ref_ws_id_label = JLabel('Ref. wire-scanner')
-        rec_point_label = JLabel('Reconstruction point')
         energy_label = JLabel('Energy [GeV]')
         phase_coverage_label = JLabel('Phase coverage [deg]')
         n_steps_label = JLabel('Total steps')
@@ -81,9 +70,6 @@ class PhaseControllerPanel(JPanel):
         # Components
         text_field_width = 11
         self.ref_ws_id_dropdown = JComboBox(RTBT_WS_IDS)
-        nodes = self.phase_controller.sequence.getNodes()
-        node_ids = [node.getId() for node in nodes]
-        self.rec_point_dropdown = JComboBox(node_ids)
         self.init_twiss_table = JTable(InitTwissTableModel(self))
         self.init_twiss_table.setShowGrid(True)
         self.energy_text_field = JTextField('1.0', text_field_width)
@@ -105,7 +91,6 @@ class PhaseControllerPanel(JPanel):
         # Build panel
         self.model_calc_panel1 = AlignedLabeledComponentsPanel()
         self.model_calc_panel1.add_row(ref_ws_id_label, self.ref_ws_id_dropdown)
-        self.model_calc_panel1.add_row(rec_point_label, self.rec_point_dropdown)
         self.model_calc_panel2 = AlignedLabeledComponentsPanel()
         self.model_calc_panel2.add_row(energy_label, self.energy_text_field)
         self.model_calc_panel2.add_row(phase_coverage_label, self.phase_coverage_text_field)
@@ -191,17 +176,17 @@ class PhaseControllerPanel(JPanel):
 
         # Plotting panels
         #------------------------------------------------------------------------
-        self.beta_plot_panel = LinePlotPanel(
+        self.beta_plot_panel = plt.LinePlotPanel(
             xlabel='Position [m]', ylabel='[m/rad]', 
             title='Model beta function vs. position',
             n_lines=2, grid='y',
         )
-        self.phase_plot_panel = LinePlotPanel(
+        self.phase_plot_panel = plt.LinePlotPanel(
             xlabel='Position [m]', ylabel='Phase adv. mod 2pi', 
             title='Model phase advance vs. position',
             n_lines=2, grid='y',
         )
-        self.bpm_plot_panel = LinePlotPanel(
+        self.bpm_plot_panel = plt.LinePlotPanel(
             xlabel='BPM', ylabel='Amplitude [mm]', title='BMP amplitudes',
             n_lines=2, lw=2, ms=5, grid='y',
         )
@@ -255,7 +240,7 @@ class PhaseControllerPanel(JPanel):
         for plot_panel in [self.beta_plot_panel, self.phase_plot_panel, self.bpm_plot_panel]:
             for i, ws_position in enumerate(RTBT_WS_POSITIONS):
                 color = Color(150, 150, 150) if i == ref_ws_index else Color(225, 225, 225)
-                plot_panel.graph.addVerticalLine(ws_position, color)
+                plot_panel.addVerticalLine(ws_position, color)
 
     def get_field_set_kws(self):
         field_set_kws = {
@@ -428,7 +413,6 @@ class CalculateModelOpticsButtonListener(ActionListener):
         """
         self.gui.model_fields_list = []
         
-        rec_node_id = self.gui.rec_point_dropdown.getSelectedItem()
         phase_coverage = float(self.gui.phase_coverage_text_field.getText())
         n_steps = int(self.gui.n_steps_text_field.getText())        
         max_beta = float(self.gui.max_beta_text_field.getText())
@@ -460,13 +444,13 @@ class CalculateModelOpticsButtonListener(ActionListener):
                                            filename)
 
             # Save transfer matrix at each wire-scanner.
-            file = open('_output/model_transfer_mat_elems_{}_{}.dat'.format(scan_index, rec_node_id), 'w')
-            fstr = 16 * '{} ' + '\n'
-            for ws_id in RTBT_WS_IDS:
-                M = self.phase_controller.transfer_matrix(rec_node_id, ws_id)
-                elements = [elem for row in M for elem in row]
-                file.write(fstr.format(*elements))
-            file.close()
+#             file = open('_output/model_transfer_mat_elems_{}_{}.dat'.format(scan_index, rec_node_id), 'w')
+#             fstr = 16 * '{} ' + '\n'
+#             for ws_id in RTBT_WS_IDS:
+#                 M = self.phase_controller.transfer_matrix(rec_node_id, ws_id)
+#                 elements = [elem for row in M for elem in row]
+#                 file.write(fstr.format(*elements))
+#             file.close()
 
             # Save real space beam moments at each wire-scanner.
             file = open('_output/model_moments_{}.dat'.format(scan_index), 'w')
@@ -503,7 +487,6 @@ class SetLiveOpticsButtonListener(ActionListener):
         self.ind_quad_ids = self.phase_controller.ind_quad_ids
         
     def actionPerformed(self, action):
-        rec_node_id = self.gui.rec_point_dropdown.getSelectedItem()
         quad_ids = self.phase_controller.ind_quad_ids
         field_set_kws = self.gui.get_field_set_kws()
         scan_index = self.gui.scan_index_dropdown.getSelectedItem()
@@ -528,64 +511,21 @@ class SetLiveOpticsButtonListener(ActionListener):
         file.close()
         
         # Save transfer matrix at each wire-scanner.
-        file = open('_output/model_transfer_mat_elems_{}_{}.dat'.format(scan_index, rec_node_id), 'w')
-        fstr = 16 * '{} ' + '\n'
-        for ws_id in RTBT_WS_IDS:
-            M = self.phase_controller.transfer_matrix(rec_node_id, ws_id)
-            elements = [elem for row in M for elem in row]
-            file.write(fstr.format(*elements))
-        file.close()
+#         file = open('_output/model_transfer_mat_elems_{}_{}.dat'.format(scan_index, rec_node_id), 'w')
+#         fstr = 16 * '{} ' + '\n'
+#         for ws_id in RTBT_WS_IDS:
+#             M = self.phase_controller.transfer_matrix(rec_node_id, ws_id)
+#             elements = [elem for row in M for elem in row]
+#             file.write(fstr.format(*elements))
+#         file.close()
         
         # Save expected Twiss parameters at reconstruction location.
-        file = open('_output/model_twiss_{}.dat'.format(rec_node_id), 'w')
-        (mu_x, mu_y, alpha_x, alpha_y, 
-         beta_x, beta_y, eps_x, eps_y) = self.phase_controller.twiss(rec_node_id)
-        file.write('{} {} {} {}'.format(alpha_x, alpha_y, beta_x, beta_y))
-        file.close()
- 
-    
-    
-# Plotting
-#-------------------------------------------------------------------------------
-class LinePlotPanel(JPanel):
-    """Class for 2D line plots."""
-    def __init__(self, xlabel='', ylabel='', title='', n_lines=2, 
-                 lw=3, ms=0, grid=True):
-        self.setLayout(GridLayout(1, 1))
-        etched_border = BorderFactory.createEtchedBorder()
-        self.setBorder(etched_border)
-        self.graph = FunctionGraphsJPanel()
-        self.graph.setLegendButtonVisible(False)
-        self.graph.setName(title)
-        self.graph.setAxisNames(xlabel, ylabel)
-        self.graph.setBorder(etched_border)
-        self.graph.setGraphBackGroundColor(Color.white)   
-        self.graph.setGridLineColor(Color(245, 245, 245))
-        if grid == 'y' or not grid:
-            self.graph.setGridLinesVisibleX(False)
-        if grid == 'x' or not grid:
-            self.graph.setGridLinesVisibleY(False)
-        self.add(self.graph)
-        self.n_lines = n_lines
-        self.data_list = [BasicGraphData() for _ in range(n_lines)]
-        for data, color in zip(self.data_list, COLOR_CYCLE):
-            data.setGraphColor(color)
-            data.setLineThick(lw)
-            data.setGraphPointSize(ms)
-    
-    def set_data(self, x, y_list):
-        if len(utils.shape(y_list)) == 1:
-            y_list = [y_list]
-        self.graph.removeAllGraphData()
-        for data, y in zip(self.data_list, y_list):
-            data.addPoint(x, y)  
-            self.graph.addGraphData(data) 
-            
-    def set_xlim(self, xmin, xmax, xstep):
-        self.graph.setLimitsAndTicksX(xmin, xmax, xstep)
-        
-    def set_ylim(self, ymin, ymax, ystep):
-        self.graph.setLimitsAndTicksX(ymin, ymax, ystep)
+#         file = open('_output/model_twiss_{}.dat'.format(rec_node_id), 'w')
+#         (mu_x, mu_y, alpha_x, alpha_y, 
+#          beta_x, beta_y, eps_x, eps_y) = self.phase_controller.twiss(rec_node_id)
+#         file.write('{} {} {} {}'.format(alpha_x, alpha_y, beta_x, beta_y))
+#         file.close()
+
             
             
 # Miscellaneous
