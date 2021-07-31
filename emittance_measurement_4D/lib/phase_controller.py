@@ -418,7 +418,7 @@ class PhaseController:
                 elem.setMagField(field)
             if quad_id in self.shared_power:
                 for dep_quad_id in self.shared_power[quad_id]:
-                    self.set_field(dep_quad_id, field)
+                    self.set_field(dep_quad_id, field, 'model')
         elif opt == 'live': 
             node.setField(field)
             self.machine_has_changed = True
