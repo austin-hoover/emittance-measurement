@@ -5,6 +5,8 @@ from java.awt import Dimension
 from java.awt import FlowLayout
 from java.awt import Font
 from java.awt import GridLayout
+from java.awt import GridBagLayout
+from java.awt import GridBagConstraints
 from java.awt.event import ActionListener
 from java.awt.event import WindowAdapter
 from javax.swing import BorderFactory
@@ -38,22 +40,30 @@ COLOR_CYCLE = [
     Color(0.3372549, 0.70588235, 0.91372549),
 ]
 
+GRID_COLOR = Color(245, 245, 245)
 
-class LinePlotPanel(FunctionGraphsJPanel):
-    """Class for 2D line plots."""
-    def __init__(self, xlabel='', ylabel='', title='', n_lines=2, lw=3, ms=0, grid=True):
-        etched_border = BorderFactory.createEtchedBorder()
-        self.setBorder(etched_border)
-        self.setLegendButtonVisible(False)
+
+class PlotPanel(FunctionGraphsJPanel):
+    
+    def __init__(self, xlabel='', ylabel='', title='', grid=True):
+        FunctionGraphsJPanel.__init__(self)
         self.setName(title)
         self.setAxisNames(xlabel, ylabel)
-        self.setBorder(etched_border)
         self.setGraphBackGroundColor(Color.white)   
-        self.setGridLineColor(Color(245, 245, 245))
+        self.setGridLineColor(GRID_COLOR)
         if grid == 'y' or not grid:
             self.setGridLinesVisibleX(False)
         if grid == 'x' or not grid:
             self.setGridLinesVisibleY(False)
+        
+
+class LinePlotPanel(PlotPanel):
+    """Class for 2D line plots."""
+    def __init__(self, xlabel='', ylabel='', title='', n_lines=2, lw=3, ms=0, grid=True):
+        PlotPanel.__init__(self, xlabel, ylabel, title, grid)
+        etched_border = BorderFactory.createEtchedBorder()
+        self.setBorder(etched_border)
+        self.setLegendButtonVisible(False)
         self.n_lines = n_lines
         self.data_list = [BasicGraphData() for _ in range(n_lines)]
         for data, color in zip(self.data_list, COLOR_CYCLE):
@@ -82,3 +92,39 @@ class LinePlotPanel(FunctionGraphsJPanel):
         
     def set_ylim(self, ymin, ymax, ystep):
         self.setLimitsAndTicksX(ymin, ymax, ystep)
+        
+        
+    
+class CornerPlotPanel(JPanel):
+    def __init__(self, grid=False, figsize=(600, 44)):
+        JPanel.__init__(self)
+        self.setLayout(GridBagLayout())
+        self.setPreferredSize(Dimension(*figsize))
+        
+        constraints = GridBagConstraints()
+        constraints.fill = GridBagConstraints.BOTH
+        constraints.gridwidth = 1
+        constraints.gridheight = 1
+        constraints.weightx = 0.5
+        constraints.weighty = 0.5
+        
+        dim_to_int = {'x':0, 'xp':1, 'y':2, 'yp':3}
+        dims = ['x', 'xp', 'y', 'yp']
+        xdims = dims[:-1]
+        ydims = dims[1:]
+        self.plots = dict()
+        for ydim in ydims:
+            for xdim in xdims:
+                i = dim_to_int[ydim] - 1
+                j = dim_to_int[xdim]
+                if j <= i:
+                    plot = PlotPanel(grid=grid)
+                    constraints.gridx = j
+                    constraints.gridy = i
+                    if j == 0:
+                        plot.setAxisNameY(ydim)
+                    if i == 2:
+                        plot.setAxisNameX(xdim)
+                    self.add(plot, constraints)
+                    key = ''.join([xdim, ',', ydim])
+                    self.plots[key] = plot

@@ -120,40 +120,10 @@ class AnalysisPanel(JPanel):
         self.bottom_left_panel.add(JTextField('[Parameter table]'))
         
         
-        # The bottom right panel plots the ellipse defined by x^T Sigma x = 1.   
-        self.bottom_right_panel = JPanel()
-        self.bottom_right_panel.setLayout(GridBagLayout())
-        self.bottom_right_panel.setPreferredSize(Dimension(400, 400))
-        
-        constraints = GridBagConstraints()
-        constraints.fill = GridBagConstraints.BOTH
-        constraints.gridwidth = 1
-        constraints.gridheight = 1
-        constraints.weightx = 0.5
-        constraints.weighty = 0.5
-        
-        plots = dict()
-        dim_to_int = {'x':0, 'xp':1, 'y':2, 'yp':3}
-        dims = ['x', 'xp', 'y', 'yp']
-        xdims = dims[:-1]
-        ydims = dims[1:]
-        for ydim in ydims:
-            for xdim in xdims:
-                i = dim_to_int[ydim] - 1
-                j = dim_to_int[xdim]
-                if j <= i:
-                    plot = FunctionGraphsJPanel()
-                    constraints.gridx = j
-                    constraints.gridy = i
-                    if j == 0:
-                        plot.setAxisNameY(ydim)
-                    if i == 2:
-                        plot.setAxisNameX(xdim)
-                    self.bottom_right_panel.add(plot, constraints)
-                    key = ''.join([xdim, ',', ydim])
-                    plots[key] = plot
-        
-        
+        # The bottom right panel plots the ellipse defined by x^T Sigma x = 1.  
+        self.bottom_right_panel = plt.CornerPlotPanel()
+
+        # Build the bottom panel.
         self.bottom_panel = JPanel()
         self.bottom_panel.setLayout(BorderLayout())
         self.bottom_panel.setPreferredSize(Dimension(1200, 600))
