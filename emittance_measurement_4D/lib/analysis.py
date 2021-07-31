@@ -1,4 +1,4 @@
-"""Reconstruct the covariance matrix from measurement data."""
+"""Reconstruct covariance matrix from measurement data."""
 import sys
 import math
 from math import sqrt
