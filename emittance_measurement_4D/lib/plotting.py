@@ -96,7 +96,7 @@ class LinePlotPanel(PlotPanel):
         
     
 class CornerPlotPanel(JPanel):
-    def __init__(self, grid=False, figsize=(600, 44)):
+    def __init__(self, grid=False, figsize=(600, 440)):
         JPanel.__init__(self)
         self.setLayout(GridBagLayout())
         self.setPreferredSize(Dimension(*figsize))

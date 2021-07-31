@@ -1,3 +1,9 @@
+"""
+To to:
+    * Add options for solver (when calculating covariance).
+    * Corner plot.
+    * Export?
+"""
 from java.awt import BorderLayout
 from java.awt import Color
 from java.awt import Component
@@ -254,9 +260,9 @@ class PhaseControllerPanel(JPanel):
 #-------------------------------------------------------------------------------      
 class QuadSettingsTableModel(AbstractTableModel):
 
-    def __init__(self, gui):
-        self.gui = gui
-        self.phase_controller = gui.phase_controller
+    def __init__(self, panel):
+        self.panel = panel
+        self.phase_controller = panel.phase_controller
         self.quad_ids = self.phase_controller.ind_quad_ids
         self.column_names = ['Quad', 'Model [T/m]', 'Live [T/m]']
         self.nf4 = NumberFormat.getInstance()
@@ -285,9 +291,9 @@ class QuadSettingsTableModel(AbstractTableModel):
 
 class InitTwissTableModel(AbstractTableModel):
 
-    def __init__(self, gui):
-        self.gui = gui
-        self.phase_controller = gui.phase_controller
+    def __init__(self, panel):
+        self.panel = panel
+        self.phase_controller = panel.phase_controller
         self.column_names = ["<html>&alpha;<SUB>x</SUB> [m/rad]<html>",
                              "<html>&alpha;<SUB>y</SUB> [m/rad]<html>", 
                              "<html>&beta;<SUB>x</SUB> [m/rad]<html>", 
@@ -320,57 +326,57 @@ class InitTwissTableModel(AbstractTableModel):
 #-------------------------------------------------------------------------------
 class EnergyTextFieldListener(ActionListener):
 
-    def __init__(self, gui):
-        self.gui = gui
-        self.text_field = gui.energy_text_field
-        self.phase_controller = gui.phase_controller
+    def __init__(self, panel):
+        self.panel = panel
+        self.text_field = panel.energy_text_field
+        self.phase_controller = panel.phase_controller
         
     def actionPerformed(self, event):
         kin_energy = float(self.text_field.getText())
         if kin_energy < 0:
             raise ValueError('Kinetic energy must be postive.')
         self.phase_controller.set_kin_energy(kin_energy)
-        self.gui.init_twiss_table.getModel().fireTableDataChanged()
+        self.panel.init_twiss_table.getModel().fireTableDataChanged()
         self.phase_controller.track()
-        self.gui.update_plots()
+        self.panel.update_plots()
         print 'Updated kinetic energy to {:.3e} [eV]'.format(
             self.phase_controller.probe.getKineticEnergy())
 
         
 class RefWsIdDropdownListener(ActionListener):
     
-    def __init__(self, gui):
-        self.gui = gui
-        self.dropdown = gui.ref_ws_id_dropdown
-        self.phase_controller = gui.phase_controller
+    def __init__(self, panel):
+        self.panel = panel
+        self.dropdown = panel.ref_ws_id_dropdown
+        self.phase_controller = panel.phase_controller
         
     def actionPerformed(self, event):
         self.phase_controller.ref_ws_id = self.dropdown.getSelectedItem()
-        if hasattr(self.gui, 'right_panel'):
-            self.gui.update_plots()
+        if hasattr(self.panel, 'right_panel'):
+            self.panel.update_plots()
         print 'Updated ref_ws_id to {}'.format(self.phase_controller.ref_ws_id)
         
         
 class NStepsTextFieldListener(ActionListener):
     
-    def __init__(self, gui):
-        self.gui = gui
+    def __init__(self, panel):
+        self.panel = panel
     
     def actionPerformed(self, event):
-        n_steps = float(self.gui.n_steps_text_field.getText())
+        n_steps = float(self.panel.n_steps_text_field.getText())
         n_steps = int(n_steps)
-        self.gui.scan_index_dropdown.removeAllItems()
-        self.gui.scan_index_dropdown.addItem('default')
+        self.panel.scan_index_dropdown.removeAllItems()
+        self.panel.scan_index_dropdown.addItem('default')
         for scan_index in range(n_steps):
-            self.gui.scan_index_dropdown.addItem(scan_index)
+            self.panel.scan_index_dropdown.addItem(scan_index)
             
              
 class TwissTableListener(CellEditorListener):
     
-    def __init__(self, gui):
-        self.gui = gui
-        self.phase_controller = gui.phase_controller
-        self.table = gui.init_twiss_table
+    def __init__(self, panel):
+        self.panel = panel
+        self.phase_controller = panel.phase_controller
+        self.table = panel.init_twiss_table
         self.cell_editor = self.table.getCellEditor(0, 0)
 
     def editingStopped(self, event):
@@ -380,15 +386,15 @@ class TwissTableListener(CellEditorListener):
         self.phase_controller.init_twiss[key] = value
         self.table.getModel().fireTableDataChanged()
         self.phase_controller.track()
-        self.gui.update_plots()
+        self.panel.update_plots()
         print 'Updated initial Twiss:', self.phase_controller.init_twiss
 
 
 class CalculateModelOpticsButtonListener(ActionListener):
 
-    def __init__(self, gui):
-        self.gui = gui
-        self.phase_controller = gui.phase_controller
+    def __init__(self, panel):
+        self.panel = panel
+        self.phase_controller = panel.phase_controller
         self.ind_quad_ids = self.phase_controller.ind_quad_ids
         
     def actionPerformed(self, event):
@@ -411,11 +417,11 @@ class CalculateModelOpticsButtonListener(ActionListener):
         - 'model_fields_i.dat':
              Node ID and field strength of the independent quadrupoles [T/m].
         """
-        self.gui.model_fields_list = []
+        self.panel.model_fields_list = []
         
-        phase_coverage = float(self.gui.phase_coverage_text_field.getText())
-        n_steps = int(self.gui.n_steps_text_field.getText())        
-        max_beta = float(self.gui.max_beta_text_field.getText())
+        phase_coverage = float(self.panel.phase_coverage_text_field.getText())
+        n_steps = int(self.panel.n_steps_text_field.getText())        
+        max_beta = float(self.panel.max_beta_text_field.getText())
         beta_lims = (max_beta, max_beta)
         phases = self.phase_controller.get_phases_for_scan(phase_coverage, n_steps)
         print 'index | mu_x  | mu_y [rad]'
@@ -469,10 +475,10 @@ class CalculateModelOpticsButtonListener(ActionListener):
                 model_fields.append(field)
                 file.write('{}, {}\n'.format(quad_id, field))
             file.close()
-            self.gui.model_fields_list.append(model_fields)
+            self.panel.model_fields_list.append(model_fields)
             
-            # Update the GUI progress bar.
-            self.gui.progress_bar.setValue(scan_index + 1)
+            # Update the panel progress bar.
+            self.panel.progress_bar.setValue(scan_index + 1)
                     
             print ''
             
@@ -481,15 +487,15 @@ class CalculateModelOpticsButtonListener(ActionListener):
         
 class SetLiveOpticsButtonListener(ActionListener):
     
-    def __init__(self, gui):
-        self.gui = gui
-        self.phase_controller = gui.phase_controller
+    def __init__(self, panel):
+        self.panel = panel
+        self.phase_controller = panel.phase_controller
         self.ind_quad_ids = self.phase_controller.ind_quad_ids
         
     def actionPerformed(self, action):
         quad_ids = self.phase_controller.ind_quad_ids
-        field_set_kws = self.gui.get_field_set_kws()
-        scan_index = self.gui.scan_index_dropdown.getSelectedItem()
+        field_set_kws = self.panel.get_field_set_kws()
+        scan_index = self.panel.scan_index_dropdown.getSelectedItem()
         print 'Syncing live quads with model...'
         print field_set_kws
         if scan_index == 'default':
@@ -497,11 +503,11 @@ class SetLiveOpticsButtonListener(ActionListener):
 #             self.phase_controller.restore_default_optics('live')
         else:
             scan_index = int(scan_index)
-            model_fields = self.gui.model_fields_list[scan_index]
+            model_fields = self.panel.model_fields_list[scan_index]
             self.phase_controller.set_fields(quad_ids, model_fields, 'model')
 #             self.phase_controller.set_fields(quad_ids, model_fields, 'live', **field_set_kws)
-        self.gui.quad_settings_table.getModel().fireTableDataChanged()
-        self.gui.update_plots()
+        self.panel.quad_settings_table.getModel().fireTableDataChanged()
+        self.panel.update_plots()
         
         # Save live quad strengths.
         file = open('_output/live_fields_{}.dat'.format(scan_index), 'w')

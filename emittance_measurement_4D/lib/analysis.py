@@ -72,6 +72,7 @@ class BeamStats:
         self.eps_x, self.eps_y = apparent_emittances(Sigma)
         self.eps_1, self.eps_2 = intrinsic_emittances(Sigma)
         self.alpha_x, self.alpha_y, self.beta_x, self.beta_y = twiss2D(Sigma)
+        self.coupling_coeff = 1.0 - sqrt(self.eps_1 * self.eps_2 / (self.eps_x * self.eps_y))
         
     def rms_ellipse_dims(dim1, dim2):
         return rms_ellipse_dims(self.Sigma, dim1, dim2)

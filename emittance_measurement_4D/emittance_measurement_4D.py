@@ -68,7 +68,7 @@ class GUI:
         
         # Add tabbed pane to frame.
         self.frame = JFrame("RTBT Phase Controller")
-        self.frame.setSize(Dimension(1000, 900))
+        self.frame.setSize(Dimension(1100, 1000))
         self.frame.add(self.pane)
         
         # Add time stamp at the bottom of the frame.
