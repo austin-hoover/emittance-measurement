@@ -109,7 +109,11 @@ class AnalysisPanel(JPanel):
             self.profile_plots_panel.add(panel)
         
         self.top_panel = JPanel()
-        self.top_panel.add(self.temp_panel, BorderLayout.NORTH)
+        self.top_panel.setLayout(BorderLayout())
+        self.top_panel.setPreferredSize(Dimension(1200, 200))
+#         self.top_panel.setLayout(BoxLayout(self.top_panel, BoxLayout.X_AXIS))
+        self.top_panel.add(self.temp_panel, BorderLayout.WEST)
+        self.top_panel.add(self.profile_plots_panel)
 
 
         # The bottom left panel reconstructs the covariance matrix and 
@@ -131,8 +135,8 @@ class AnalysisPanel(JPanel):
         self.bottom_panel.add(self.bottom_right_panel)
         
         
-#         self.add(self.top_panel, BorderLayout.NORTH)
-        self.add(self.profile_plots_panel)
+        self.add(self.top_panel, BorderLayout.NORTH)
+#         self.add(self.profile_plots_panel)
         self.add(self.bottom_panel, BorderLayout.SOUTH)
 
         
@@ -220,17 +224,19 @@ class ReconstructCovarianceButtonListener(ActionListener):
         self.panel = panel
         
     def actionPerformed(self, event):
-        if not self.panel.measurements:
+        measurements = self.panel.measurements
+        moments_dict = self.panel.moments_dict
+        tmats_dict = self.panel.tmats_dict
+        
+        if not measurements:
             raise ValueError('No wire-scanner files have been loaded.')
 
         # Form list of transfer matrices and measured moments.
-        ACTIVE_NODE_IDS = measurement.node_ids # Read this from GUI later.
+        ACTIVE_NODE_IDS = measurements[0].node_ids # Read this from GUI later.
         moments_list, tmats_list = [], []
-        for measurement in measurements:
-            for meas_node_id in ACTIVE_NODE_IDS:
-                moments_list.extend(moments_dict[meas_node_id])
-                tmats_list.extend(tmats_dict[meas_node_id])
-            
+        for meas_node_id in ACTIVE_NODE_IDS:
+            moments_list.extend(moments_dict[meas_node_id])
+            tmats_list.extend(tmats_dict[meas_node_id])
         # Reconstruct and print results.
         Sigma = analysis.reconstruct(tmats_list, moments_list, verbose=2, solver='lsmr')
         beam_stats = analysis.BeamStats(Sigma)

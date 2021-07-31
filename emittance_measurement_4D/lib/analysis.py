@@ -144,7 +144,7 @@ def reconstruct(transfer_mats, moments, **lsq_kws):
         b.append(sig_xx)
         b.append(sig_yy)
         b.append(sig_xy)
-        
+
     # Solve the problem Ax = b.
     lsq_kws.setdefault('solver', 'lsmr')
     moment_vec = lsq_linear(A, b, **lsq_kws)
