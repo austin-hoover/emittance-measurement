@@ -1,8 +1,11 @@
+"""General utility functions."""
 import math
 import os
 
 
-def split_list(items, token):
+# Lists
+#-------------------------------------------------------------------------------
+def split(items, token):
     """Split `items` into sublists, excluding `token`.
 
     Example:
@@ -29,25 +32,12 @@ def list_to_string(items):
     return string[:-1]
 
 
-def shape(array):
-    if type(array) != list:
-        return []
-    return [len(array)] + shape(array[0])
-
-
-def linspace(start, stop, num=10):
-    if num < 2:
-        return [start]
-    step = float(stop - start) / (num - 1)
-    return [start + i*step for i in range(num)]
-
-
-def arange(start, stop, step=1.0):
-    vals, x = [], start
-    while abs(x - stop) > abs(step):
-        vals.append(x)
-        x += step
-    return vals
+def string_to_list(string):
+    """Convert string to list of floats.
+    
+    '1 2 3' -> [1.0, 2.0, 3.0])
+    """
+    return [float(token) for token in string.split()]
 
 
 def multiply(vec, factor):
@@ -62,15 +52,33 @@ def subtract(vec1, vec2):
     return add(vec1, multiply(vec2, -1))
 
 
+def square(vec):
+    return [elem**2 for elem in vec]
+
+
 def norm(vec):
-    return math.sqrt(sum([elem**2 for elem in vec]))
+    return math.sqrt(sum(square(vec)))
 
 
-def transpose_list(X):
-    return [list(x) for x in zip(*X)]
+def linspace(start, stop, num=10):
+    if num < 2:
+        return [start]
+    step = float(stop - start) / (num - 1)
+    return [start + i*step for i in range(num)]
 
 
-# Other functions
+def shape(array):
+    if type(array) != list:
+        return []
+    return [len(array)] + shape(array[0])
+
+
+def transpose(array):
+    return [list(x) for x in zip(*array)]
+
+
+# Miscellaneous
+#-------------------------------------------------------------------------------
 def clip(x, lo=None, hi=None):
     "Enforce lo <= x <= hi."
     if lo is not None and x < lo:
@@ -103,6 +111,7 @@ def put_angle_in_range(angle):
 
 
 # File processing
+#-------------------------------------------------------------------------------
 def delete_files_not_folders(directory):
     """Delete all files in directory and subdirectories."""
     for root, dirs, files in os.walk(directory):
@@ -112,7 +121,6 @@ def delete_files_not_folders(directory):
             
             
 def save_array(array, filename):
-    """Save list or list of lists to a file."""
     if len(shape(array)) == 1:
         array = [array]
         

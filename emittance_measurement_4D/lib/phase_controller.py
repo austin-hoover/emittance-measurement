@@ -7,15 +7,15 @@ import warnings
 
 from xal.ca import Channel
 from xal.ca import ChannelFactory
+from xal.extension.solver import Problem
+from xal.extension.solver import Scorer
+from xal.extension.solver import Solver
+from xal.extension.solver import Stopper
 from xal.extension.solver import Trial
 from xal.extension.solver import Variable
-from xal.extension.solver import Scorer
-from xal.extension.solver import Stopper
-from xal.extension.solver import Solver
-from xal.extension.solver import Problem
+from xal.extension.solver.algorithm import SimplexSearchAlgorithm
 from xal.extension.solver.ProblemFactory import getInverseSquareMinimizerProblem
 from xal.extension.solver.SolveStopperFactory import maxEvaluationsStopper
-from xal.extension.solver.algorithm import SimplexSearchAlgorithm
 from xal.model.probe import Probe
 from xal.model.probe.traj import Trajectory
 from xal.sim.scenario import AlgorithmFactory
@@ -25,30 +25,30 @@ from xal.smf import Accelerator
 from xal.smf import AcceleratorSeq 
 from xal.smf.data import XMLDataManager
 from xal.smf.impl import MagnetMainSupply
-from xal.tools.beam import Twiss
-from xal.tools.beam import PhaseVector
 from xal.tools.beam import CovarianceMatrix
+from xal.tools.beam import PhaseVector
+from xal.tools.beam import Twiss
 from xal.tools.beam.calc import CalculationsOnBeams
 from xal.tools.beam.calc import CalculationsOnRings
 
 # Local
-from utils import subtract
-from utils import norm
 from utils import clip
+from utils import norm
 from utils import put_angle_in_range
-from helpers import get_trial_vals
-from helpers import minimize
-from helpers import list_from_xal_matrix
-from lib.utils import radians
-from lib.utils import linspace
+from utils import subtract
+from xal_helpers import get_trial_vals
+from xal_helpers import list_from_xal_matrix
+from xal_helpers import minimize
+from utils import linspace
+from utils import radians
 
 
 # Available RTBT wire-scanners
-ws_ids = ['RTBT_Diag:WS02', 'RTBT_Diag:WS20', 'RTBT_Diag:WS21', 
-          'RTBT_Diag:WS23', 'RTBT_Diag:WS24']
+RTBT_WS_IDS = ['RTBT_Diag:WS02', 'RTBT_Diag:WS20', 'RTBT_Diag:WS21', 
+               'RTBT_Diag:WS23', 'RTBT_Diag:WS24']
 
 # Quadrupoles with independent power supplies
-rtbt_ind_quad_ids = ['RTBT_Mag:QH02', 'RTBT_Mag:QV03', 'RTBT_Mag:QH04', 
+RTBT_IND_QUAD_IDS = ['RTBT_Mag:QH02', 'RTBT_Mag:QV03', 'RTBT_Mag:QH04', 
                      'RTBT_Mag:QV05', 'RTBT_Mag:QH06', 'RTBT_Mag:QH12', 
                      'RTBT_Mag:QV13', 'RTBT_Mag:QH14', 'RTBT_Mag:QV15', 
                      'RTBT_Mag:QH16', 'RTBT_Mag:QV17', 'RTBT_Mag:QH18', 
@@ -74,6 +74,7 @@ def compute_twiss(state, calculator):
 class PhaseController:
 
     def __init__(self, ref_ws_id='RTBT_Diag:WS24', kin_energy=1.0):
+        self.machine_has_changed = False
         self.ref_ws_id = ref_ws_id
         self.accelerator = XMLDataManager.loadDefaultAccelerator()
         self.sequence = self.accelerator.getComboSequence('RTBT')
@@ -409,7 +410,7 @@ class PhaseController:
         """Set quadrupole field strength [T/m].
         
         Note: this can lead to errors if the desired field is too far from the 
-        book value.
+        book value (if changing the live values).
         """
         node = self.sequence.getNodeWithId(quad_id)
         if opt == 'model':
@@ -420,8 +421,10 @@ class PhaseController:
                     self.set_field(dep_quad_id, field)
         elif opt == 'live': 
             node.setField(field)
+            self.machine_has_changed = True
         elif opt == 'book':
             self.book_channels[quad_id].putVal(node.toCAFromField(field))
+            self.machine_has_changed = True
         else:
             raise ValueError("opt must be in {'model', 'live', 'book'}")
         

@@ -28,9 +28,10 @@ from java.text import DecimalFormat
 from xal.extension.widgets.plot import BasicGraphData
 from xal.extension.widgets.plot import FunctionGraphsJPanel
 
-from helpers import write_traj_to_file
+# Local
 from phase_controller import PhaseController
 import utils
+import xal_helpers
 
 
 # 'Colorblind' color cycle
@@ -44,13 +45,13 @@ COLOR_CYCLE = [
 ]
 
 # Node id of each wire-scanner.
-ws_ids = ['RTBT_Diag:WS02', 'RTBT_Diag:WS20', 'RTBT_Diag:WS21', 
-          'RTBT_Diag:WS23', 'RTBT_Diag:WS24']
+RTBT_WS_IDS = ['RTBT_Diag:WS02', 'RTBT_Diag:WS20', 'RTBT_Diag:WS21', 
+               'RTBT_Diag:WS23', 'RTBT_Diag:WS24']
 
 # Distance of each wire-scanner from the RTBT entrance. This should
 # just be calculated... I think there is a method called 
 # `getDistanceBetween(node1, node2)`.
-ws_positions = [27.336298, 111.74436, 116.965, 129.0394, 134.75916]
+RTBT_WS_POSITIONS = [27.336298, 111.74436, 116.965, 129.0394, 134.75916]
 
 
 
@@ -79,7 +80,7 @@ class PhaseControllerPanel(JPanel):
 
         # Components
         text_field_width = 11
-        self.ref_ws_id_dropdown = JComboBox(ws_ids)
+        self.ref_ws_id_dropdown = JComboBox(RTBT_WS_IDS)
         nodes = self.phase_controller.sequence.getNodes()
         node_ids = [node.getId() for node in nodes]
         self.rec_point_dropdown = JComboBox(node_ids)
@@ -98,7 +99,7 @@ class PhaseControllerPanel(JPanel):
         self.energy_text_field.addActionListener(EnergyTextFieldListener(self))
         self.ref_ws_id_dropdown.addActionListener(RefWsIdDropdownListener(self))
         self.ref_ws_id_dropdown.setSelectedIndex(4)
-        self.calculate_model_optics_button.addActionListener(CalculateModelOpticsButtonListener(self))               
+        self.calculate_model_optics_button.addActionListener(CalculateModelOpticsButtonListener(self))   
         self.init_twiss_table.getCellEditor(0, 0).addCellEditorListener(TwissTableListener(self))
 
         # Build panel
@@ -250,9 +251,9 @@ class PhaseControllerPanel(JPanel):
         x_avgs, y_avgs = self.read_bpms()
         self.bpm_plot_panel.set_data(self.bpm_positions, [x_avgs, y_avgs])
 
-        ref_ws_index = ws_ids.index(self.ref_ws_id_dropdown.getSelectedItem())
+        ref_ws_index = RTBT_WS_IDS.index(self.ref_ws_id_dropdown.getSelectedItem())
         for plot_panel in [self.beta_plot_panel, self.phase_plot_panel, self.bpm_plot_panel]:
-            for i, ws_position in enumerate(ws_positions):
+            for i, ws_position in enumerate(RTBT_WS_POSITIONS):
                 color = Color(150, 150, 150) if i == ref_ws_index else Color(225, 225, 225)
                 plot_panel.graph.addVerticalLine(ws_position, color)
 
@@ -454,14 +455,14 @@ class CalculateModelOpticsButtonListener(ActionListener):
             
             # Save model Twiss vs. position data.
             filename = '_output/model_twiss_{}.dat'.format(scan_index)
-            write_traj_to_file(self.phase_controller.tracked_twiss(), 
-                               self.phase_controller.positions, 
-                               filename)
+            xal_helpers.write_traj_to_file(self.phase_controller.tracked_twiss(), 
+                                           self.phase_controller.positions, 
+                                           filename)
 
             # Save transfer matrix at each wire-scanner.
             file = open('_output/model_transfer_mat_elems_{}_{}.dat'.format(scan_index, rec_node_id), 'w')
             fstr = 16 * '{} ' + '\n'
-            for ws_id in ws_ids:
+            for ws_id in RTBT_WS_IDS:
                 M = self.phase_controller.transfer_matrix(rec_node_id, ws_id)
                 elements = [elem for row in M for elem in row]
                 file.write(fstr.format(*elements))
@@ -469,7 +470,7 @@ class CalculateModelOpticsButtonListener(ActionListener):
 
             # Save real space beam moments at each wire-scanner.
             file = open('_output/model_moments_{}.dat'.format(scan_index), 'w')
-            for ws_id in ws_ids:
+            for ws_id in RTBT_WS_IDS:
                 (mu_x, mu_y, alpha_x, alpha_y, 
                  beta_x, beta_y, eps_x, eps_y) = self.phase_controller.twiss(ws_id)
                 moments = [eps_x * beta_x, eps_y * beta_y, 0.0]
@@ -529,7 +530,7 @@ class SetLiveOpticsButtonListener(ActionListener):
         # Save transfer matrix at each wire-scanner.
         file = open('_output/model_transfer_mat_elems_{}_{}.dat'.format(scan_index, rec_node_id), 'w')
         fstr = 16 * '{} ' + '\n'
-        for ws_id in ws_ids:
+        for ws_id in RTBT_WS_IDS:
             M = self.phase_controller.transfer_matrix(rec_node_id, ws_id)
             elements = [elem for row in M for elem in row]
             file.write(fstr.format(*elements))
