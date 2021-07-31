@@ -57,14 +57,14 @@ class AnalysisPanel(JPanel):
     def __init__(self, kin_energy=1e9):
         JPanel.__init__(self)
         self.setLayout(BorderLayout())
-        self.files_loaded = False
         self.kin_energy = kin_energy
-        self.measurements = []
-        self.moments_dict = dict()
-        self.moments_list = []
-        self.tmats_dict = dict()
-        self.tmats_list = []
+        self.start_fresh()
         self.build_panel()
+        
+    def start_fresh(self):
+        self.measurements = []
+        self.moments_dict, self.moments_list = dict(), []
+        self.tmats_dict, self.tmats_list = dict(), []
         
     def build_panel(self):
         print 'Kinetic energy is hard coded. Do not delete this message until this is fixed.'
@@ -74,20 +74,26 @@ class AnalysisPanel(JPanel):
         self.tmat_generator = analysis.TransferMatrixGenerator(self.sequence, self.kin_energy)
         
         # Buttons
-        self.load_files_button = JButton('Load wire-scan files')
+        self.load_files_button = JButton('Load files')
+        self.clear_files_button = JButton('Clear files')
         self.reconstruct_covariance_button = JButton('Reconstruct covariance matrix')   
         
         # Action listeners
         self.load_files_button.addActionListener(LoadFilesButtonListener(self))
+        self.clear_files_button.addActionListener(ClearFilesButtonListener(self))
         self.reconstruct_covariance_button.addActionListener(
             ReconstructCovarianceButtonListener(self))
         
         # Add components to panel.
         self.panel1 = JPanel()
         self.panel1.add(self.load_files_button)
-        self.panel1.add(self.reconstruct_covariance_button)
+        self.panel1.add(self.clear_files_button)
         
-        self.add(self.panel1)
+        self.panel2 = JPanel()
+        self.panel2.add(self.reconstruct_covariance_button)
+        
+        self.add(self.panel1, BorderLayout.WEST)
+        self.add(self.panel2)
     
 
 
@@ -157,22 +163,31 @@ class LoadFilesButtonListener(ActionListener):
                 moments_list.extend(moments_dict[meas_node_id])
                 tmats_list.extend(tmats_dict[meas_node_id])
             
-        # Save everything to the main panel.
+        # Save everything.
         self.panel.measurements = measurements
         self.panel.moments_list = moments_list
         self.panel.moments_dict = moments_dict
         self.panel.tmats_list = tmats_list
         self.panel.tmats_dict = tmats_dict
-        self.panel.files_loaded = True
         
-                
+        
+class ClearFilesButtonListener(ActionListener):
+    
+    def __init__(self, panel):
+        self.panel = panel
+    
+    def actionPerformed(self, event):
+        self.panel.start_fresh()        
+        print 'Cleared data.'
+              
+            
 class ReconstructCovarianceButtonListener(ActionListener):
     
     def __init__(self, panel):
         self.panel = panel
         
     def actionPerformed(self, event):
-        if not self.panel.files_loaded:
+        if not self.panel.measurements:
             raise ValueError('No wire-scanner files have been loaded.')
         tmats_list = self.panel.tmats_list
         moments_list = self.panel.moments_list
