@@ -121,6 +121,8 @@ class LinePlotPanel(PlotPanel):
             data.setLineThick(lw)
         if ms:
             data.setGraphPointSize(ms)
+        for x, y in zip(xvals, yvals):
+            data.addPoint(x, y)
         self.addGraphData(data) 
             
     def set_xlim(self, xmin, xmax, xstep):

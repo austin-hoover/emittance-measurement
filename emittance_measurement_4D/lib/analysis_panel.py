@@ -51,6 +51,9 @@ from xal.service.pvlogger.sim import PVLoggerDataSource
 from xal.smf import Accelerator
 from xal.smf import AcceleratorSeq 
 from xal.smf.data import XMLDataManager
+from xal.tools.beam import Twiss
+from xal.tools.beam.calc import CalculationsOnBeams
+from xal.tools.beam.calc import CalculationsOnRings
 
 # Local
 import analysis
@@ -59,8 +62,6 @@ import utils
 import xal_helpers
 
 
-REC_NODE_ID = 'Begin_Of_RTBT1'
-
 
 class AnalysisPanel(JPanel):
     
@@ -68,7 +69,7 @@ class AnalysisPanel(JPanel):
         JPanel.__init__(self)
         self.setLayout(BorderLayout())
         self.kin_energy = kin_energy
-        self.rec_node_id = REC_NODE_ID
+        self.rec_node_id = 'Begin_Of_RTBT1'
         self.accelerator = XMLDataManager.loadDefaultAccelerator()
         self.sequence = self.accelerator.getComboSequence('RTBT')
         self.scenario = Scenario.newScenarioFor(self.sequence)
@@ -131,7 +132,7 @@ class AnalysisPanel(JPanel):
         self.max_iter_label = JLabel('max iter')
         self.max_iter_text_field = JTextField('100', 5)
         self.llsq_solver_label = JLabel('LLSQ solver')
-        self.llsq_solver_dropdown = JComboBox(['lsmr', 'exact'])
+        self.llsq_solver_dropdown = JComboBox(['exact', 'lsmr'])
         self.tol_label = JLabel('tol')
         self.tol_text_field = JTextField('1e-12')
         self.results_table = JTable(ResultsTableModel(self))
@@ -219,40 +220,44 @@ class AnalysisPanel(JPanel):
         # Plot the 2D projections of the rms ellipsoid (x^T Sigma x = 1).
         self.corner_plot_panel.rms_ellipses(self.beam_stats.Sigma)
             
-        # Plot the reconstruction lines.
-        xxp_panel = self.corner_plot_panel.plots['x,xp']
-        yyp_panel = self.corner_plot_panel.plots['y,yp']
-        xmax = xxp_panel.getCurrentMaxX()
-        xpmax = xxp_panel.getCurrentMaxY()
-        ymax = yyp_panel.getCurrentMaxX()
-        ypmax = yyp_panel.getCurrentMaxY()
-        print 'max x', xmax
-        print 'max xp', xpmax
-        print 'max y', ymax
-        print 'max yp', ypmax
+#         # Plot the reconstruction lines.
+#         xxp_panel = self.corner_plot_panel.plots['x,xp']
+#         yyp_panel = self.corner_plot_panel.plots['y,yp']
+#         xmax = xxp_panel.getCurrentMaxX()
+#         xpmax = xxp_panel.getCurrentMaxY()
+#         ymax = yyp_panel.getCurrentMaxX()
+#         ypmax = yyp_panel.getCurrentMaxY()
+#         print 'max x', xmax
+#         print 'max xp', xpmax
+#         print 'max y', ymax
+#         print 'max yp', ypmax
         
-        def possible_points(M, sig_xx, sig_yy):
-            Minv = M.inverse()
-            x_max = 2.0 * math.sqrt(sig_xx)
-            y_max = 2.0 * math.sqrt(sig_yy)
-            x_vals, xp_vals, y_vals, yp_vals = [], [], [], []
-            for slope in (-20, 20):
-                vec_1 = Matrix([[x_max], [slope], [0.], [0.]])
-                vec_0 = Minv.times(vec_1)
-                x_vals.append(vec_0.get(0, 0))
-                y_vals.append(vec_0.get(2, 0))
-                xp_vals.append(vec_0.get(1, 0))
-                yp_vals.append(vec_0.get(3, 0))
-            return x_vals, xp_vals, y_vals, yp_vals
+#         def possible_points(M, sig_xx, sig_yy):
+#             Minv = M.inverse()
+#             x_max = 2.0 * math.sqrt(sig_xx)
+#             y_max = 2.0 * math.sqrt(sig_yy)
+#             x_vals, xp_vals, y_vals, yp_vals = [], [], [], []
+#             for slope in (-20, 20):
+#                 vec_1 = Matrix([[x_max], [slope], [0.], [0.]])
+#                 vec_0 = Minv.times(vec_1)
+#                 x_vals.append(vec_0.get(0, 0))
+#                 y_vals.append(vec_0.get(2, 0))
+#                 xp_vals.append(vec_0.get(1, 0))
+#                 yp_vals.append(vec_0.get(3, 0))
+#             return x_vals, xp_vals, y_vals, yp_vals
         
-        node_ids = sorted(list(tmats_dict))
-        for node_id, color in zip(node_ids, plt.COLOR_CYCLE):
-            print node_id, color
-            for M, (sig_xx, sig_yy, sig_xy) in zip(tmats_dict[node_id], moments_dict[node_id]):
-                M = Matrix(M)
-                x_vals, xp_vals, y_vals, yp_vals = possible_points(M, sig_xx, sig_yy)
-                xxp_panel.plot(x_vals, xp_vals, color=color, ms=0)
-                yyp_panel.plot(y_vals, yp_vals, color=color, ms=0)
+#         node_ids = sorted(list(tmats_dict))
+#         for node_id, color in zip(node_ids, plt.COLOR_CYCLE):
+#             print node_id, color
+#             for M, (sig_xx, sig_yy, sig_xy) in zip(tmats_dict[node_id], moments_dict[node_id]):
+#                 M = Matrix(M)
+#                 x_vals, xp_vals, y_vals, yp_vals = possible_points(M, sig_xx, sig_yy)
+#                 xxp_panel.plot(x_vals, xp_vals, color=color, ms=0)
+#                 yyp_panel.plot(y_vals, yp_vals, color=color, ms=0)
+#                 xxp_panel.set_xlim(-xmax, xmax, xmax/4)
+#                 xxp_panel.set_ylim(-xpmax, xpmax, xpmax/4)
+#                 yyp_panel.set_xlim(-ymax, ymax, ymax/4)
+#                 yyp_panel.set_ylim(-ypmax, ypmax, ypmax/4)
                 
             
 # Tables
@@ -290,7 +295,6 @@ class ResultsTableModel(AbstractTableModel):
         elif col == 2:
             if row < 5:
                 return '-'
-            # Get model Twiss.
             return '-'
 
     def getColumnCount(self):

@@ -34,15 +34,9 @@ from phase_controller import PhaseController
 import utils
 import xal_helpers
 
-# Node id of each wire-scanner.
+
 RTBT_WS_IDS = ['RTBT_Diag:WS02', 'RTBT_Diag:WS20', 'RTBT_Diag:WS21', 
                'RTBT_Diag:WS23', 'RTBT_Diag:WS24']
-
-# Distance of each wire-scanner from the RTBT entrance. This should
-# just be calculated... I think there is a method called 
-# `getDistanceBetween(node1, node2)`.
-RTBT_WS_POSITIONS = [27.336298, 111.74436, 116.965, 129.0394, 134.75916]
-
 
 
 class PhaseControllerPanel(JPanel):
@@ -443,12 +437,12 @@ class CalculateModelOpticsButtonListener(ActionListener):
             max_betas_anywhere = self.phase_controller.max_betas(stop=None)
             print '  Max betas anywhere: {:.3f}, {:.3f}.'.format(*max_betas_anywhere)
             
-            # Save model Twiss vs. position data.
-            filename = '_output/model_twiss_{}.dat'.format(scan_index)
-            xal_helpers.write_traj_to_file(self.phase_controller.tracked_twiss(), 
-                                           self.phase_controller.positions, 
-                                           filename)
-
+#             # Save model Twiss vs. position data.
+#             filename = '_output/model_twiss_{}.dat'.format(scan_index)
+#             xal_helpers.write_traj_to_file(self.phase_controller.tracked_twiss(), 
+#                                            self.phase_controller.positions, 
+#                                            filename)
+# 
 #             # Save transfer matrix at each wire-scanner.
 #             file = open('_output/model_transfer_mat_elems_{}_{}.dat'.format(scan_index, rec_node_id), 'w')
 #             fstr = 16 * '{} ' + '\n'
@@ -457,7 +451,7 @@ class CalculateModelOpticsButtonListener(ActionListener):
 #                 elements = [elem for row in M for elem in row]
 #                 file.write(fstr.format(*elements))
 #             file.close()
-
+# 
 #             # Save real space beam moments at each wire-scanner.
 #             file = open('_output/model_moments_{}.dat'.format(scan_index), 'w')
 #             for ws_id in RTBT_WS_IDS:
@@ -466,15 +460,17 @@ class CalculateModelOpticsButtonListener(ActionListener):
 #                 moments = [eps_x * beta_x, eps_y * beta_y, 0.0]
 #                 file.write('{} {} {}\n'.format(*moments))
 #             file.close()
-    
-            # Save model quadrupole strengths.
-            file = open('_output/model_fields_{}.dat'.format(scan_index), 'w')
-            model_fields = []
-            for quad_id in self.ind_quad_ids:
-                field = self.phase_controller.get_field(quad_id, 'model')
-                model_fields.append(field)
-                file.write('{}, {}\n'.format(quad_id, field))
-            file.close()
+#     
+#             # Save model quadrupole strengths.
+#             file = open('_output/model_fields_{}.dat'.format(scan_index), 'w')
+#             model_fields = []
+#             for quad_id in self.ind_quad_ids:
+#                 field = self.phase_controller.get_field(quad_id, 'model')
+#                 model_fields.append(field)
+#                 file.write('{}, {}\n'.format(quad_id, field))
+#             file.close()
+            
+            # Store the model fields.
             self.panel.model_fields_list.append(model_fields)
             
             # Update the panel progress bar. (This doesn't work currently;
@@ -483,6 +479,7 @@ class CalculateModelOpticsButtonListener(ActionListener):
                     
             print ''
             
+        # Put the model back to its original state.
         self.phase_controller.restore_default_optics('model')
         
         

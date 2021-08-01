@@ -1,6 +1,3 @@
-"""
-To do: add flag telling if the live machine has been changed.
-"""
 import math
 import time
 import warnings

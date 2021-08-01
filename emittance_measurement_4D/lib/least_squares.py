@@ -479,5 +479,7 @@ def lsq_linear(A, b, solver='exact', max_iter=None, lsmr_tol=1e-12, verbose=0):
         x, istop, itn, normr, normar, normA, condA, normx = result
     else:
         raise ValueError("Method must be in {'exact', 'lsmr'}")
+        
+    # Turn column vector into row vector.
     x = [x.get(i, 0) for i in range(x.getRowDimension())]
     return x
