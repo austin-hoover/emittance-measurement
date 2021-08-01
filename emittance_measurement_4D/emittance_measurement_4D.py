@@ -1,3 +1,8 @@
+"""
+To do:
+    * The GUI-building parts of the code are hard to read. I don't think I'm doing it 
+      correctly. Maybe try the EdgeLayout class from OpenXAL.
+"""
 import math
 import time
 import sys
@@ -68,15 +73,14 @@ class GUI:
         
         # Add tabbed pane to frame.
         self.frame = JFrame("RTBT Phase Controller")
-        self.frame.setSize(Dimension(1100, 1000))
+        self.frame.setSize(Dimension(1100, 850))
         self.frame.add(self.pane)
         
         # Add time stamp at the bottom of the frame.
         time_text = DateAndTimeText()
         time_panel = JPanel(BorderLayout())
         time_panel.add(time_text.getTimeTextField(), BorderLayout.CENTER)
-        self.frame.add(time_panel, BorderLayout.SOUTH)
-        
+        self.frame.add(time_panel, BorderLayout.SOUTH)        
         
     def get_field_set_kws(self):
         """Get key words for setting the live quads fields.

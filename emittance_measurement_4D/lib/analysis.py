@@ -22,19 +22,42 @@ import utils
 import xal_helpers
 
 
+DIAG_WIRE_ANGLE = utils.radians(-45.0)
+
+
 # Covariance matrix analysis
 #-------------------------------------------------------------------------------
 def rms_ellipse_dims(Sigma, dim1='x', dim2='y'):
+    """Return tilt angle and semi-axes of rms ellipse.
+
+    Parameters
+    ----------
+    Sigma : Matrix, shape (4, 4)
+        The covariance matrix for [x, x', y, y']. The rms ellipsoid is defined
+        by w^T Sigma w, where w = [x, x', y, y']^T.
+    dim1, dim2, {'x', 'xp', 'y', 'yp'}
+        The horizontal (dim1) and vertical (dim2) dimension. The 4D ellipsoid
+        is projected onto this 2D plane.
+        
+    Returns
+    -------
+    phi : float
+        The tilt angle of the ellipse as measured above the horizontal axis.
+        So, a positive tilt angle means a positive correlation.
+    c1, c2 : float
+        The horizontal and vertical semi-axes, respectively, of the ellipse
+        when phi = 0.
+    """
     str_to_int = {'x':0, 'xp':1, 'y':2, 'yp':3}
     i = str_to_int[dim1]
     j = str_to_int[dim2]
     sii, sjj, sij = Sigma.get(i, i), Sigma.get(j, j), Sigma.get(i, j)
-    angle = -0.5 * math.atan2(2*sij, sii-sjj)
-    sin, cos = math.sin(angle), math.cos(angle)
+    phi = 0.5 * math.atan2(2*sij, sii-sjj)
+    sin, cos = math.sin(phi), math.cos(phi)
     sin2, cos2 = sin**2, cos**2
     c1 = sqrt(abs(sii*cos2 + sjj*sin2 - 2*sij*sin*cos))
     c2 = sqrt(abs(sii*sin2 + sjj*cos2 + 2*sij*sin*cos))
-    return angle, c1, c2
+    return phi, c1, c2
 
 
 def intrinsic_emittances(Sigma):
@@ -372,3 +395,33 @@ class TransferMatrixGenerator:
         M = xal_helpers.list_from_xal_matrix(M)
         M = [row[:4] for row in M[:4]]
         return M
+    
+    
+def get_tmats_dict(measurements, tmat_generator, rec_node_id):
+    tmats_dict = dict()
+    for measurement in measurements:
+        print 'Collecting transfer matrices - pvloggerid = {}.'.format(measurement.pvloggerid)
+        tmat_generator.sync(measurement.pvloggerid)
+        for meas_node_id in measurement.node_ids:
+            tmat = tmat_generator.transfer_matrix(rec_node_id, meas_node_id)
+            if meas_node_id not in tmats_dict:
+                tmats_dict[meas_node_id] = []
+            tmats_dict[meas_node_id].append(tmat)
+    return tmats_dict
+
+
+def get_moments_dict(measurements):
+    moments_dict = dict()
+    for measurement in measurements:
+        print 'Collecting measured moments - pvloggerid = {}.'.format(measurement.pvloggerid)
+        for meas_node_id in measurement.node_ids:
+            profile = measurement.profiles[meas_node_id]
+            sig_xx = profile.hor.stats['Sigma'].rms**2
+            sig_yy = profile.ver.stats['Sigma'].rms**2
+            sig_uu = profile.dia.stats['Sigma'].rms**2
+            sig_xy = get_sig_xy(sig_xx, sig_yy, sig_uu, DIAG_WIRE_ANGLE)
+            moments = [sig_xx, sig_yy, sig_xy]
+            if meas_node_id not in moments_dict:
+                moments_dict[meas_node_id] = []
+            moments_dict[meas_node_id].append(moments)
+    return moments_dict

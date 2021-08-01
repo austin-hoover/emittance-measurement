@@ -1,9 +1,3 @@
-"""
-To to:
-    * Add options for solver (when calculating covariance).
-    * Corner plot.
-    * Export?
-"""
 from java.awt import BorderLayout
 from java.awt import Color
 from java.awt import Component
@@ -58,6 +52,16 @@ class PhaseControllerPanel(JPanel):
         self.setLayout(BorderLayout())
         self.phase_controller = PhaseController()
         self.model_fields_list = []
+        # Get wire-scanner positions.
+        self.ws_ids = RTBT_WS_IDS
+        self.sequence = self.phase_controller.sequence
+        self.start_node = self.sequence.getNodeWithId('Begin_Of_RTBT1')
+        self.ws_positions = []
+        for ws_id in self.ws_ids:
+            ws_node = self.sequence.getNodeWithId(ws_id)
+            ws_position = self.sequence.getDistanceBetween(self.start_node, ws_node)
+            self.ws_positions.append(ws_position)
+            
         self.build_panels()
         
     def build_panels(self):
@@ -75,7 +79,7 @@ class PhaseControllerPanel(JPanel):
 
         # Components
         text_field_width = 11
-        self.ref_ws_id_dropdown = JComboBox(RTBT_WS_IDS)
+        self.ref_ws_id_dropdown = JComboBox(self.ws_ids)
         self.init_twiss_table = JTable(InitTwissTableModel(self))
         self.init_twiss_table.setShowGrid(True)
         self.energy_text_field = JTextField('1.0', text_field_width)
@@ -103,7 +107,6 @@ class PhaseControllerPanel(JPanel):
         self.model_calc_panel2.add_row(n_steps_label, self.n_steps_text_field)
         self.model_calc_panel2.add_row(max_beta_label, self.max_beta_text_field)
         self.model_calc_panel = JPanel()
-
         self.model_calc_panel.add(init_twiss_label)
         self.model_calc_panel.add(self.init_twiss_table.getTableHeader())
         self.model_calc_panel.add(self.init_twiss_table)
@@ -154,8 +157,11 @@ class PhaseControllerPanel(JPanel):
 
         label = JLabel('Compute model')
         font = label.getFont()
-        label.setFont(Font(font.name, font.BOLD, int(1.05 * font.size)));
-        self.left_panel.add(label)
+        label.setFont(Font(font.name, font.BOLD, int(1.1 * font.size)));
+        temp_panel = JPanel()
+        temp_panel.setLayout(FlowLayout(FlowLayout.LEFT))
+        temp_panel.add(label)
+        self.left_panel.add(temp_panel)
 
         self.left_panel.add(self.model_calc_panel)
 
@@ -172,8 +178,11 @@ class PhaseControllerPanel(JPanel):
         self.left_panel.add(panel)
 
         label = JLabel('Update machine')
-        label.setFont(Font(font.name, font.BOLD, int(1.05 * font.size)));
-        self.left_panel.add(label)
+        label.setFont(Font(font.name, font.BOLD, int(1.1 * font.size)))
+        temp_panel = JPanel()
+        temp_panel.setLayout(FlowLayout(FlowLayout.LEFT))
+        temp_panel.add(label)
+        self.left_panel.add(temp_panel)
 
         self.left_panel.add(self.machine_update_panel)
 
@@ -193,26 +202,17 @@ class PhaseControllerPanel(JPanel):
             n_lines=2, grid='y',
         )
         self.bpm_plot_panel = plt.LinePlotPanel(
-            xlabel='BPM', ylabel='Amplitude [mm]', title='BMP amplitudes',
+            xlabel='Position [m]', ylabel='Amplitude [mm]', title='BMP amplitudes',
             n_lines=2, lw=2, ms=5, grid='y',
         )
 
         # Get BPM positions
         self.bpms = self.phase_controller.sequence.getNodesOfType('BPM')
-        self.bpm_positions = []
-        rtbt1_length = 69.7 # length of 'RTBT1' sequence [m]
-        in_second_half = False
-        for node in self.phase_controller.sequence.getNodes():
-            if node.getId() == 'Begin_Of_RTBT2':
-                in_second_half = True
-            if node not in self.bpms:
-                continue
-            position = node.getPosition()
-            if in_second_half:
-                position += rtbt1_length
-            self.bpm_positions.append(position)
+        ref_node = self.phase_controller.sequence.getNodes()[0]
+        seq = self.phase_controller.sequence
+        self.bpm_positions = [seq.getDistanceBetween(ref_node, node) for node in self.bpms]
 
-        # Add the plots to the panel
+        # Add the plots to the panel.
         self.right_panel = JPanel()
         self.right_panel.setLayout(BoxLayout(self.right_panel, BoxLayout.Y_AXIS))
         self.right_panel.add(self.beta_plot_panel)
@@ -242,9 +242,9 @@ class PhaseControllerPanel(JPanel):
         x_avgs, y_avgs = self.read_bpms()
         self.bpm_plot_panel.set_data(self.bpm_positions, [x_avgs, y_avgs])
 
-        ref_ws_index = RTBT_WS_IDS.index(self.ref_ws_id_dropdown.getSelectedItem())
+        ref_ws_index = self.ws_ids.index(self.ref_ws_id_dropdown.getSelectedItem())
         for plot_panel in [self.beta_plot_panel, self.phase_plot_panel, self.bpm_plot_panel]:
-            for i, ws_position in enumerate(RTBT_WS_POSITIONS):
+            for i, ws_position in enumerate(self.ws_positions):
                 color = Color(150, 150, 150) if i == ref_ws_index else Color(225, 225, 225)
                 plot_panel.addVerticalLine(ws_position, color)
 
@@ -449,7 +449,7 @@ class CalculateModelOpticsButtonListener(ActionListener):
                                            self.phase_controller.positions, 
                                            filename)
 
-            # Save transfer matrix at each wire-scanner.
+#             # Save transfer matrix at each wire-scanner.
 #             file = open('_output/model_transfer_mat_elems_{}_{}.dat'.format(scan_index, rec_node_id), 'w')
 #             fstr = 16 * '{} ' + '\n'
 #             for ws_id in RTBT_WS_IDS:
@@ -458,14 +458,14 @@ class CalculateModelOpticsButtonListener(ActionListener):
 #                 file.write(fstr.format(*elements))
 #             file.close()
 
-            # Save real space beam moments at each wire-scanner.
-            file = open('_output/model_moments_{}.dat'.format(scan_index), 'w')
-            for ws_id in RTBT_WS_IDS:
-                (mu_x, mu_y, alpha_x, alpha_y, 
-                 beta_x, beta_y, eps_x, eps_y) = self.phase_controller.twiss(ws_id)
-                moments = [eps_x * beta_x, eps_y * beta_y, 0.0]
-                file.write('{} {} {}\n'.format(*moments))
-            file.close()
+#             # Save real space beam moments at each wire-scanner.
+#             file = open('_output/model_moments_{}.dat'.format(scan_index), 'w')
+#             for ws_id in RTBT_WS_IDS:
+#                 (mu_x, mu_y, alpha_x, alpha_y, 
+#                  beta_x, beta_y, eps_x, eps_y) = self.phase_controller.twiss(ws_id)
+#                 moments = [eps_x * beta_x, eps_y * beta_y, 0.0]
+#                 file.write('{} {} {}\n'.format(*moments))
+#             file.close()
     
             # Save model quadrupole strengths.
             file = open('_output/model_fields_{}.dat'.format(scan_index), 'w')
@@ -477,7 +477,8 @@ class CalculateModelOpticsButtonListener(ActionListener):
             file.close()
             self.panel.model_fields_list.append(model_fields)
             
-            # Update the panel progress bar.
+            # Update the panel progress bar. (This doesn't work currently;
+            # we would need to run on a separate thread.)
             self.panel.progress_bar.setValue(scan_index + 1)
                     
             print ''
@@ -500,26 +501,26 @@ class SetLiveOpticsButtonListener(ActionListener):
         print field_set_kws
         if scan_index == 'default':
             self.phase_controller.restore_default_optics('model')
-#             self.phase_controller.restore_default_optics('live')
+            self.phase_controller.restore_default_optics('live')
         else:
             scan_index = int(scan_index)
             model_fields = self.panel.model_fields_list[scan_index]
             self.phase_controller.set_fields(quad_ids, model_fields, 'model')
-#             self.phase_controller.set_fields(quad_ids, model_fields, 'live', **field_set_kws)
+            self.phase_controller.set_fields(quad_ids, model_fields, 'live', **field_set_kws)
         self.panel.quad_settings_table.getModel().fireTableDataChanged()
         self.panel.update_plots()
         
         # Save live quad strengths.
-        file = open('_output/live_fields_{}.dat'.format(scan_index), 'w')
-        for quad_id in self.ind_quad_ids:
-            field = self.phase_controller.get_field(quad_id, 'live')
-            file.write('{}, {}\n'.format(quad_id, field))
-        file.close()
+#         file = open('_output/live_fields_{}.dat'.format(scan_index), 'w')
+#         for quad_id in self.ind_quad_ids:
+#             field = self.phase_controller.get_field(quad_id, 'live')
+#             file.write('{}, {}\n'.format(quad_id, field))
+#         file.close()
         
         # Save transfer matrix at each wire-scanner.
 #         file = open('_output/model_transfer_mat_elems_{}_{}.dat'.format(scan_index, rec_node_id), 'w')
 #         fstr = 16 * '{} ' + '\n'
-#         for ws_id in RTBT_WS_IDS:
+#         for ws_id in self.ws_ids:
 #             M = self.phase_controller.transfer_matrix(rec_node_id, ws_id)
 #             elements = [elem for row in M for elem in row]
 #             file.write(fstr.format(*elements))

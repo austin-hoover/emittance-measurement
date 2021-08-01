@@ -79,8 +79,8 @@ class PhaseController:
         self.accelerator = XMLDataManager.loadDefaultAccelerator()
         self.sequence = self.accelerator.getComboSequence('RTBT')
         self.scenario = Scenario.newScenarioFor(self.sequence)
-#         self.scenario.setSynchronizationMode(Scenario.SYNC_MODE_LIVE)
-#         self.scenario.resync()
+        self.scenario.setSynchronizationMode(Scenario.SYNC_MODE_LIVE)
+        self.scenario.resync()
         self.algorithm = AlgorithmFactory.createEnvelopeTracker(self.sequence)
         self.algorithm.setUseSpacecharge(False)
         self.probe = ProbeFactory.getEnvelopeProbe(self.sequence, self.algorithm)
@@ -116,22 +116,22 @@ class PhaseController:
                 if ps_id == ind_ps_id and quad_id != ind_quad_id:
                     self.shared_power.setdefault(ind_quad_id, []).append(quad_id)
 
-#         # Connect to B_Book channels. These need to be changed at the same time as
-#         # the field settings, else the machine will trip.
-#         self.book_channels = {}
-#         for quad_id, ps_node in zip(self.quad_ids, self.ps_nodes):
-#             channel = ps_node.findChannel(MagnetMainSupply.FIELD_BOOK_HANDLE)
-#             self.book_channels[quad_id] = channel
+        # Connect to B_Book channels. These need to be changed at the same time as
+        # the field settings, else the machine will trip.
+        self.book_channels = {}
+        for quad_id, ps_node in zip(self.quad_ids, self.ps_nodes):
+            channel = ps_node.findChannel(MagnetMainSupply.FIELD_BOOK_HANDLE)
+            self.book_channels[quad_id] = channel
 
-#         # Determine upper and lower bounds on power supplies.
-#         self.ps_lb, self.ps_ub = [], []
-#         for quad_node, ps_node in zip(self.ind_quad_nodes, self.ind_ps_nodes):
-#             lb = quad_node.toFieldFromCA(ps_node.lowerFieldLimit())
-#             ub = quad_node.toFieldFromCA(ps_node.upperFieldLimit())
-#             if lb > ub:
-#                 lb, ub = ub, lb
-#             self.ps_lb.append(lb)
-#             self.ps_ub.append(ub)
+        # Determine upper and lower bounds on power supplies.
+        self.ps_lb, self.ps_ub = [], []
+        for quad_node, ps_node in zip(self.ind_quad_nodes, self.ind_ps_nodes):
+            lb = quad_node.toFieldFromCA(ps_node.lowerFieldLimit())
+            ub = quad_node.toFieldFromCA(ps_node.upperFieldLimit())
+            if lb > ub:
+                lb, ub = ub, lb
+            self.ps_lb.append(lb)
+            self.ps_ub.append(ub)
             
         # Store the default field settings
         self.default_fields = self.get_fields(self.ind_quad_ids, 'model')    
@@ -500,8 +500,8 @@ class PhaseController:
         sequence = accelerator.getComboSequence('Ring')
         scenario = Scenario.newScenarioFor(sequence)
         # Sync model with live machine.
-#         scenario.setSynchronizationMode(Scenario.SYNC_MODE_LIVE)
-#         scenario.resync()
+        scenario.setSynchronizationMode(Scenario.SYNC_MODE_LIVE)
+        scenario.resync()
         # Get matched Twiss at RTBT entrance
         algorithm = AlgorithmFactory.createTransferMapTracker(sequence)
         probe = ProbeFactory.getTransferMapProbe(sequence, algorithm)

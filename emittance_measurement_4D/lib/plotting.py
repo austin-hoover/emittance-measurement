@@ -1,3 +1,6 @@
+import math
+from Jama import Matrix
+
 from java.awt import BorderLayout
 from java.awt import Color
 from java.awt import Component
@@ -24,10 +27,12 @@ from javax.swing import JTextField
 from javax.swing import JFormattedTextField
 
 from xal.extension.widgets.plot import BasicGraphData
+from xal.extension.widgets.plot import CurveData
 from xal.extension.widgets.plot import FunctionGraphsJPanel
 
 # Local
 import utils
+import analysis
 
 
 # 'Colorblind' color cycle
@@ -41,6 +46,22 @@ COLOR_CYCLE = [
 ]
 
 GRID_COLOR = Color(245, 245, 245)
+
+
+def rotate(x, y, phi):
+    """Rotate point (x, y) counterclockwise by phi radians."""
+    sn, cs = math.sin(phi), math.cos(phi)
+    x_rot =  x * cs - y * sn
+    y_rot =  x * sn + y * cs
+    return x_rot, y_rot
+
+
+def ellipse_points(width, height, tilt=0., n_pts=50):
+    angles = utils.linspace(0, 2 * math.pi, n_pts)
+    xvals = [width * math.cos(angle) for angle in angles]
+    yvals = [height * math.sin(angle) for angle in angles]
+    xvals, yvals = zip(*[utils.rotate(x, y, tilt) for x, y in zip(xvals, yvals)])
+    return xvals, yvals
 
 
 class PlotPanel(FunctionGraphsJPanel):
@@ -71,21 +92,36 @@ class LinePlotPanel(PlotPanel):
             data.setLineThick(lw)
             data.setGraphPointSize(ms)
     
-    def set_data(self, x, y_list):
-        """Set the graph data.
-        
-        x : list
-            List of x values.
-        y_list : list or list of lists
-            The set of y values for each line. So this can be a list of
-            numbers or a list of lists of numbers.
-        """
-        if len(utils.shape(y_list)) == 1:
+    def set_data(self, x_list, y_list):
+        """Replot with provided data."""
+        if not x_list or not y_list:
+            return
+        if len(utils.shape(y_list)) == 1: # single list provided
             y_list = [y_list]
+        if len(utils.shape(x_list)) == 1: # single list provided
+            x_list = len(y_list) * [x_list]
         self.removeAllGraphData()
-        for data, y in zip(self.data_list, y_list):
+        for data, x, y in zip(self.data_list, x_list, y_list):
             data.addPoint(x, y)  
             self.addGraphData(data) 
+        
+    def ellipse(self, width, height, tilt=0.0, points=50, lw=4):
+        xvals, yvals = ellipse_points(width, height, tilt, points)
+        curve_data = CurveData()
+        curve_data.setPoints(xvals, yvals)
+        curve_data.setLineWidth(lw)
+        self.addCurveData(curve_data)
+        
+    def plot(self, xvals, yvals, color=None, lw=None, ms=None):
+        """Add a line to the plot."""
+        data = BasicGraphData()
+        if color:
+            data.setGraphColor(color)
+        if lw:
+            data.setLineThick(lw)
+        if ms:
+            data.setGraphPointSize(ms)
+        self.addGraphData(data) 
             
     def set_xlim(self, xmin, xmax, xstep):
         self.setLimitsAndTicksX(xmin, xmax, xstep)
@@ -93,13 +129,14 @@ class LinePlotPanel(PlotPanel):
     def set_ylim(self, ymin, ymax, ystep):
         self.setLimitsAndTicksX(ymin, ymax, ystep)
         
-        
     
 class CornerPlotPanel(JPanel):
-    def __init__(self, grid=False, figsize=(600, 440)):
+    
+    def __init__(self, grid=False, figsize=None):
         JPanel.__init__(self)
         self.setLayout(GridBagLayout())
-        self.setPreferredSize(Dimension(*figsize))
+        if figsize:
+            self.setPreferredSize(Dimension(*figsize))
         
         constraints = GridBagConstraints()
         constraints.fill = GridBagConstraints.BOTH
@@ -118,7 +155,7 @@ class CornerPlotPanel(JPanel):
                 i = dim_to_int[ydim] - 1
                 j = dim_to_int[xdim]
                 if j <= i:
-                    plot = PlotPanel(grid=grid)
+                    plot = LinePlotPanel(grid=grid)
                     constraints.gridx = j
                     constraints.gridy = i
                     if j == 0:
@@ -128,3 +165,13 @@ class CornerPlotPanel(JPanel):
                     self.add(plot, constraints)
                     key = ''.join([xdim, ',', ydim])
                     self.plots[key] = plot
+                    
+    def rms_ellipses(self, Sigma, lw=4, points=100):
+        for key, panel in self.plots.items():
+            dim1, dim2 = key.split(',')
+            phi, cx, cy = analysis.rms_ellipse_dims(Sigma, dim1, dim2)
+            panel.ellipse(cx, cy, phi, lw=lw, points=points)
+                    
+                    
+                    
+    

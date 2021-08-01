@@ -1,6 +1,14 @@
+"""
+To to:
+    * Plot reconstruction lines.
+    * Model Twiss parameters.
+"""
 import os
+import math
 import random
 from pprint import pprint
+
+from Jama import Matrix
 
 from java.awt import BorderLayout
 from java.awt import Color
@@ -51,7 +59,6 @@ import utils
 import xal_helpers
 
 
-DIAG_WIRE_ANGLE = utils.radians(-45.0)
 REC_NODE_ID = 'Begin_Of_RTBT1'
 
 
@@ -61,6 +68,12 @@ class AnalysisPanel(JPanel):
         JPanel.__init__(self)
         self.setLayout(BorderLayout())
         self.kin_energy = kin_energy
+        self.rec_node_id = REC_NODE_ID
+        self.accelerator = XMLDataManager.loadDefaultAccelerator()
+        self.sequence = self.accelerator.getComboSequence('RTBT')
+        self.scenario = Scenario.newScenarioFor(self.sequence)
+        self.tmat_generator = analysis.TransferMatrixGenerator(self.sequence, self.kin_energy)
+        self.node_ids = [node.getId() for node in self.sequence.getNodes()]
         self.clear_data()
         self.build_panel()
         
@@ -72,11 +85,6 @@ class AnalysisPanel(JPanel):
         
     def build_panel(self):
         print 'Kinetic energy is hard coded. Do not delete this message until this is fixed.'
-        accelerator = XMLDataManager.loadDefaultAccelerator()
-        self.sequence = accelerator.getComboSequence('RTBT')
-        self.scenario = Scenario.newScenarioFor(self.sequence)
-        self.tmat_generator = analysis.TransferMatrixGenerator(self.sequence, self.kin_energy)
-        self.node_ids = [node.getId() for node in self.sequence.getNodes()]
         
         # Top panel
         #-------------------------------------------------------------------------------
@@ -109,30 +117,64 @@ class AnalysisPanel(JPanel):
 
         self.top_panel = JPanel()
         self.top_panel.setLayout(BorderLayout())
-        self.top_panel.setPreferredSize(Dimension(1200, 250))
+        self.top_panel.setPreferredSize(Dimension(1100, 200))
         self.top_panel.add(self.top_top_panel, BorderLayout.NORTH)
         self.top_panel.add(self.profile_plots_panel)
         
         # Bottom panel
         #-------------------------------------------------------------------------------
-        self.rec_point_dropdown = JComboBox(self.node_ids)
         self.reconstruct_covariance_button = JButton('Reconstruct covariance matrix')  
         self.reconstruct_covariance_button.addActionListener(ReconstructCovarianceButtonListener(self))
+        self.rec_point_label = JLabel('Reconstruction point')
+        self.rec_point_dropdown = JComboBox(self.node_ids)
+        self.rec_point_dropdown.addActionListener(RecPointDropdownListener(self))
+        self.max_iter_label = JLabel('max iter')
+        self.max_iter_text_field = JTextField('100', 5)
+        self.llsq_solver_label = JLabel('LLSQ solver')
+        self.llsq_solver_dropdown = JComboBox(['lsmr', 'exact'])
+        self.tol_label = JLabel('tol')
+        self.tol_text_field = JTextField('1e-12')
         self.results_table = JTable(ResultsTableModel(self))
         self.results_table.setShowGrid(True)
         
         self.bottom_left_panel = JPanel()
-        self.bottom_left_panel.setLayout(BoxLayout(self.bottom_left_panel, BoxLayout.Y_AXIS))
-        self.bottom_left_panel.add(self.reconstruct_covariance_button)
-        self.bottom_left_panel.add(self.results_table.getTableHeader())
-        self.bottom_left_panel.add(self.results_table)
-        self.bottom_right_panel = plt.CornerPlotPanel(figsize=(700, 440))
+        self.bottom_left_panel.setLayout(BorderLayout())
+        bottom_left_top_panel = JPanel()
+        bottom_left_top_panel.setLayout(BoxLayout(bottom_left_top_panel, BoxLayout.Y_AXIS))
+        temp_panel = JPanel()
+        temp_panel.setLayout(FlowLayout(FlowLayout.LEFT))
+        temp_panel.add(self.reconstruct_covariance_button)
+        bottom_left_top_panel.add(temp_panel)
+        bottom_left_top_panel1 = JPanel()
+        bottom_left_top_panel1.setLayout(FlowLayout(FlowLayout.LEFT))
+        bottom_left_top_panel1.add(self.rec_point_label)
+        bottom_left_top_panel1.add(self.rec_point_dropdown)
+        bottom_left_top_panel2 = JPanel()
+        bottom_left_top_panel2.setLayout(FlowLayout(FlowLayout.LEFT))
+        bottom_left_top_panel2.add(self.llsq_solver_label)
+        bottom_left_top_panel2.add(self.llsq_solver_dropdown)
+        bottom_left_top_panel2.add(self.max_iter_label)
+        bottom_left_top_panel2.add(self.max_iter_text_field)
+        bottom_left_top_panel2.add(self.tol_label)
+        bottom_left_top_panel2.add(self.tol_text_field)
+        bottom_left_top_panel.add(bottom_left_top_panel1)
+        bottom_left_top_panel.add(bottom_left_top_panel2)
+        self.bottom_left_panel.add(bottom_left_top_panel, BorderLayout.NORTH)
+        bottom_left_bottom_panel = JPanel()
+        bottom_left_bottom_panel.setLayout(BorderLayout())
+        bottom_left_bottom_panel.add(self.results_table.getTableHeader(), BorderLayout.NORTH)
+        bottom_left_bottom_panel.add(self.results_table)
+        self.bottom_left_panel.add(bottom_left_bottom_panel)
+        
+        self.corner_plot_panel = plt.CornerPlotPanel()
+        self.corner_plot_panel.setPreferredSize(Dimension(650, 455))
+        
         self.bottom_panel = JPanel()
         self.bottom_panel.setBorder(BorderFactory.createLineBorder(Color.black))
         self.bottom_panel.setLayout(BorderLayout())
-        self.bottom_panel.setPreferredSize(Dimension(1200, 600))
+        self.bottom_panel.setPreferredSize(Dimension(1100, 500))
         self.bottom_panel.add(self.bottom_left_panel, BorderLayout.WEST)
-        self.bottom_panel.add(self.bottom_right_panel, BorderLayout.EAST)
+        self.bottom_panel.add(self.corner_plot_panel, BorderLayout.EAST)
         
         # Build the main panel
         self.add(self.top_panel, BorderLayout.NORTH)
@@ -140,10 +182,20 @@ class AnalysisPanel(JPanel):
         
     def update_plots(self):
         measurements = self.measurements
-        if not measurements:
-            for plot_panel in self.profile_plot_panels:
-                plot_panel.removeAllGraphData()
+        tmats_dict = self.tmats_dict
+        moments_dict = self.moments_dict
+        beam_stats = self.beam_stats
+        
+        # Clear the plots if there is no data.
+        if not measurements: 
+            for panel in self.profile_plot_panels:
+                panel.removeAllGraphData()
+            for panel in self.corner_plot_panel.plots.values():
+                panel.removeAllGraphData()
+                panel.removeAllCurveData()
             return
+        
+        # Plot profiles for selected measurement.
         meas_index = int(self.meas_index_dropdown.getSelectedItem())
         measurement = measurements[meas_index]
         xpos, ypos, ypos = [], [], []
@@ -159,8 +211,49 @@ class AnalysisPanel(JPanel):
         self.profile_plot_panels[0].set_data(xpos, xraw_list)
         self.profile_plot_panels[1].set_data(ypos, yraw_list)
         self.profile_plot_panels[2].set_data(upos, uraw_list)
+        
+        # Stop if we haven't reconstructed the covariance matrix yet.
+        if not self.beam_stats:
+            return
+    
+        # Plot the 2D projections of the rms ellipsoid (x^T Sigma x = 1).
+        self.corner_plot_panel.rms_ellipses(self.beam_stats.Sigma)
             
-            
+        # Plot the reconstruction lines.
+        xxp_panel = self.corner_plot_panel.plots['x,xp']
+        yyp_panel = self.corner_plot_panel.plots['y,yp']
+        xmax = xxp_panel.getCurrentMaxX()
+        xpmax = xxp_panel.getCurrentMaxY()
+        ymax = yyp_panel.getCurrentMaxX()
+        ypmax = yyp_panel.getCurrentMaxY()
+        print 'max x', xmax
+        print 'max xp', xpmax
+        print 'max y', ymax
+        print 'max yp', ypmax
+        
+        def possible_points(M, sig_xx, sig_yy):
+            Minv = M.inverse()
+            x_max = 2.0 * math.sqrt(sig_xx)
+            y_max = 2.0 * math.sqrt(sig_yy)
+            x_vals, xp_vals, y_vals, yp_vals = [], [], [], []
+            for slope in (-20, 20):
+                vec_1 = Matrix([[x_max], [slope], [0.], [0.]])
+                vec_0 = Minv.times(vec_1)
+                x_vals.append(vec_0.get(0, 0))
+                y_vals.append(vec_0.get(2, 0))
+                xp_vals.append(vec_0.get(1, 0))
+                yp_vals.append(vec_0.get(3, 0))
+            return x_vals, xp_vals, y_vals, yp_vals
+        
+        node_ids = sorted(list(tmats_dict))
+        for node_id, color in zip(node_ids, plt.COLOR_CYCLE):
+            print node_id, color
+            for M, (sig_xx, sig_yy, sig_xy) in zip(tmats_dict[node_id], moments_dict[node_id]):
+                M = Matrix(M)
+                x_vals, xp_vals, y_vals, yp_vals = possible_points(M, sig_xx, sig_yy)
+                xxp_panel.plot(x_vals, xp_vals, color=color, ms=0)
+                yyp_panel.plot(y_vals, yp_vals, color=color, ms=0)
+                
             
 # Tables
 #-------------------------------------------------------------------------------      
@@ -197,7 +290,8 @@ class ResultsTableModel(AbstractTableModel):
         elif col == 2:
             if row < 5:
                 return '-'
-            return 1.0
+            # Get model Twiss.
+            return '-'
 
     def getColumnCount(self):
         return 3
@@ -208,7 +302,6 @@ class ResultsTableModel(AbstractTableModel):
     def getColumnName(self, col):
         return self.column_names[col]
 
-            
             
 # Listeners
 #-------------------------------------------------------------------------------  
@@ -236,39 +329,24 @@ class LoadFilesButtonListener(ActionListener):
             filename_short = filename.split('/')[-1]
             if 'WireAnalysisFmt' not in filename or analysis.is_harp_file(filename):
                 continue
-            measurement = analysis.Measurement(filename)
-            measurements.append(measurement)
-            print "Loaded file '{}'  pvloggerid = {}".format(filename_short, measurement.pvloggerid)
-            
+            measurements.append(analysis.Measurement(filename))
+                    
         # Sort files by timestamp (oldest to newest).
         measurements = sorted(measurements, key=lambda measurement: measurement.timestamp)
         
-        # Form dictionary of transfer matrices and measured moments.
-        # This is convenient for later reference.
-        moments_dict, tmats_dict = dict(), dict()
+        # Remove measurements without PVLoggerID.
+        measurements = [measurement for measurement in measurements
+                        if measurement.pvloggerid > 0 
+                        and measurement.pvloggerid is not None]
+        
+        # Print loaded file names.
         for measurement in measurements:
-            filename_short = measurement.filename.split('/')[-1]
-            if measurement.pvloggerid < 0 or measurement.pvloggerid is None:
-                print "Skipping '{}' because it doesn't have a PVLoggerID.".format(filename_short)
-                continue
-            print "Analyzing file '{}'".format(filename_short)
-            self.tmat_generator.sync(measurement.pvloggerid)
-            for meas_node_id in measurement.node_ids:
-                # Store measured moments.
-                profile = measurement.profiles[meas_node_id]
-                sig_xx = profile.hor.stats['Sigma'].rms**2
-                sig_yy = profile.ver.stats['Sigma'].rms**2
-                sig_uu = profile.dia.stats['Sigma'].rms**2
-                sig_xy = analysis.get_sig_xy(sig_xx, sig_yy, sig_uu, DIAG_WIRE_ANGLE)
-                moments = [sig_xx, sig_yy, sig_xy]
-                if meas_node_id not in moments_dict:
-                    moments_dict[meas_node_id] = []
-                moments_dict[meas_node_id].append(moments)
-                # Store transfer matrix from reconstruction node to wire-scanner.
-                tmat = self.tmat_generator.transfer_matrix(REC_NODE_ID, meas_node_id)
-                if meas_node_id not in tmats_dict:
-                    tmats_dict[meas_node_id] = []
-                tmats_dict[meas_node_id].append(tmat)
+            filename = measurement.filename.split('/')[-1]
+            print "Loaded file '{}'  pvloggerid = {}".format(filename, measurement.pvloggerid)
+        
+        # Get dictionary of transfer matrices and measured moments.
+        tmats_dict = analysis.get_tmats_dict(measurements, self.tmat_generator, self.panel.rec_node_id)
+        moments_dict = analysis.get_moments_dict(measurements)
         print 'All files have been analyzed.'
             
         # Save data and update GUI.
@@ -276,7 +354,7 @@ class LoadFilesButtonListener(ActionListener):
         self.panel.moments_dict = moments_dict
         self.panel.tmats_dict = tmats_dict
         self.panel.meas_index_dropdown.removeAllItems()
-        for meas_index in range(len(measurements)):
+        for meas_index in range(1 if not measurements else len(measurements)):
             self.panel.meas_index_dropdown.addItem(meas_index)
         self.panel.update_plots()
         
@@ -301,6 +379,20 @@ class MeasIndexDropdownListener(ActionListener):
     def actionPerformed(self, event):
         if self.dropdown.getSelectedItem() is not None:
             self.panel.update_plots()
+            
+            
+class RecPointDropdownListener(ActionListener):
+    
+    def __init__(self, panel):
+        self.panel = panel
+        self.dropdown = panel.rec_point_dropdown
+        
+    def actionPerformed(self, event):
+        rec_node_id = self.dropdown.getSelectedItem()
+        measurements = self.panel.measurements
+        tmat_generator = self.panel.tmat_generator
+        self.panel.tmats_dict = analysis.get_tmats_dict(measurements, tmat_generator, rec_node_id)
+        self.panel.rec_node_id = rec_node_id
               
             
 class ReconstructCovarianceButtonListener(ActionListener):
@@ -321,10 +413,15 @@ class ReconstructCovarianceButtonListener(ActionListener):
         for meas_node_id in measurements[0].node_ids:
             moments_list.extend(moments_dict[meas_node_id])
             tmats_list.extend(tmats_dict[meas_node_id])
-        # Reconstruct and print results.
-        Sigma = analysis.reconstruct(tmats_list, moments_list, verbose=2, solver='lsmr')
+        # Reconstruct the covariance matrix.
+        solver = self.panel.llsq_solver_dropdown.getSelectedItem()
+        max_iter = int(self.panel.max_iter_text_field.getText())
+        lsmr_tol = float(self.panel.tol_text_field.getText())
+        Sigma = analysis.reconstruct(tmats_list, moments_list, verbose=2, 
+                                     solver=solver, max_iter=max_iter, lsmr_tol=lsmr_tol)
         beam_stats = analysis.BeamStats(Sigma)
         beam_stats.print_all()
         self.panel.beam_stats = beam_stats
-        # Update results table.
+        # Update panel.
         self.panel.results_table.getModel().fireTableDataChanged()
+        self.panel.update_plots()
