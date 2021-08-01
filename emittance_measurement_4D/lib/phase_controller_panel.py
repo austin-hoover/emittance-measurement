@@ -420,11 +420,8 @@ class CalculateModelOpticsButtonListener(ActionListener):
         phases = self.phase_controller.get_phases_for_scan(phase_coverage, n_steps)
         print 'index | mu_x  | mu_y [rad]'
         print '---------------------'
-        file = open('_output/phases.dat', 'w')
         for scan_index, (mu_x, mu_y) in enumerate(phases):
             print '{:<5} | {:.3f} | {:.3f}'.format(scan_index, mu_x, mu_y)
-            file.write('{} {}\n'.format(mu_x, mu_y))
-        file.close()
                 
         for scan_index, (mu_x, mu_y) in enumerate(phases):
             
@@ -457,18 +454,15 @@ class CalculateModelOpticsButtonListener(ActionListener):
 #             for ws_id in RTBT_WS_IDS:
 #                 (mu_x, mu_y, alpha_x, alpha_y, 
 #                  beta_x, beta_y, eps_x, eps_y) = self.phase_controller.twiss(ws_id)
-#                 moments = [eps_x * beta_x, eps_y * beta_y, 0.0]
+    #                 moments = [eps_x * beta_x, eps_y * beta_y, 0.0]
 #                 file.write('{} {} {}\n'.format(*moments))
 #             file.close()
 #     
-#             # Save model quadrupole strengths.
-#             file = open('_output/model_fields_{}.dat'.format(scan_index), 'w')
-#             model_fields = []
-#             for quad_id in self.ind_quad_ids:
-#                 field = self.phase_controller.get_field(quad_id, 'model')
-#                 model_fields.append(field)
-#                 file.write('{}, {}\n'.format(quad_id, field))
-#             file.close()
+            # Save model quadrupole strengths.
+            model_fields = []
+            for quad_id in self.ind_quad_ids:
+                field = self.phase_controller.get_field(quad_id, 'model')
+                model_fields.append(field)
             
             # Store the model fields.
             self.panel.model_fields_list.append(model_fields)
