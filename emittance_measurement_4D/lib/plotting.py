@@ -47,21 +47,42 @@ COLOR_CYCLE = [
 
 GRID_COLOR = Color(245, 245, 245)
 
+DIM_TO_INT = {'x':0, 'xp':1, 'y':2, 'yp':3}
+
 
 def rotate(x, y, phi):
-    """Rotate point (x, y) counterclockwise by phi radians."""
+    """Rotate point (x, y) clockwise by phi radians."""
     sn, cs = math.sin(phi), math.cos(phi)
-    x_rot =  x * cs - y * sn
-    y_rot =  x * sn + y * cs
+    x_rot =  cs * x + sn * y
+    y_rot = -sn * x + cs * y
     return x_rot, y_rot
 
 
-def ellipse_points(width, height, tilt=0., n_pts=50):
-    angles = utils.linspace(0, 2 * math.pi, n_pts)
-    xvals = [width * math.cos(angle) for angle in angles]
-    yvals = [height * math.sin(angle) for angle in angles]
-    xvals, yvals = zip(*[utils.rotate(x, y, tilt) for x, y in zip(xvals, yvals)])
-    return xvals, yvals
+def ellipse_points(cx, cy, tilt=0., points=50):
+    """Return array of x and y points on ellipse boundary.
+    
+    Parameters
+    ----------
+    cx, cy : float
+        Length of orizontal and vertical semi-axes, respectively.
+    tilt : float
+        Tilt angle below horizontal axis.
+    points : int
+        Number of points to use.
+        
+    Returns
+    -------
+    xx, yy : list, shape (points,)
+        List of x and y points along on the ellipse boundary.
+    """
+    xx, yy = [], []
+    for psi in utils.linspace(0, 2 * math.pi, points):
+        x = cx * math.cos(psi)
+        y = cy * math.sin(psi)
+        x, y = rotate(x, y, tilt)
+        xx.append(x)
+        yy.append(y)
+    return xx, yy
 
 
 class PlotPanel(FunctionGraphsJPanel):
@@ -80,7 +101,8 @@ class PlotPanel(FunctionGraphsJPanel):
 
 class LinePlotPanel(PlotPanel):
     """Class for 2D line plots."""
-    def __init__(self, xlabel='', ylabel='', title='', n_lines=2, lw=3, ms=0, grid=True):
+    def __init__(self, xlabel='', ylabel='', title='', n_lines=2, 
+                 lw=3, ms=0, grid=True):
         PlotPanel.__init__(self, xlabel, ylabel, title, grid)
         etched_border = BorderFactory.createEtchedBorder()
         self.setBorder(etched_border)
@@ -105,8 +127,8 @@ class LinePlotPanel(PlotPanel):
             data.addPoint(x, y)  
             self.addGraphData(data) 
         
-    def ellipse(self, width, height, tilt=0.0, points=50, lw=4):
-        xvals, yvals = ellipse_points(width, height, tilt, points)
+    def ellipse(self, cx, cy, tilt=0.0, points=50, lw=4):
+        xvals, yvals = ellipse_points(cx, cy, tilt, points)
         curve_data = CurveData()
         curve_data.setPoints(xvals, yvals)
         curve_data.setLineWidth(lw)
@@ -115,26 +137,26 @@ class LinePlotPanel(PlotPanel):
     def plot(self, xvals, yvals, color=None, lw=None, ms=None):
         """Add a line to the plot."""
         data = BasicGraphData()
+        for x, y in zip(xvals, yvals):
+            data.addPoint(x, y)
         if color:
             data.setGraphColor(color)
         if lw:
             data.setLineThick(lw)
         if ms:
             data.setGraphPointSize(ms)
-        for x, y in zip(xvals, yvals):
-            data.addPoint(x, y)
         self.addGraphData(data) 
             
     def set_xlim(self, xmin, xmax, xstep):
         self.setLimitsAndTicksX(xmin, xmax, xstep)
         
     def set_ylim(self, ymin, ymax, ystep):
-        self.setLimitsAndTicksX(ymin, ymax, ystep)
+        self.setLimitsAndTicksY(ymin, ymax, ystep)
         
     
 class CornerPlotPanel(JPanel):
     
-    def __init__(self, grid=False, figsize=None):
+    def __init__(self, grid=False, figsize=None, ticklabels=False):
         JPanel.__init__(self)
         self.setLayout(GridBagLayout())
         if figsize:
@@ -147,15 +169,14 @@ class CornerPlotPanel(JPanel):
         constraints.weightx = 0.5
         constraints.weighty = 0.5
         
-        dim_to_int = {'x':0, 'xp':1, 'y':2, 'yp':3}
         dims = ['x', 'xp', 'y', 'yp']
         xdims = dims[:-1]
         ydims = dims[1:]
         self.plots = dict()
         for ydim in ydims:
             for xdim in xdims:
-                i = dim_to_int[ydim] - 1
-                j = dim_to_int[xdim]
+                i = DIM_TO_INT[ydim] - 1
+                j = DIM_TO_INT[xdim]
                 if j <= i:
                     plot = LinePlotPanel(grid=grid)
                     constraints.gridx = j
@@ -165,20 +186,22 @@ class CornerPlotPanel(JPanel):
                     if i == 2:
                         plot.setAxisNameX(xdim)
                     self.add(plot, constraints)
-                    key = ''.join([xdim, ',', ydim])
+                    key = ''.join([xdim, '-', ydim])
                     self.plots[key] = plot
                     
-    def rms_ellipses(self, Sigma, lw=4, points=100):
+    def rms_ellipses(self, Sigma, lw=4, points=100):    
+        max_coords = [math.sqrt(Sigma.get(i, i)) for i in range(4)]
         for key, panel in self.plots.items():
-            dim1, dim2 = key.split(',')
-            phi, cx, cy = analysis.rms_ellipse_dims(Sigma, dim1, dim2)
-            panel.ellipse(cx, cy, phi, lw=lw, points=points)
+            dim1, dim2 = key.split('-')
+            phi, c1, c2 = analysis.rms_ellipse_dims(Sigma, dim1, dim2)
+            panel.ellipse(c1, c2, phi, lw=lw, points=points)
+            scale = 2.0
+            hmax = scale * max_coords[DIM_TO_INT[dim1]]
+            vmax = scale * max_coords[DIM_TO_INT[dim2]]
+            panel.set_xlim(-hmax, hmax, hmax)
+            panel.set_ylim(-vmax, vmax, vmax)
             
     def clear(self):
-        for plot_panel in self.plots.values():
-            plot_panel.removeAllGraphData()
-            plot_panel.removeAllCurveData()
-                    
-                    
-                    
-    
+        for panel in self.plots.values():
+            panel.removeAllGraphData()
+            panel.removeAllCurveData()    

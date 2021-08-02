@@ -72,7 +72,7 @@ class GUI:
         self.pane.addTab('Analysis', self.analysis_panel)
         
         # Add tabbed pane to frame.
-        self.frame = JFrame("RTBT Phase Controller")
+        self.frame = JFrame("4D Emittance Measurement")
         self.frame.setSize(Dimension(1100, 850))
         self.frame.add(self.pane)
         

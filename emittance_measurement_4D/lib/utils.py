@@ -110,14 +110,6 @@ def put_angle_in_range(angle):
     return angle
 
 
-def rotate(x, y, phi):
-    """Rotate point (x, y) counterclockwise by phi radians."""
-    sn, cs = math.sin(phi), math.cos(phi)
-    x_rot =  x * cs - y * sn
-    y_rot =  x * sn + y * cs
-    return x_rot, y_rot
-
-
 # File processing
 #-------------------------------------------------------------------------------
 def delete_files_not_folders(directory):

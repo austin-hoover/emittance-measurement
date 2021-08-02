@@ -65,7 +65,7 @@ import xal_helpers
 
 class AnalysisPanel(JPanel):
     
-    def __init__(self, kin_energy=1e9):
+    def __init__(self, kin_energy=1.0e9):
         JPanel.__init__(self)
         self.setLayout(BorderLayout())
         self.kin_energy = kin_energy
@@ -85,7 +85,7 @@ class AnalysisPanel(JPanel):
         self.beam_stats = None
         
     def build_panel(self):
-        print 'Kinetic energy {:.2e} [eV] is hard coded. Do not delete this message until this is fixed.'.format(self.kin_energy)
+        print 'Energy {:.2e} [eV] is hard coded. Please fix.'.format(self.kin_energy)
         
         # Top panel
         #-------------------------------------------------------------------------------
@@ -169,6 +169,10 @@ class AnalysisPanel(JPanel):
         
         self.corner_plot_panel = plt.CornerPlotPanel()
         self.corner_plot_panel.setPreferredSize(Dimension(650, 455))
+        # Turn off ticklabels (is there a tool in XAL to nicely format ticklabels?)
+        for panel in self.corner_plot_panel.plots.values():
+            panel.xMarkersOn(False)
+            panel.yMarkersOn(False)
         
         self.bottom_panel = JPanel()
         self.bottom_panel.setBorder(BorderFactory.createLineBorder(Color.black))
@@ -180,6 +184,9 @@ class AnalysisPanel(JPanel):
         # Build the main panel
         self.add(self.top_panel, BorderLayout.NORTH)
         self.add(self.bottom_panel, BorderLayout.SOUTH)
+        
+    def update_tables(self):
+        self.results_table.getModel().fireTableDataChanged()
         
     def update_plots(self):
         measurements = self.measurements
@@ -218,49 +225,34 @@ class AnalysisPanel(JPanel):
         # Plot the 2D projections of the rms ellipsoid (x^T Sigma x = 1).
         self.corner_plot_panel.clear()
         self.corner_plot_panel.rms_ellipses(self.beam_stats.Sigma)
-        
-#         for plot in self.corner_plot_panel.plots.values():
-#             plot.xMarkersOn(False)
-#             plot.yMarkersOn(False)
             
-        # Plot the reconstruction lines.
-        xxp_panel = self.corner_plot_panel.plots['x,xp']
-        yyp_panel = self.corner_plot_panel.plots['y,yp']
-        xmax = xxp_panel.getCurrentMaxX()
-        xpmax = xxp_panel.getCurrentMaxY()
-        ymax = yyp_panel.getCurrentMaxX()
-        ypmax = yyp_panel.getCurrentMaxY()
-        
+        # Plot the reconstruction lines. 
         def possible_points(M, sig_xx, sig_yy):
             Minv = M.inverse()
-            x_max = 2.0 * math.sqrt(sig_xx)
-            y_max = 2.0 * math.sqrt(sig_yy)
+            x_max = math.sqrt(sig_xx)
+            y_max = math.sqrt(sig_yy)
             x_vals, xp_vals, y_vals, yp_vals = [], [], [], []            
-            for slope in [-xmax, xmax]:
-                vec_1 = Matrix([[x_max], [slope], [0.], [0.]])
+            for slope in [-100, 100]:
+                vec_1 = Matrix([[x_max], [slope], [0], [0]])
                 vec_0 = Minv.times(vec_1)
                 x_vals.append(vec_0.get(0, 0))
                 xp_vals.append(vec_0.get(1, 0))
-            for slope in [-ymax, ymax]:
-                vec_1 = Matrix([[0.], [0.], [y_max], [slope]])
+                vec_1 = Matrix([[0], [0], [y_max], [slope]])
                 vec_0 = Minv.times(vec_1)
                 y_vals.append(vec_0.get(2, 0))
                 yp_vals.append(vec_0.get(3, 0))
             return x_vals, xp_vals, y_vals, yp_vals
         
+        xxp_panel = self.corner_plot_panel.plots['x-xp']
+        yyp_panel = self.corner_plot_panel.plots['y-yp']
         node_ids = sorted(list(tmats_dict))
         for node_id, color in zip(node_ids, plt.COLOR_CYCLE):
-            print node_id, color
             for M, (sig_xx, sig_yy, sig_xy) in zip(tmats_dict[node_id], moments_dict[node_id]):
                 M = Matrix(M)
                 x_vals, xp_vals, y_vals, yp_vals = possible_points(M, sig_xx, sig_yy)
-                xxp_panel.plot(x_vals, xp_vals, color=color, ms=0)
-                yyp_panel.plot(y_vals, yp_vals, color=color, ms=0)
-        xxp_panel.set_xlim(-xmax, xmax, xmax)
-        xxp_panel.set_ylim(-xpmax, xpmax, xmax)
-        yyp_panel.set_xlim(-ymax, ymax, ymax)
-        yyp_panel.set_ylim(-ypmax, ypmax, ypmax)
-
+                xxp_panel.plot(x_vals, xp_vals, color=color, ms=0, lw=2)
+                yyp_panel.plot(y_vals, yp_vals, color=color, ms=0, lw=2)
+            
             
 # Tables
 #-------------------------------------------------------------------------------      
@@ -345,15 +337,9 @@ class LoadFilesButtonListener(ActionListener):
                         if measurement.pvloggerid > 0 
                         and measurement.pvloggerid is not None]
         
-        # Print loaded file names.
-        for measurement in measurements:
-            filename = measurement.filename.split('/')[-1]
-            print "Loaded file '{}'  pvloggerid = {}".format(filename, measurement.pvloggerid)
-        
-        # Get dictionary of transfer matrices and measured moments.
-        tmats_dict = analysis.get_tmats_dict(measurements, self.tmat_generator, self.panel.rec_node_id)
-        moments_dict = analysis.get_moments_dict(measurements)
-        print 'All files have been analyzed.'
+        # Make dictionaries of measured moments and transfer matrices at each wire-scanner.
+        moments_dict, tmats_dict = analysis.get_scan_info(measurements, self.tmat_generator, 
+                                                 self.panel.rec_node_id)
             
         # Save data and update GUI.
         self.panel.measurements = measurements
@@ -373,6 +359,7 @@ class ClearFilesButtonListener(ActionListener):
     def actionPerformed(self, event):
         self.panel.clear_data()   
         self.panel.update_plots()
+        self.panel.update_tables()
         print 'Cleared data.'
         
         
@@ -397,8 +384,12 @@ class RecPointDropdownListener(ActionListener):
         rec_node_id = self.dropdown.getSelectedItem()
         measurements = self.panel.measurements
         tmat_generator = self.panel.tmat_generator
-        self.panel.tmats_dict = analysis.get_tmats_dict(measurements, tmat_generator, rec_node_id)
+        moments_dict, tmats_dict = analysis.get_scan_info(measurements, tmat_generator, rec_node_id)
         self.panel.rec_node_id = rec_node_id
+        self.panel.moments_dict = moments_dict
+        self.panel.tmats_dict = tmats_dict
+        self.panel.corner_plot_panel.clear()
+        self.panel.results_table.getModel().fireTableDataChanged()
               
             
 class ReconstructCovarianceButtonListener(ActionListener):
@@ -410,15 +401,17 @@ class ReconstructCovarianceButtonListener(ActionListener):
         measurements = self.panel.measurements
         moments_dict = self.panel.moments_dict
         tmats_dict = self.panel.tmats_dict
-        
+
         if not measurements:
-            raise ValueError('No wire-scanner files have been loaded.')
+            raise ValueError('No wire-scanner files have been loaded.')        
 
         # Form list of transfer matrices and measured moments.
         moments_list, tmats_list = [], []
-        for meas_node_id in measurements[0].node_ids:
-            moments_list.extend(moments_dict[meas_node_id])
-            tmats_list.extend(tmats_dict[meas_node_id])
+        node_ids = list(moments_dict.keys())
+        for node_id in node_ids:
+            moments_list.extend(moments_dict[node_id])
+            tmats_list.extend(tmats_dict[node_id])
+            
         # Reconstruct the covariance matrix.
         solver = self.panel.llsq_solver_dropdown.getSelectedItem()
         max_iter = int(self.panel.max_iter_text_field.getText())
@@ -429,5 +422,5 @@ class ReconstructCovarianceButtonListener(ActionListener):
         beam_stats.print_all()
         self.panel.beam_stats = beam_stats
         # Update panel.
-        self.panel.results_table.getModel().fireTableDataChanged()
+        self.panel.update_tables()
         self.panel.update_plots()

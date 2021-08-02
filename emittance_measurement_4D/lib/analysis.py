@@ -19,6 +19,7 @@ from xal.smf.data import XMLDataManager
 
 # Local
 from least_squares import lsq_linear
+from optics import TransferMatrixGenerator
 import utils
 import xal_helpers
 
@@ -28,7 +29,7 @@ DIAG_WIRE_ANGLE = utils.radians(-45.0)
 
 # Covariance matrix analysis
 #-------------------------------------------------------------------------------
-def rms_ellipse_dims(Sigma, dim1='x', dim2='y'):
+def rms_ellipse_dims(Sigma, dim1, dim2):
     """Return tilt angle and semi-axes of rms ellipse.
 
     Parameters
@@ -43,8 +44,8 @@ def rms_ellipse_dims(Sigma, dim1='x', dim2='y'):
     Returns
     -------
     phi : float
-        The tilt angle of the ellipse as measured above the horizontal axis.
-        So, a positive tilt angle means a positive correlation.
+        The tilt angle of the ellipse as measured below the horizontal axis.
+        So, a positive tilt angle means a negative correlation.
     c1, c2 : float
         The horizontal and vertical semi-axes, respectively, of the ellipse
         when phi = 0.
@@ -52,12 +53,12 @@ def rms_ellipse_dims(Sigma, dim1='x', dim2='y'):
     str_to_int = {'x':0, 'xp':1, 'y':2, 'yp':3}
     i = str_to_int[dim1]
     j = str_to_int[dim2]
-    sii, sjj, sij = Sigma.get(i, i), Sigma.get(j, j), Sigma.get(i, j)
-    phi = 0.5 * math.atan2(2*sij, sii-sjj)
-    sin, cos = math.sin(phi), math.cos(phi)
-    sin2, cos2 = sin**2, cos**2
-    c1 = sqrt(abs(sii*cos2 + sjj*sin2 - 2*sij*sin*cos))
-    c2 = sqrt(abs(sii*sin2 + sjj*cos2 + 2*sij*sin*cos))
+    sig_ii, sig_jj, sig_ij = Sigma.get(i, i), Sigma.get(j, j), Sigma.get(i, j)
+    phi = -0.5 * math.atan2(2 * sig_ij, sig_ii - sig_jj)
+    sn, cs = math.sin(phi), math.cos(phi)
+    sn2, cs2 = sn**2, cs**2
+    c1 = sqrt(abs(sig_ii*cs2 + sig_jj*sn2 - 2*sig_ij*sn*cs))
+    c2 = sqrt(abs(sig_ii*sn2 + sig_jj*cs2 + 2*sig_ij*sn*cs))
     return phi, c1, c2
 
 
@@ -232,8 +233,10 @@ class Profile:
     ----------
     hor, ver, dia : Signal
         Signal object for horizontal, vertical and diagonal wire.
+    diag_wire_angle : float
+        Angle of diagonal wire above the x axis.
     """
-    def __init__(self, pos, raw, fit=None, stats=None):
+    def __init__(self, pos, raw, fit=None, stats=None, diag_wire_angle=DIAG_WIRE_ANGLE):
         """Constructor.
         
         Parameters
@@ -247,6 +250,7 @@ class Profile:
         stats : [xstats, ystats, ustats]
             List of stats dictionaries for each wire.
         """
+        self.diag_wire_angle = diag_wire_angle
         xpos, ypos, upos = pos
         xraw, yraw, uraw = raw
         if fit is None:
@@ -256,24 +260,43 @@ class Profile:
         if stats is None:
             xstats = ystats = ustats = None
         else:
-            xstats, ystats, ustats = stats   
+            xstats, ystats, ustats = stats
         self.hor = Signal(xpos, xraw, xfit, xstats)
         self.ver = Signal(ypos, yraw, yfit, ystats)
-        self.dia = Signal(upos, uraw, ufit, ustats)   
+        self.dia = Signal(upos, uraw, ufit, ustats)
         
 
 class Measurement(dict):
-    """A dictionary of profiles for one measurement.
+    """Dictionary of profiles for one measurement.
+
+    Each key in this dictionary is a wire-scanner ID; each value is a Profile.
     
-    Each measurement is a collection of wire scans at a single machine setting.
+    Attributes
+    ----------
+    filename : str
+        Full path to the PTA file.
+    filename_short : str
+        Only include the filename, not the full path.
+    timestamp : datetime
+        Represents the time at which the data was taken.
+    pvloggerid : int
+        The PVLoggerID of the measurement (this gives a snapshot of the machine state).
+    node_ids : list[str]
+        The ID of each wire-scanner. (These are the dictionary keys.)
+    moments : dict
+        The [<x^2>, <y^2>, <xy>] moments at each wire-scanner.
+    transfer_mats : dict
+        The linear 4x4 transfer matrix from a start node to each wire-scanner. 
+        The start node is determined in the function call `get_transfer_mats`.
     """
     def __init__(self, filename):
         dict.__init__(self)
         self.filename = filename
+        self.filename_short = filename.split('/')[-1]
         self.timestamp = None
-        self.profiles = dict()
         self.pvloggerid = None
         self.node_ids = None
+        self.moments, self.transfer_mats = dict(), dict()
         self.read_pta_file()
         
     def read_pta_file(self):
@@ -338,7 +361,6 @@ class Measurement(dict):
                 ystats[name] = Stat(name, s_yrms, s_yfit)
                 ustats[name] = Stat(name, s_urms, s_ufit)
 
-                
             profile = Profile(
                 [xpos, ypos, upos], 
                 [xraw, yraw, uraw], 
@@ -347,6 +369,31 @@ class Measurement(dict):
             )
             self[node_id] = profile
             
+    def get_moments(self):
+        """Store/return dictionary of measured moments at each profile."""
+        self.moments = dict()
+        for node_id in self.node_ids:
+            profile = self[node_id]
+            sig_xx = profile.hor.stats['Sigma'].rms**2
+            sig_yy = profile.ver.stats['Sigma'].rms**2
+            sig_uu = profile.dia.stats['Sigma'].rms**2
+            sig_xy = get_sig_xy(sig_xx, sig_yy, sig_uu, profile.diag_wire_angle)
+            self.moments[node_id] = [sig_xx, sig_yy, sig_xy]
+        return self.moments
+
+    def get_transfer_mats(self, start_node_id, tmat_generator):
+        """Store/return dictionary of transfer matrices from start_node to each profile."""
+        self.transfer_mats = dict()
+        tmat_generator.sync(self.pvloggerid)
+        for node_id in self.node_ids:
+            tmat = tmat_generator.generate(start_node_id, node_id)
+            self.transfer_mats[node_id] = tmat
+        return self.transfer_mats
+
+    def export_files(self):
+        """Write files in nice format (nicer than PTA files at least)."""
+        return
+
 
 class TransferMatrixGenerator:
     """Class to compute transfer matrix between two nodes."""
@@ -362,7 +409,7 @@ class TransferMatrixGenerator:
         self.scenario = pvl_data_source.setModelSource(self.sequence, self.scenario)
         self.scenario.resync()
     
-    def transfer_matrix(self, start_node_id=None, stop_node_id=None):
+    def generate(self, start_node_id=None, stop_node_id=None):
         """Return transfer matrix elements from start to node entrance.
         
         The node ids can be out of order.
@@ -400,31 +447,21 @@ class TransferMatrixGenerator:
         return M
     
     
-def get_tmats_dict(measurements, tmat_generator, rec_node_id):
-    tmats_dict = dict()
+def get_scan_info(measurements, tmat_generator, start_node_id):
+    """Make dictionaries of measured moments and transfer matrices at each wire-scanner."""
+    moments_dict, tmats_dict = dict(), dict()
     for measurement in measurements:
-        print('Collecting transfer matrices - pvloggerid = {}.'.format(measurement.pvloggerid))
-        tmat_generator.sync(measurement.pvloggerid)
-        for meas_node_id in measurement.node_ids:
-            tmat = tmat_generator.transfer_matrix(rec_node_id, meas_node_id)
-            if meas_node_id not in tmats_dict:
-                tmats_dict[meas_node_id] = []
-            tmats_dict[meas_node_id].append(tmat)
-    return tmats_dict
-
-
-def get_moments_dict(measurements):
-    moments_dict = dict()
-    for measurement in measurements:
-        print('Collecting measured moments - pvloggerid = {}.'.format(measurement.pvloggerid))
-        for meas_node_id in measurement.node_ids:
-            profile = measurement[meas_node_id]
-            sig_xx = profile.hor.stats['Sigma'].rms**2
-            sig_yy = profile.ver.stats['Sigma'].rms**2
-            sig_uu = profile.dia.stats['Sigma'].rms**2
-            sig_xy = get_sig_xy(sig_xx, sig_yy, sig_uu, DIAG_WIRE_ANGLE)
-            moments = [sig_xx, sig_yy, sig_xy]
-            if meas_node_id not in moments_dict:
-                moments_dict[meas_node_id] = []
-            moments_dict[meas_node_id].append(moments)
-    return moments_dict
+        filename = measurement.filename.split('/')[-1]
+        print("Reading file '{}'  pvloggerid = {}".format(filename, measurement.pvloggerid))
+        measurement.get_moments()
+        for node_id, moments in measurement.moments.items():
+            if node_id not in moments_dict:
+                moments_dict[node_id] = []
+            moments_dict[node_id].append(moments)
+        measurement.get_transfer_mats(start_node_id, tmat_generator)
+        for node_id, tmat in measurement.transfer_mats.items():
+            if node_id not in tmats_dict:
+                tmats_dict[node_id] = []
+            tmats_dict[node_id].append(tmat)
+    print('All files have been read.')
+    return moments_dict, tmats_dict

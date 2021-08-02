@@ -68,15 +68,70 @@ def compute_twiss(state, calculator):
     return mu_x, mu_y, alpha_x, alpha_y, beta_x, beta_y, eps_x, eps_y
 
 
-class PhaseController:
+class TransferMatrixGenerator:
+    """Class to compute transfer matrix between two nodes."""
+    def __init__(self, sequence, kin_energy):
+        self.sequence = sequence
+        self.scenario = Scenario.newScenarioFor(sequence)
+        self.kin_energy = kin_energy
+        
+    def sync(self, pvloggerid):
+        """Sync model with machine state from PVLoggerID."""
+        pvl_data_source = PVLoggerDataSource(pvloggerid)
+        self.scenario = pvl_data_source.setModelSource(self.sequence, self.scenario)
+        self.scenario.resync()
+    
+    def generate(self, start_node_id=None, stop_node_id=None):
+        """Return transfer matrix elements from start to node entrance.
+        
+        The node ids can be out of order.
+        """ 
+        # Check if the nodes are in order. If they are not, flip them and
+        # remember to take the inverse at the end.
+        reverse = False
+        node_ids = [node.getId() for node in self.sequence.getNodes()]
+        if node_ids.index(start_node_id) > node_ids.index(stop_node_id):
+            start_node_id, stop_node_id = stop_node_id, start_node_id
+            reverse = True
+        # Run the scenario.
+        tracker = AlgorithmFactory.createTransferMapTracker(self.sequence)
+        probe = ProbeFactory.getTransferMapProbe(self.sequence, tracker)
+        probe.setKineticEnergy(self.kin_energy)
+        self.scenario.setProbe(probe)
+        self.scenario.run()
+        # Get transfer matrix from upstream to downstream node.
+        trajectory = probe.getTrajectory()
+        state1 = trajectory.stateForElement(start_node_id)
+        state2 = trajectory.stateForElement(stop_node_id)
+        M1 = state1.getTransferMap().getFirstOrder()
+        M2 = state2.getTransferMap().getFirstOrder()
+        M = M2.times(M1.inverse())
+        if reverse:
+            M = M.inverse()
+        # Return list of shape (4, 4).
+        M = xal_helpers.list_from_xal_matrix(M)
+        M = [row[:4] for row in M[:4]]
+        return M
 
+
+class PhaseController:
+    """Class to control the phase advances in the RTBT.
+    
+    Attributes
+    ----------
+    
+    """
     def __init__(self, ref_ws_id='RTBT_Diag:WS24', kin_energy=1.0):
         self.machine_has_changed = False
         self.ref_ws_id = ref_ws_id
         self.accelerator = XMLDataManager.loadDefaultAccelerator()
         self.sequence = self.accelerator.getComboSequence('RTBT')
         self.scenario = Scenario.newScenarioFor(self.sequence)
-        self.scenario.setSynchronizationMode(Scenario.SYNC_MODE_LIVE)
+        try:
+            self.scenario.setSynchronizationMode(Scenario.SYNC_MODE_LIVE)
+        except (xal.sim.sync.SynchronizationException, sync_exception):
+            self.scenario.setSynchronizationMode(Scenario.SYNC_MODE_DESIGN)
+            print 'Could not sync with live machine. Using design fields.'     
         self.scenario.resync()
         self.algorithm = AlgorithmFactory.createEnvelopeTracker(self.sequence)
         self.algorithm.setUseSpacecharge(False)
@@ -178,45 +233,6 @@ class PhaseController:
         """Return beta functions at node entrance."""
         return self.twiss(node_id)[4:6]
         
-    def transfer_matrix(self, start_node_id=None, stop_node_id=None):
-        """Return transfer matrix elements from start to node entrance.
-        
-        The node ids can be out of order.
-        """
-        if start_node_id is None:
-            start_node_id = self.sequence.getNodes()[0].getId()
-        if stop_node_id is None:
-            stop_node_id = self.ref_ws_id     
-            
-        # Check if the nodes are in order. If they are not, flip them and
-        # remember to take the inverse at the end.
-        reverse = False
-        node_ids = [node.getId() for node in self.sequence.getNodes()]
-        if node_ids.index(start_node_id) > node_ids.index(stop_node_id):
-            start_node_id, stop_node_id = stop_node_id, start_node_id
-            reverse = True
-            
-        scenario = Scenario.newScenarioFor(self.sequence)
-        algorithm = AlgorithmFactory.createTransferMapTracker(self.sequence)
-        probe = ProbeFactory.getTransferMapProbe(self.sequence, algorithm)
-        scenario.setProbe(probe)
-        scenario.run()
-        trajectory = probe.getTrajectory()
-        
-        # Get transfer matrix from upstream to downstream node.
-        state1 = trajectory.stateForElement(start_node_id)
-        state2 = trajectory.stateForElement(stop_node_id)
-        M1 = state1.getTransferMap().getFirstOrder()
-        M2 = state2.getTransferMap().getFirstOrder()
-        M = M2.times(M1.inverse())
-        if reverse:
-            M = M.inverse()
-            
-        # Return a 4x4 list.
-        M = list_from_xal_matrix(M)
-        M = [row[:4] for row in M[:4]]
-        return M
-        
     def max_betas(self, start='RTBT_Mag:QH02', stop='RTBT_Diag:WS24'):
         """Return maximum x and y beta functions from start to stop node.
         
@@ -231,58 +247,6 @@ class PhaseController:
             beta_xs.append(beta_x)
             beta_ys.append(beta_y)
         return max(beta_xs), max(beta_ys)
-
-#     def set_ref_ws_phases(self, mu_x, mu_y, beta_lims=(40, 40), verbose=0):
-#         """Set x and y phases from start to the reference wire-scanner. 
-    
-#         Parameters
-#         ----------
-#         mu_x, mu_y : float
-#             The desired phase advances at the reference wire-scanner [rad].
-#         beta_lims : (xmax, ymax)
-#             Maximum beta functions to allow from QH02 to WS24.
-#         verbose : int
-#             If greater than zero, print a before/after summary.
-            
-#         Returns
-#         -------
-#         fields : list[float]
-#             The correct field strengths for the independent quadrupoles.
-#         """        
-#         class MyScorer(Scorer):
-#             def __init__(self, controller):
-#                 self.controller = controller
-#                 self.beta_lims = beta_lims
-#                 self.target_phases = [mu_x, mu_y]
-#                 self.ref_ws_id = controller.ref_ws_id
-#                 self.quad_ids = controller.ind_quad_ids[:-5]
-                
-#             def score(self, trial, variables):
-#                 fields = get_trial_vals(trial, variables)   
-#                 self.controller.set_fields(self.quad_ids, fields, 'model')
-#                 self.controller.track()
-#                 calc_phases = self.controller.phases(self.ref_ws_id)
-#                 residuals = subtract(calc_phases, self.target_phases)
-#                 return norm(residuals) + self.penalty_function()
-            
-#             def penalty_function(self):
-#                 penalty = 0.
-#                 for max_beta, beta_lim in zip(self.controller.max_betas(), self.beta_lims):
-#                     penalty += clip(max_beta - beta_lim, 0)
-#                 return penalty**2
-            
-#         scorer = MyScorer(self)
-#         var_names = self.ind_quad_ids
-#         bounds = (self.ps_lb[:-5], self.ps_ub[:-5])
-#         init_fields = self.default_fields[:-5]    
-#         self.restore_default_optics()
-#         fields = minimize(scorer, init_fields, var_names, bounds)
-#         if verbose > 0:
-#             print '  Desired phases : {:.3f}, {:.3f}'.format(mu_x, mu_y)
-#             print '  Calc phases    : {:.3f}, {:.3f}'.format(*self.phases(self.ref_ws_id))
-#             print '  Max betas (Q03 - WS24): {:.3f}, {:.3f}'.format(*self.max_betas())
-#             print '  Betas at target: {:.3f}, {:.3f}'.format(*self.beta_funcs('RTBT:Tgt'))
-#         return fields
 
     def set_ref_ws_phases(self, mu_x, mu_y, beta_lims=(40, 40), verbose=0):
         """Set x and y phases from start to the reference wire-scanner.
@@ -496,8 +460,11 @@ class PhaseController:
         accelerator = XMLDataManager.loadDefaultAccelerator()
         sequence = accelerator.getComboSequence('Ring')
         scenario = Scenario.newScenarioFor(sequence)
-        # Sync model with live machine.
-        scenario.setSynchronizationMode(Scenario.SYNC_MODE_LIVE)
+        try:
+            scenario.setSynchronizationMode(Scenario.SYNC_MODE_LIVE)
+        except (xal.sim.sync.SynchronizationException, sync_exception):
+            scenario.setSynchronizationMode(Scenario.SYNC_MODE_DESIGN)
+            print 'Could not sync with live machine. Using design fields.'     
         scenario.resync()
         # Get matched Twiss at RTBT entrance
         algorithm = AlgorithmFactory.createTransferMapTracker(sequence)

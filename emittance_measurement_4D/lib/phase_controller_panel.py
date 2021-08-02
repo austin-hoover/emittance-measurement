@@ -29,8 +29,8 @@ from xal.extension.widgets.plot import BasicGraphData
 from xal.extension.widgets.plot import FunctionGraphsJPanel
 
 # Local
+from optics import PhaseController
 import plotting as plt
-from phase_controller import PhaseController
 import utils
 import xal_helpers
 
