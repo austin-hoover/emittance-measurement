@@ -173,6 +173,11 @@ class CornerPlotPanel(JPanel):
             dim1, dim2 = key.split(',')
             phi, cx, cy = analysis.rms_ellipse_dims(Sigma, dim1, dim2)
             panel.ellipse(cx, cy, phi, lw=lw, points=points)
+            
+    def clear(self):
+        for plot_panel in self.plots.values():
+            plot_panel.removeAllGraphData()
+            plot_panel.removeAllCurveData()
                     
                     
                     

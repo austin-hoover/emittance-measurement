@@ -191,9 +191,7 @@ class AnalysisPanel(JPanel):
         if not measurements: 
             for panel in self.profile_plot_panels:
                 panel.removeAllGraphData()
-            for panel in self.corner_plot_panel.plots.values():
-                panel.removeAllGraphData()
-                panel.removeAllCurveData()
+            self.corner_plot_panel.clear()
             return
         
         # Plot profiles for selected measurement.
@@ -218,6 +216,7 @@ class AnalysisPanel(JPanel):
             return
     
         # Plot the 2D projections of the rms ellipsoid (x^T Sigma x = 1).
+        self.corner_plot_panel.clear()
         self.corner_plot_panel.rms_ellipses(self.beam_stats.Sigma)
             
 #         # Plot the reconstruction lines.
