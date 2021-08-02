@@ -1,4 +1,5 @@
 """Reconstruct covariance matrix from measurement data."""
+from __future__ import print_function
 import sys
 import math
 from math import sqrt
@@ -101,10 +102,10 @@ class BeamStats:
         return rms_ellipse_dims(self.Sigma, dim1, dim2)
     
     def print_all(self):
-        print 'eps_1, eps_2 = {} {} [mm mrad]'.format(self.eps_1, self.eps_2)
-        print 'eps_x, eps_y = {} {} [mm mrad]'.format(self.eps_x, self.eps_y)
-        print 'alpha_x, alpha_y = {} {} [rad]'.format(self.alpha_x, self.alpha_y)
-        print 'beta_x, beta_y = {} {} [m/rad]'.format(self.beta_x, self.beta_y)
+        print('eps_1, eps_2 = {} {} [mm mrad]'.format(self.eps_1, self.eps_2))
+        print('eps_x, eps_y = {} {} [mm mrad]'.format(self.eps_x, self.eps_y))
+        print('alpha_x, alpha_y = {} {} [rad]'.format(self.alpha_x, self.alpha_y))
+        print('beta_x, beta_y = {} {} [m/rad]'.format(self.beta_x, self.beta_y))
 
 
 def to_mat(moment_vec):
@@ -400,7 +401,7 @@ class TransferMatrixGenerator:
 def get_tmats_dict(measurements, tmat_generator, rec_node_id):
     tmats_dict = dict()
     for measurement in measurements:
-        print 'Collecting transfer matrices - pvloggerid = {}.'.format(measurement.pvloggerid)
+        print('Collecting transfer matrices - pvloggerid = {}.'.format(measurement.pvloggerid))
         tmat_generator.sync(measurement.pvloggerid)
         for meas_node_id in measurement.node_ids:
             tmat = tmat_generator.transfer_matrix(rec_node_id, meas_node_id)
@@ -413,7 +414,7 @@ def get_tmats_dict(measurements, tmat_generator, rec_node_id):
 def get_moments_dict(measurements):
     moments_dict = dict()
     for measurement in measurements:
-        print 'Collecting measured moments - pvloggerid = {}.'.format(measurement.pvloggerid)
+        print('Collecting measured moments - pvloggerid = {}.'.format(measurement.pvloggerid))
         for meas_node_id in measurement.node_ids:
             profile = measurement.profiles[meas_node_id]
             sig_xx = profile.hor.stats['Sigma'].rms**2
