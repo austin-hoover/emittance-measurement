@@ -433,31 +433,7 @@ class CalculateModelOpticsButtonListener(ActionListener):
             self.phase_controller.constrain_size_on_target(verbose=1)
             max_betas_anywhere = self.phase_controller.max_betas(stop=None)
             print '  Max betas anywhere: {:.3f}, {:.3f}.'.format(*max_betas_anywhere)
-            
-#             # Save model Twiss vs. position data.
-#             filename = '_output/model_twiss_{}.dat'.format(scan_index)
-#             xal_helpers.write_traj_to_file(self.phase_controller.tracked_twiss(), 
-#                                            self.phase_controller.positions, 
-#                                            filename)
-# 
-#             # Save transfer matrix at each wire-scanner.
-#             file = open('_output/model_transfer_mat_elems_{}_{}.dat'.format(scan_index, rec_node_id), 'w')
-#             fstr = 16 * '{} ' + '\n'
-#             for ws_id in RTBT_WS_IDS:
-#                 M = self.phase_controller.transfer_matrix(rec_node_id, ws_id)
-#                 elements = [elem for row in M for elem in row]
-#                 file.write(fstr.format(*elements))
-#             file.close()
-# 
-#             # Save real space beam moments at each wire-scanner.
-#             file = open('_output/model_moments_{}.dat'.format(scan_index), 'w')
-#             for ws_id in RTBT_WS_IDS:
-#                 (mu_x, mu_y, alpha_x, alpha_y, 
-#                  beta_x, beta_y, eps_x, eps_y) = self.phase_controller.twiss(ws_id)
-    #                 moments = [eps_x * beta_x, eps_y * beta_y, 0.0]
-#                 file.write('{} {} {}\n'.format(*moments))
-#             file.close()
-#     
+
             # Save model quadrupole strengths.
             model_fields = []
             for quad_id in self.ind_quad_ids:
@@ -500,30 +476,6 @@ class SetLiveOpticsButtonListener(ActionListener):
             self.phase_controller.set_fields(quad_ids, model_fields, 'live', **field_set_kws)
         self.panel.quad_settings_table.getModel().fireTableDataChanged()
         self.panel.update_plots()
-        
-        # Save live quad strengths.
-#         file = open('_output/live_fields_{}.dat'.format(scan_index), 'w')
-#         for quad_id in self.ind_quad_ids:
-#             field = self.phase_controller.get_field(quad_id, 'live')
-#             file.write('{}, {}\n'.format(quad_id, field))
-#         file.close()
-        
-        # Save transfer matrix at each wire-scanner.
-#         file = open('_output/model_transfer_mat_elems_{}_{}.dat'.format(scan_index, rec_node_id), 'w')
-#         fstr = 16 * '{} ' + '\n'
-#         for ws_id in self.ws_ids:
-#             M = self.phase_controller.transfer_matrix(rec_node_id, ws_id)
-#             elements = [elem for row in M for elem in row]
-#             file.write(fstr.format(*elements))
-#         file.close()
-        
-        # Save expected Twiss parameters at reconstruction location.
-#         file = open('_output/model_twiss_{}.dat'.format(rec_node_id), 'w')
-#         (mu_x, mu_y, alpha_x, alpha_y, 
-#          beta_x, beta_y, eps_x, eps_y) = self.phase_controller.twiss(rec_node_id)
-#         file.write('{} {} {} {}'.format(alpha_x, alpha_y, beta_x, beta_y))
-#         file.close()
-
             
             
 # Miscellaneous
