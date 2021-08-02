@@ -261,13 +261,14 @@ class Profile:
         self.ver = Signal(ypos, yraw, yfit, ystats)
         self.dia = Signal(upos, uraw, ufit, ustats)   
         
-        
-class Measurement:
-    """Holds data for one measurement.
+
+class Measurement(dict):
+    """A dictionary of profiles for one measurement.
     
     Each measurement is a collection of wire scans at a single machine setting.
     """
     def __init__(self, filename):
+        dict.__init__(self)
         self.filename = filename
         self.timestamp = None
         self.profiles = dict()
@@ -276,7 +277,6 @@ class Measurement:
         self.read_pta_file()
         
     def read_pta_file(self):
-        
         # Store the timestamp on the file.
         date, time = self.filename.split('WireAnalysisFmt-')[-1].split('_')
         time = time.split('.pta')[0]
@@ -338,12 +338,14 @@ class Measurement:
                 ystats[name] = Stat(name, s_yrms, s_yfit)
                 ustats[name] = Stat(name, s_urms, s_ufit)
 
-            self.profiles[node_id] = Profile(
+                
+            profile = Profile(
                 [xpos, ypos, upos], 
                 [xraw, yraw, uraw], 
                 [xfit, yfit, ufit], 
                 [xstats, ystats, ustats],
             )
+            self[node_id] = profile
             
 
 class TransferMatrixGenerator:
@@ -416,7 +418,7 @@ def get_moments_dict(measurements):
     for measurement in measurements:
         print('Collecting measured moments - pvloggerid = {}.'.format(measurement.pvloggerid))
         for meas_node_id in measurement.node_ids:
-            profile = measurement.profiles[meas_node_id]
+            profile = measurement[meas_node_id]
             sig_xx = profile.hor.stats['Sigma'].rms**2
             sig_yy = profile.ver.stats['Sigma'].rms**2
             sig_uu = profile.dia.stats['Sigma'].rms**2
