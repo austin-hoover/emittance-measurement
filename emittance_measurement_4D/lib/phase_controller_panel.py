@@ -476,6 +476,7 @@ class SetLiveOpticsButtonListener(ActionListener):
             self.phase_controller.set_fields(quad_ids, model_fields, 'live', **field_set_kws)
         self.panel.quad_settings_table.getModel().fireTableDataChanged()
         self.panel.update_plots()
+        print 'Done.'
             
             
 # Miscellaneous

@@ -61,6 +61,14 @@ def norm(vec):
     return math.sqrt(sum(square(vec)))
 
 
+def dot(vec1, vec2):
+    return sum([elem1 * elem2 for elem1, elem2 in zip(vec1, vec2)])
+
+
+def matvec(A, vec):
+    return [dot(row, vec) for row in A]
+
+
 def linspace(start, stop, num=10):
     if num < 2:
         return [start]

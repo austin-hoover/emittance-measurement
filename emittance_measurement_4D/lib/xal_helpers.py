@@ -75,6 +75,8 @@ def minimize(scorer, x, var_names, bounds, maxiters=1000, tol=1e-8, verbose=0):
     if type(ub) in [float, int]:
         ub = n_vars * [ub]
     for i in range(n_vars):
+        if float('inf') in [abs(lb[i]), abs(ub[i])]:
+            raise ValueError("OpenXAL Solver cannot use float('inf') as a bound.")
         if x[i] < lb[i] or x[i] > ub[i]:
             raise ValueError('Initial guess is outside bounds.')
             

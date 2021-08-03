@@ -1,3 +1,9 @@
+"""Perform analysis of wire-scanner files.
+
+To do
+    * Make 'Load files' button just add files instead of overwriting?
+    * Clean up.
+"""
 import os
 import math
 from math import sqrt
@@ -90,18 +96,19 @@ class AnalysisPanel(JPanel):
         #-------------------------------------------------------------------------------
         self.load_files_button = JButton('Load files')
         self.load_files_button.addActionListener(LoadFilesButtonListener(self))
-        
         self.clear_files_button = JButton('Clear files') 
         self.clear_files_button.addActionListener(ClearFilesButtonListener(self))
-        
         self.meas_index_label = JLabel('Measurement index to plot')
         self.meas_index_dropdown = JComboBox([0])
         self.meas_index_dropdown.addActionListener(MeasIndexDropdownListener(self))
+        self.export_data_button = JButton('Export data')
+        self.export_data_button.addActionListener(ExportDataButtonListener(self, '_output'))
         
         self.top_top_panel = JPanel()
         self.top_top_panel.setLayout(FlowLayout(FlowLayout.LEFT))
         self.top_top_panel.add(self.load_files_button)
         self.top_top_panel.add(self.clear_files_button)
+        self.top_top_panel.add(self.export_data_button)
         self.top_top_panel.add(self.meas_index_label)
         self.top_top_panel.add(self.meas_index_dropdown)
         
@@ -136,6 +143,7 @@ class AnalysisPanel(JPanel):
         self.tol_text_field = JTextField('1e-12')
         self.results_table = JTable(ResultsTableModel(self))
         self.results_table.setShowGrid(True)
+        self.norm_label = JLabel('Normalization')
         self.norm_dropdown = JComboBox(['None', '2D', '4D'])
         self.norm_dropdown.addActionListener(NormDropdownListener(self))
         
@@ -172,6 +180,7 @@ class AnalysisPanel(JPanel):
         self.bottom_right_panel = JPanel()
         self.bottom_right_panel.setLayout(BorderLayout())
         self.bottom_right_top_panel = JPanel()
+        self.bottom_right_top_panel.add(self.norm_label)
         self.bottom_right_top_panel.add(self.norm_dropdown)
         self.corner_plot_panel = plt.CornerPlotPanel()
         self.corner_plot_panel.setPreferredSize(Dimension(500, 500))
@@ -213,7 +222,7 @@ class AnalysisPanel(JPanel):
         # Plot profiles for selected measurement.
         meas_index = int(self.meas_index_dropdown.getSelectedItem())
         measurement = measurements[meas_index]
-        xpos, ypos, ypos = [], [], []
+        xpos, ypos, upos = [], [], []
         xraw_list, yraw_list, uraw_list = [], [], []
         for node_id in measurement.node_ids:
             profile = measurement[node_id]
@@ -476,7 +485,7 @@ class LoadFilesButtonListener(ActionListener):
         self.tmat_generator = panel.tmat_generator
     
     def actionPerformed(self, event):
-        
+
         # Open file chooser dialog.
         file_chooser = JFileChooser(os.getcwd())        
         file_chooser.setFileSelectionMode(JFileChooser.FILES_AND_DIRECTORIES);
@@ -509,7 +518,7 @@ class LoadFilesButtonListener(ActionListener):
         
         # Make dictionaries of measured moments and transfer matrices at each wire-scanner.
         moments_dict, tmats_dict = analysis.get_scan_info(measurements, self.tmat_generator, 
-                                                 self.panel.rec_node_id)
+                                                          self.panel.rec_node_id)
         # Save data and update GUI.
         self.panel.measurements = measurements
         self.panel.moments_dict = moments_dict
@@ -531,6 +540,47 @@ class ClearFilesButtonListener(ActionListener):
         self.panel.update_tables()
         print 'Cleared data.'
         
+               
+class ExportDataButtonListener(ActionListener):
+    
+    def __init__(self, panel, folder):
+        self.panel = panel
+        self.folder = folder
+    
+    def actionPerformed(self, event):
+        print('Exporting data...')
+        utils.delete_files_not_folders(self.folder)
+        tmats_dict = self.panel.tmats_dict
+        moments_dict = self.panel.moments_dict
+        
+        # Transfer matrices
+        file = open(os.path.join(self.folder, 'transfer_mats.dat'), 'w')
+        ws_ids = self.panel.measurements[0].node_ids
+        for ws_id in ws_ids:
+            for tmat in tmats_dict[ws_id]:
+                tmat_elems = [elem for row in tmat for elem in row]
+                fstr = 17 * '{} ' + '\n'
+                file.write(fstr.format(ws_id, *tmat_elems))
+        file.close()
+        
+        # Measured moments
+        file = open(os.path.join(self.folder, 'moments.dat'), 'w')
+        for ws_id in ws_ids:
+            for moments in moments_dict[ws_id]:
+                fstr = 4 * '{} ' + '\n'
+                file.write(fstr.format(ws_id, *moments))
+        file.close()
+        print("Done. Files are in folder: '_output'")
+        
+        # Profile data
+        
+        # Other info
+        file = open(os.path.join(self.folder, 'info'), 'w')
+        file.write('reconstruction_point = {}\n'.format(self.panel.rec_node_id))
+        file.write('beam_energy_GeV = {}\n'.format(self.panel.kin_energy * 1e-9))
+        file.close()
+        
+
         
 class MeasIndexDropdownListener(ActionListener):
     

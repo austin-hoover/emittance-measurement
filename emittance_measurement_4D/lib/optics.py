@@ -19,6 +19,7 @@ from xal.service.pvlogger.sim import PVLoggerDataSource
 from xal.sim.scenario import AlgorithmFactory
 from xal.sim.scenario import ProbeFactory
 from xal.sim.scenario import Scenario
+from xal.sim.sync import SynchronizationException
 from xal.smf import Accelerator
 from xal.smf import AcceleratorSeq 
 from xal.smf.data import XMLDataManager
@@ -76,7 +77,7 @@ def safe_sync(scenario, sync_mode):
         try:
             scenario.setSynchronizationMode(Scenario.SYNC_MODE_LIVE)
             scenario.resync()
-        except (xal.sim.sync.SynchronizationException, sync_exception):
+        except (SynchronizationException, sync_exception):
             sync_mode = 'design'
             print "Can't sync with live machine. Using design fields."
     if sync_mode == 'design':

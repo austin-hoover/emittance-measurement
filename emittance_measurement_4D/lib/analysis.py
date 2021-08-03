@@ -7,6 +7,15 @@ from pprint import pprint
 from datetime import datetime
 from Jama import Matrix
 
+from xal.extension.solver import Problem
+from xal.extension.solver import Scorer
+from xal.extension.solver import Solver
+from xal.extension.solver import Stopper
+from xal.extension.solver import Trial
+from xal.extension.solver import Variable
+from xal.extension.solver.algorithm import SimplexSearchAlgorithm
+from xal.extension.solver.ProblemFactory import getInverseSquareMinimizerProblem
+from xal.extension.solver.SolveStopperFactory import maxEvaluationsStopper
 from xal.model.probe import Probe
 from xal.model.probe.traj import Trajectory
 from xal.sim.scenario import AlgorithmFactory
@@ -405,10 +414,11 @@ class Measurement(dict):
     
 def get_scan_info(measurements, tmat_generator, start_node_id):
     """Make dictionaries of measured moments and transfer matrices at each wire-scanner."""
+    print( 'Reading files...')
     moments_dict, tmats_dict = dict(), dict()
     for measurement in measurements:
         filename = measurement.filename.split('/')[-1]
-        print("Reading file '{}'  pvloggerid = {}".format(filename, measurement.pvloggerid))
+        print("  Reading file '{}'  pvloggerid = {}".format(filename, measurement.pvloggerid))
         measurement.get_moments()
         for node_id, moments in measurement.moments.items():
             if node_id not in moments_dict:
@@ -419,5 +429,5 @@ def get_scan_info(measurements, tmat_generator, start_node_id):
             if node_id not in tmats_dict:
                 tmats_dict[node_id] = []
             tmats_dict[node_id].append(tmat)
-    print('All files have been read.')
+    print('Done.')
     return moments_dict, tmats_dict
