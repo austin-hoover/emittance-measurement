@@ -40,26 +40,13 @@ from xal.smf import AcceleratorSeqCombo
 from xal.smf.data import XMLDataManager
 
 from lib import utils
-from lib.time_and_date_lib import DateAndTimeText
-from lib.phase_controller import PhaseController
-
 from lib.analysis_panel import AnalysisPanel
 from lib.phase_controller_panel import PhaseControllerPanel
-                
+from lib.time_and_date_lib import DateAndTimeText
 
-class GUI:
-    """Graphical user interface for phase controller.
-    
-    Attributes
-    ----------
-    phase_controller : PhaseController
-        This object calculates the optics needed to obtain a certain phase 
-        advance at the wire-scanner. It also updates the live machine to 
-        reflect the model.
-    model_fields_list : List
-        Holds the model field strengths for each scan index. It is filled when 
-        the `Calculate model fields` button is pressed.
-    """
+
+class EmittanceMeasurement4D:
+
     def __init__(self):
 
         # Create panels.
@@ -118,5 +105,4 @@ class GUI:
             
 # Launch application
 #-------------------------------------------------------------------------------
-gui = GUI()
-gui.launch()
+EmittanceMeasurement4D().launch()
