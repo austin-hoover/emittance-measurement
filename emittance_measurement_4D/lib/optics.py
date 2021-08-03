@@ -15,6 +15,7 @@ from xal.extension.solver.ProblemFactory import getInverseSquareMinimizerProblem
 from xal.extension.solver.SolveStopperFactory import maxEvaluationsStopper
 from xal.model.probe import Probe
 from xal.model.probe.traj import Trajectory
+from xal.service.pvlogger.sim import PVLoggerDataSource
 from xal.sim.scenario import AlgorithmFactory
 from xal.sim.scenario import ProbeFactory
 from xal.sim.scenario import Scenario
@@ -68,6 +69,22 @@ def compute_twiss(state, calculator):
     return mu_x, mu_y, alpha_x, alpha_y, beta_x, beta_y, eps_x, eps_y
 
 
+def safe_sync(scenario, sync_mode):
+    if sync_mode not in ['live', 'design']:
+        raise ValueError("`sync_mode` must be in {'live', 'design'}")
+    if sync_mode == 'live':
+        try:
+            scenario.setSynchronizationMode(Scenario.SYNC_MODE_LIVE)
+            scenario.resync()
+        except (xal.sim.sync.SynchronizationException, sync_exception):
+            sync_mode = 'design'
+            print "Can't sync with live machine. Using design fields."
+    if sync_mode == 'design':
+        scenario.setSynchronizationMode(Scenario.SYNC_MODE_LIVE)
+        scenario.resync()
+    return sync_mode
+
+
 class TransferMatrixGenerator:
     """Class to compute transfer matrix between two nodes."""
     def __init__(self, sequence, kin_energy):
@@ -109,7 +126,7 @@ class TransferMatrixGenerator:
         if reverse:
             M = M.inverse()
         # Return list of shape (4, 4).
-        M = xal_helpers.list_from_xal_matrix(M)
+        M = list_from_xal_matrix(M)
         M = [row[:4] for row in M[:4]]
         return M
 
@@ -121,21 +138,18 @@ class PhaseController:
     ----------
     
     """
-    def __init__(self, ref_ws_id='RTBT_Diag:WS24', kin_energy=1.0):
+    def __init__(self, ref_ws_id='RTBT_Diag:WS24', kin_energy=1.0, sync_mode='live', 
+                 connect=True):
         self.machine_has_changed = False
+        self.connect = connect
         self.ref_ws_id = ref_ws_id
         self.accelerator = XMLDataManager.loadDefaultAccelerator()
         self.sequence = self.accelerator.getComboSequence('RTBT')
         self.scenario = Scenario.newScenarioFor(self.sequence)
-        try:
-            self.scenario.setSynchronizationMode(Scenario.SYNC_MODE_LIVE)
-        except (xal.sim.sync.SynchronizationException, sync_exception):
-            self.scenario.setSynchronizationMode(Scenario.SYNC_MODE_DESIGN)
-            print 'Could not sync with live machine. Using design fields.'     
-        self.scenario.resync()
-        self.algorithm = AlgorithmFactory.createEnvelopeTracker(self.sequence)
-        self.algorithm.setUseSpacecharge(False)
-        self.probe = ProbeFactory.getEnvelopeProbe(self.sequence, self.algorithm)
+        self.sync_mode = safe_sync(self.scenario, sync_mode)
+        self.tracker = AlgorithmFactory.createEnvelopeTracker(self.sequence)
+        self.tracker.setUseSpacecharge(False)
+        self.probe = ProbeFactory.getEnvelopeProbe(self.sequence, self.tracker)
         self.probe.setBeamCurrent(0.0)
         self.set_kin_energy(kin_energy)
         self.scenario.setProbe(self.probe)
@@ -170,10 +184,11 @@ class PhaseController:
 
         # Connect to B_Book channels. These need to be changed at the same time as
         # the field settings, else the machine will trip.
-        self.book_channels = {}
-        for quad_id, ps_node in zip(self.quad_ids, self.ps_nodes):
-            channel = ps_node.findChannel(MagnetMainSupply.FIELD_BOOK_HANDLE)
-            self.book_channels[quad_id] = channel
+        if self.connect:
+            self.book_channels = {}
+            for quad_id, ps_node in zip(self.quad_ids, self.ps_nodes):
+                channel = ps_node.findChannel(MagnetMainSupply.FIELD_BOOK_HANDLE)
+                self.book_channels[quad_id] = channel
 
         # Determine upper and lower bounds on power supplies.
         self.ps_lb, self.ps_ub = [], []
@@ -199,12 +214,15 @@ class PhaseController:
         """Reset the envelope probe to the start of the lattice."""
         self.scenario.resetProbe()
         self.probe.setKineticEnergy(1e9 * self.kin_energy)
-        eps_x = eps_y = 20e-6 # arbitrary
-        twissX = Twiss(self.init_twiss['alpha_x'], self.init_twiss['beta_x'], eps_x)
-        twissY = Twiss(self.init_twiss['alpha_y'], self.init_twiss['beta_y'], eps_y)
-        twissZ = Twiss(0, 1, 0)
-        Sigma = CovarianceMatrix().buildCovariance(twissX, twissY, twissZ)
-        self.probe.setCovariance(Sigma)
+        alpha_x = self.init_twiss['alpha_x']
+        alpha_y = self.init_twiss['alpha_y']
+        beta_x = self.init_twiss['beta_x']
+        beta_y = self.init_twiss['beta_y']
+        eps_x = eps_y = 20e-5 # [mm mrad] (arbitrary)
+        twiss_x = Twiss(alpha_x, beta_x, eps_x)
+        twiss_y = Twiss(alpha_y, beta_y, eps_y)
+        twiss_z = Twiss(0, 1, 0)
+        self.probe.initFromTwiss([twiss_x, twiss_y, twiss_z])
         
     def track(self):
         """Return envelope trajectory through the lattice."""
@@ -460,12 +478,7 @@ class PhaseController:
         accelerator = XMLDataManager.loadDefaultAccelerator()
         sequence = accelerator.getComboSequence('Ring')
         scenario = Scenario.newScenarioFor(sequence)
-        try:
-            scenario.setSynchronizationMode(Scenario.SYNC_MODE_LIVE)
-        except (xal.sim.sync.SynchronizationException, sync_exception):
-            scenario.setSynchronizationMode(Scenario.SYNC_MODE_DESIGN)
-            print 'Could not sync with live machine. Using design fields.'     
-        scenario.resync()
+        safe_sync(scenario, self.sync_mode)
         # Get matched Twiss at RTBT entrance
         algorithm = AlgorithmFactory.createTransferMapTracker(sequence)
         probe = ProbeFactory.getTransferMapProbe(sequence, algorithm)

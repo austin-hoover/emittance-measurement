@@ -1,8 +1,3 @@
-"""
-To to:
-    * Plot reconstruction lines.
-    * Model Twiss parameters.
-"""
 import os
 import math
 import random
@@ -57,6 +52,7 @@ from xal.tools.beam.calc import CalculationsOnRings
 
 # Local
 import analysis
+from optics import PhaseController
 import plotting as plt
 import utils
 import xal_helpers
@@ -72,9 +68,10 @@ class AnalysisPanel(JPanel):
         self.rec_node_id = 'Begin_Of_RTBT1'
         self.accelerator = XMLDataManager.loadDefaultAccelerator()
         self.sequence = self.accelerator.getComboSequence('RTBT')
-        self.scenario = Scenario.newScenarioFor(self.sequence)
         self.tmat_generator = analysis.TransferMatrixGenerator(self.sequence, self.kin_energy)
         self.node_ids = [node.getId() for node in self.sequence.getNodes()]
+        self.model_twiss = dict()
+        self.design_twiss = dict()
         self.clear_data()
         self.build_panel()
         
@@ -83,6 +80,8 @@ class AnalysisPanel(JPanel):
         self.moments_dict = dict()
         self.tmats_dict = dict()
         self.beam_stats = None
+        self.model_twiss = dict()
+        self.design_
         
     def build_panel(self):
         print 'Energy {:.2e} [eV] is hard coded. Please fix.'.format(self.kin_energy)
@@ -252,6 +251,119 @@ class AnalysisPanel(JPanel):
                 x_vals, xp_vals, y_vals, yp_vals = possible_points(M, sig_xx, sig_yy)
                 xxp_panel.plot(x_vals, xp_vals, color=color, ms=0, lw=2)
                 yyp_panel.plot(y_vals, yp_vals, color=color, ms=0, lw=2)
+                
+    def compute_model_twiss(self):
+        """Get the model Twiss parameters at the reconstruction point.
+        
+        We use the pvloggerid of the first measurement, assuming the optics
+        don't change between measurements. The method assumes this. If the
+        user selects a reconstruction point downstream of QH18 in the RTBT, 
+        and if the optics were varied during the scan, then the method 
+        doesn't work.
+        """
+        if not self.measurements:
+            return
+        
+        # Set up
+        pvloggerid = self.measurements[0].pvloggerid
+        pvl_data_source = PVLoggerDataSource(pvloggerid)
+        sequence = self.accelerator.getComboSequence('Ring')
+        scenario = Scenario.newScenarioFor(sequence)
+        scenario = pvl_data_source.setModelSource(sequence, scenario)
+        scenario.resync()
+
+        # Get the model optics at the RTBT entrance in the ring. 
+        tracker = AlgorithmFactory.createTransferMapTracker(sequence)
+        probe = ProbeFactory.getTransferMapProbe(sequence, tracker)
+        probe.setKineticEnergy(self.kin_energy)
+        scenario.setProbe(probe)
+        scenario.run()
+        trajectory = probe.getTrajectory()
+        calculator = CalculationsOnRings(trajectory)
+        state = trajectory.statesForElement('Begin_Of_Ring3')[0]
+        twiss_x, twiss_y, twiss_z = calculator.computeMatchedTwissAt(state)
+
+        # Now track through the RTBT if necessary.
+        sequence = self.accelerator.getComboSequence('RTBT')
+        scenario = Scenario.newScenarioFor(sequence)
+        scenario = pvl_data_source.setModelSource(sequence, scenario)
+        scenario.resync()
+        rec_node_id = self.rec_node_id
+        node_ids = [node.getId() for node in sequence.getNodes()]
+        rec_node_index = node_ids.index(rec_node_id)                
+        if rec_node_index > node_ids.index('RTBT_Mag:QH18'):
+            string = ''.join([
+                'Reconstruction point is downstream of first varied quad (RTBT_Mag:QH18). ',
+                'Method will be inaccurate if optics were changed between measurements.',
+            ])
+            print string
+        if rec_node_index > 0:
+            tracker = AlgorithmFactory.createEnvelopeTracker(sequence)
+            tracker.setUseSpacecharge(False)
+            probe = ProbeFactory.getEnvelopeProbe(sequence, tracker)
+            probe.setBeamCurrent(0.0)
+            probe.setKineticEnergy(self.kin_energy)            
+            eps_x = eps_y = 20e-5 # [mm mrad] (arbitrary)
+            twiss_x = Twiss(twiss_x.getAlpha(), twiss_x.getBeta(), eps_x)
+            twiss_y = Twiss(twiss_y.getAlpha(), twiss_y.getBeta(), eps_y)
+            twiss_z = Twiss(0, 1, 0)
+            probe.initFromTwiss([twiss_x, twiss_y, twiss_z])
+            scenario.setProbe(probe)
+            scenario.run()
+            trajectory = probe.getTrajectory()
+            calculator = CalculationsOnBeams(trajectory)
+            state = trajectory.stateForElement(rec_node_id)
+            twiss_x, twiss_y, _ = calculator.computeTwissParameters(state)
+
+        self.model_twiss['alpha_x'] = twiss_x.getAlpha()
+        self.model_twiss['alpha_y'] = twiss_y.getAlpha()
+        self.model_twiss['beta_x'] = twiss_x.getBeta()
+        self.model_twiss['beta_y'] = twiss_y.getBeta()    
+        
+        
+    def compute_design_twiss(self):
+        """Get the design Twiss parameters at the reconstruction point."""        
+        sequence = self.accelerator.getComboSequence('Ring')
+        scenario = Scenario.newScenarioFor(sequence)
+
+        # Get the design optics at the RTBT entrance in the ring. 
+        tracker = AlgorithmFactory.createTransferMapTracker(sequence)
+        probe = ProbeFactory.getTransferMapProbe(sequence, tracker)
+        probe.setKineticEnergy(self.kin_energy)
+        scenario.setProbe(probe)
+        scenario.run()
+        trajectory = probe.getTrajectory()
+        calculator = CalculationsOnRings(trajectory)
+        state = trajectory.statesForElement('Begin_Of_Ring3')[0]
+        twiss_x, twiss_y, twiss_z = calculator.computeMatchedTwissAt(state)
+
+        # Now track through the RTBT if necessary.
+        sequence = self.accelerator.getComboSequence('RTBT')
+        scenario = Scenario.newScenarioFor(sequence)
+        rec_node_id = self.rec_node_id
+        node_ids = [node.getId() for node in sequence.getNodes()]
+        if node_ids.index(rec_node_id) > 0:
+            tracker = AlgorithmFactory.createEnvelopeTracker(sequence)
+            tracker.setUseSpacecharge(False)
+            probe = ProbeFactory.getEnvelopeProbe(sequence, tracker)
+            probe.setBeamCurrent(0.0)
+            probe.setKineticEnergy(self.kin_energy)            
+            eps_x = eps_y = 20e-5 # [mm mrad] (arbitrary)
+            twiss_x = Twiss(twiss_x.getAlpha(), twiss_x.getBeta(), eps_x)
+            twiss_y = Twiss(twiss_y.getAlpha(), twiss_y.getBeta(), eps_y)
+            twiss_z = Twiss(0, 1, 0)
+            probe.initFromTwiss([twiss_x, twiss_y, twiss_z])
+            scenario.setProbe(probe)
+            scenario.run()
+            trajectory = probe.getTrajectory()
+            calculator = CalculationsOnBeams(trajectory)
+            state = trajectory.stateForElement(rec_node_id)
+            twiss_x, twiss_y, _ = calculator.computeTwissParameters(state)
+
+        self.design_twiss['alpha_x'] = twiss_x.getAlpha()
+        self.design_twiss['alpha_y'] = twiss_y.getAlpha()
+        self.design_twiss['beta_x'] = twiss_x.getBeta()
+        self.design_twiss['beta_y'] = twiss_y.getBeta() 
             
             
 # Tables
@@ -275,10 +387,13 @@ class ResultsTableModel(AbstractTableModel):
 
     def getValueAt(self, row, col):
         beam_stats = self.panel.beam_stats
+        measurements = self.panel.measurements
+        no_calc_data = not beam_stats
+        no_meas_data = not measurements
         if col == 0:
             return self.parameter_names[row]
         elif col == 1:
-            if beam_stats is None:
+            if no_calc_data:
                 return '-'
             data = [beam_stats.eps_1, beam_stats.eps_2,
                     beam_stats.eps_x, beam_stats.eps_y,
@@ -287,9 +402,18 @@ class ResultsTableModel(AbstractTableModel):
                     beam_stats.alpha_x, beam_stats.alpha_y]
             return data[row]
         elif col == 2:
-            if row < 5:
+            if no_meas_data or row < 5:
                 return '-'
-            return '-'
+            if not self.panel.model_twiss:
+                self.panel.compute_model_twiss()
+            if row == 5:
+                return self.panel.model_twiss['beta_x']
+            if row == 6:
+                return self.panel.model_twiss['beta_y']
+            if row == 7:
+                return self.panel.model_twiss['alpha_x']
+            if row == 8:
+                return self.panel.model_twiss['alpha_y']
 
     def getColumnCount(self):
         return 3
@@ -340,7 +464,6 @@ class LoadFilesButtonListener(ActionListener):
         # Make dictionaries of measured moments and transfer matrices at each wire-scanner.
         moments_dict, tmats_dict = analysis.get_scan_info(measurements, self.tmat_generator, 
                                                  self.panel.rec_node_id)
-            
         # Save data and update GUI.
         self.panel.measurements = measurements
         self.panel.moments_dict = moments_dict
@@ -389,6 +512,7 @@ class RecPointDropdownListener(ActionListener):
         self.panel.moments_dict = moments_dict
         self.panel.tmats_dict = tmats_dict
         self.panel.corner_plot_panel.clear()
+        self.panel.compute_model_twiss()
         self.panel.results_table.getModel().fireTableDataChanged()
               
             
