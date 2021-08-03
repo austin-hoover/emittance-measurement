@@ -1,6 +1,7 @@
 """General utility functions."""
 import math
 import os
+from Jama import Matrix
 
 
 # Lists
@@ -75,6 +76,20 @@ def shape(array):
 
 def transpose(array):
     return [list(x) for x in zip(*array)]
+
+
+# JAMA matrices
+#-------------------------------------------------------------------------------
+def diagonal_matrix(diagonal_elements):
+    n = len(diagonal_elements)
+    M = Matrix(n, n)
+    for i, elem in enumerate(diagonal_elements):
+        M.set(i, i, elem)
+    return M
+
+
+def identity_matrix(n):
+    return diagonal_matrix(n * [1.0])
 
 
 # Miscellaneous

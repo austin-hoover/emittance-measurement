@@ -1,5 +1,6 @@
 import os
 import math
+from math import sqrt
 import random
 from pprint import pprint
 
@@ -81,7 +82,6 @@ class AnalysisPanel(JPanel):
         self.tmats_dict = dict()
         self.beam_stats = None
         self.model_twiss = dict()
-        self.design_
         
     def build_panel(self):
         print 'Energy {:.2e} [eV] is hard coded. Please fix.'.format(self.kin_energy)
@@ -117,7 +117,7 @@ class AnalysisPanel(JPanel):
 
         self.top_panel = JPanel()
         self.top_panel.setLayout(BorderLayout())
-        self.top_panel.setPreferredSize(Dimension(1100, 200))
+        self.top_panel.setPreferredSize(Dimension(1100, 225))
         self.top_panel.add(self.top_top_panel, BorderLayout.NORTH)
         self.top_panel.add(self.profile_plots_panel)
         
@@ -136,6 +136,8 @@ class AnalysisPanel(JPanel):
         self.tol_text_field = JTextField('1e-12')
         self.results_table = JTable(ResultsTableModel(self))
         self.results_table.setShowGrid(True)
+        self.norm_dropdown = JComboBox(['None', '2D', '4D'])
+        self.norm_dropdown.addActionListener(NormDropdownListener(self))
         
         self.bottom_left_panel = JPanel()
         self.bottom_left_panel.setLayout(BorderLayout())
@@ -166,19 +168,27 @@ class AnalysisPanel(JPanel):
         bottom_left_bottom_panel.add(self.results_table)
         self.bottom_left_panel.add(bottom_left_bottom_panel)
         
+        
+        self.bottom_right_panel = JPanel()
+        self.bottom_right_panel.setLayout(BorderLayout())
+        self.bottom_right_top_panel = JPanel()
+        self.bottom_right_top_panel.add(self.norm_dropdown)
         self.corner_plot_panel = plt.CornerPlotPanel()
-        self.corner_plot_panel.setPreferredSize(Dimension(650, 455))
+        self.corner_plot_panel.setPreferredSize(Dimension(500, 500))
         # Turn off ticklabels (is there a tool in XAL to nicely format ticklabels?)
         for panel in self.corner_plot_panel.plots.values():
             panel.xMarkersOn(False)
             panel.yMarkersOn(False)
+        self.bottom_right_panel.add(self.bottom_right_top_panel)
+        self.bottom_right_panel.add(self.bottom_right_top_panel, BorderLayout.NORTH)
+        self.bottom_right_panel.add(self.corner_plot_panel)
         
         self.bottom_panel = JPanel()
         self.bottom_panel.setBorder(BorderFactory.createLineBorder(Color.black))
         self.bottom_panel.setLayout(BorderLayout())
-        self.bottom_panel.setPreferredSize(Dimension(1100, 500))
+        self.bottom_panel.setPreferredSize(Dimension(1100, 550))
         self.bottom_panel.add(self.bottom_left_panel, BorderLayout.WEST)
-        self.bottom_panel.add(self.corner_plot_panel, BorderLayout.EAST)
+        self.bottom_panel.add(self.bottom_right_panel, BorderLayout.EAST)
         
         # Build the main panel
         self.add(self.top_panel, BorderLayout.NORTH)
@@ -220,12 +230,29 @@ class AnalysisPanel(JPanel):
         # Stop if we haven't reconstructed the covariance matrix yet.
         if not self.beam_stats:
             return
-    
-        # Plot the 2D projections of the rms ellipsoid (x^T Sigma x = 1).
+        
+        # Plot the 2D projections of the rms ellipsoid (x^T Sigma x = 1).   
+        Sigma = self.beam_stats.Sigma
+        V = utils.identity_matrix(4)
+        norm = self.norm_dropdown.getSelectedItem()
+        if norm == '2D':
+            alpha_x = self.beam_stats.alpha_x
+            alpha_y = self.beam_stats.alpha_y
+            beta_x = self.beam_stats.beta_x
+            beta_y = self.beam_stats.beta_y
+            V = analysis.V_matrix_uncoupled(alpha_x, alpha_y, beta_x, beta_y)
+        elif norm == '4D':
+            U = Matrix([[0, 1, 0, 0], [-1, 0, 0, 0], [0, 0, 0, 1], [0, 0, -1, 0]])
+            SigmaU = Sigma.times(U)
+            eig = SigmaU.eig()
+            V = eig.getV()
+        Vinv = V.inverse()
+        Sigma = Vinv.times(Sigma.times(Vinv.transpose()))
+        
         self.corner_plot_panel.clear()
-        self.corner_plot_panel.rms_ellipses(self.beam_stats.Sigma)
-            
-        # Plot the reconstruction lines. 
+        self.corner_plot_panel.rms_ellipses(Sigma)
+                    
+        # Plot reconstruction lines. 
         def possible_points(M, sig_xx, sig_yy):
             Minv = M.inverse()
             x_max = math.sqrt(sig_xx)
@@ -234,10 +261,12 @@ class AnalysisPanel(JPanel):
             for slope in [-100, 100]:
                 vec_1 = Matrix([[x_max], [slope], [0], [0]])
                 vec_0 = Minv.times(vec_1)
+                vec_0 = Vinv.times(vec_0)
                 x_vals.append(vec_0.get(0, 0))
                 xp_vals.append(vec_0.get(1, 0))
                 vec_1 = Matrix([[0], [0], [y_max], [slope]])
                 vec_0 = Minv.times(vec_1)
+                vec_0 = Vinv.times(vec_0)
                 y_vals.append(vec_0.get(2, 0))
                 yp_vals.append(vec_0.get(3, 0))
             return x_vals, xp_vals, y_vals, yp_vals
@@ -372,7 +401,7 @@ class ResultsTableModel(AbstractTableModel):
 
     def __init__(self, panel):
         self.panel = panel
-        self.column_names = ['Parameters', 'Measured', 'Model']
+        self.column_names = ['Parameters', 'Measured', 'Model', 'Design']
         self.parameter_names = [
             "<html>&epsilon;<SUB>1</SUB> [mm mrad]<html>",
             "<html>&epsilon;<SUB>2</SUB> [mm mrad]<html>",
@@ -414,9 +443,22 @@ class ResultsTableModel(AbstractTableModel):
                 return self.panel.model_twiss['alpha_x']
             if row == 8:
                 return self.panel.model_twiss['alpha_y']
+        elif col == 3:
+            if row < 5:
+                return '-'
+            if not self.panel.design_twiss:
+                self.panel.compute_design_twiss()
+            if row == 5:
+                return self.panel.design_twiss['beta_x']
+            if row == 6:
+                return self.panel.design_twiss['beta_y']
+            if row == 7:
+                return self.panel.design_twiss['alpha_x']
+            if row == 8:
+                return self.panel.design_twiss['alpha_y']
 
     def getColumnCount(self):
-        return 3
+        return len(self.column_names)
 
     def getRowCount(self):
         return 9
@@ -547,4 +589,13 @@ class ReconstructCovarianceButtonListener(ActionListener):
         self.panel.beam_stats = beam_stats
         # Update panel.
         self.panel.update_tables()
+        self.panel.update_plots()
+        
+
+class NormDropdownListener(ActionListener):
+    
+    def __init__(self, panel):
+        self.panel = panel
+        
+    def actionPerformed(self, event):
         self.panel.update_plots()

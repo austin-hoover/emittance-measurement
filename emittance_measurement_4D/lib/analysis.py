@@ -87,6 +87,15 @@ def twiss2D(Sigma):
     return [alpha_x, alpha_y, beta_x, beta_y]
 
 
+def V_matrix_uncoupled(alpha_x, alpha_y, beta_x, beta_y):
+    """4x4 normalization matrix for x-x' and y-y'."""
+    V = Matrix([[sqrt(beta_x), 0, 0, 0],
+                [-alpha_x/sqrt(beta_x), 1/sqrt(beta_x), 0, 0],
+                [0, 0, sqrt(beta_y), 0],
+                [0, 0, -alpha_y/sqrt(beta_y), 1/sqrt(beta_y)]])
+    return V
+
+
 class BeamStats:
     """Container for beam statistics calculated from the covariance matrix."""
     def __init__(self, Sigma):
