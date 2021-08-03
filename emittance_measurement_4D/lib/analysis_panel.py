@@ -478,13 +478,17 @@ class LoadFilesButtonListener(ActionListener):
     def actionPerformed(self, event):
         
         # Open file chooser dialog.
-        file_chooser = JFileChooser(os.getcwd())
-        file_chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY)
-        return_value = file_chooser.showOpenDialog(self.panel);
-        directory = file_chooser.getSelectedFile()
-        if not directory or not directory.isDirectory():
-            raise ValueError('Invalid directory.')
-        files = directory.listFiles()
+        file_chooser = JFileChooser(os.getcwd())        
+        file_chooser.setFileSelectionMode(JFileChooser.FILES_AND_DIRECTORIES);
+        file_chooser.setMultiSelectionEnabled(True)
+        return_value = file_chooser.showOpenDialog(self.panel)
+        selected_items = file_chooser.getSelectedFiles()
+        files = []
+        for item in selected_items:
+            if item.isDirectory():
+                files.extend(item.listFiles())
+            else:
+                files.append(item)
         
         # Parse each file.
         measurements = []
