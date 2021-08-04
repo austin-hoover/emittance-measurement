@@ -92,6 +92,10 @@ class TransferMatrixGenerator:
         self.sequence = sequence
         self.scenario = Scenario.newScenarioFor(sequence)
         self.kin_energy = kin_energy
+        self.tracker = AlgorithmFactory.createTransferMapTracker(self.sequence)
+        self.probe = ProbeFactory.getTransferMapProbe(self.sequence, self.tracker)
+        self.probe.setKineticEnergy(self.kin_energy)
+        self.scenario.setProbe(self.probe)
         
     def sync(self, pvloggerid):
         """Sync model with machine state from PVLoggerID."""
@@ -112,13 +116,10 @@ class TransferMatrixGenerator:
             start_node_id, stop_node_id = stop_node_id, start_node_id
             reverse = True
         # Run the scenario.
-        tracker = AlgorithmFactory.createTransferMapTracker(self.sequence)
-        probe = ProbeFactory.getTransferMapProbe(self.sequence, tracker)
-        probe.setKineticEnergy(self.kin_energy)
-        self.scenario.setProbe(probe)
+        self.scenario.resetProbe()
         self.scenario.run()
         # Get transfer matrix from upstream to downstream node.
-        trajectory = probe.getTrajectory()
+        trajectory = self.probe.getTrajectory()
         state1 = trajectory.stateForElement(start_node_id)
         state2 = trajectory.stateForElement(stop_node_id)
         M1 = state1.getTransferMap().getFirstOrder()
@@ -251,6 +252,11 @@ class PhaseController:
     def beta_funcs(self, node_id):
         """Return beta functions at node entrance."""
         return self.twiss(node_id)[4:6]
+    
+    def transfer_matrix(self, node_id):
+        tmat_generator = TransferMatrixGenerator(self.sequence, self.kin_energy)
+        M = tmat_generator.generate('Begin_Of_RTBT1', node_id)
+        return M
         
     def max_betas(self, start='RTBT_Mag:QH02', stop='RTBT_Diag:WS24'):
         """Return maximum x and y beta functions from start to stop node.
