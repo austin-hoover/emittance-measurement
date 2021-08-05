@@ -195,7 +195,71 @@ def reconstruct(transfer_mats, moments, **lsq_kws):
     moment_vec = lsq_linear(A, b, **lsq_kws)
     Sigma = to_mat(moment_vec)
     Sigma = Matrix(Sigma)
-    return Sigma
+    
+    
+    
+    # Return the answer if it's okay.
+    eps_1, eps_2 = intrinsic_emittances(Sigma)
+    eps_x, eps_y = apparent_emittances(Sigma)        
+    if eps_1 * eps_2 <= eps_x * eps_y:
+        return Sigma
+    
+    # Otherwise try different fitting. 
+    print('Covariance matrix is unphysical. Running solver.')
+    
+    A, b = [], []
+    for M, (sig_xx, sig_yy, sig_xy) in zip(transfer_mats, moments):
+        A.append([M[0][0]*M[2][2],  M[0][1]*M[2][2],  M[0][0]*M[2][3],  M[0][1]*M[2][3]])
+        b.append([sig_xy])
+    A = Matrix(A)
+    b = Matrix(b)
+    Sigma_new = Sigma.copy()
+    
+    class MyScorer(Scorer):
+        
+        def __init__(self):
+            return
+        
+        def score(self, trial, variables):
+            sig_13, sig_23, sig_14, sig_24 = xal_helpers.get_trial_vals(trial, variables)
+            x = Matrix([[sig_13], [sig_23], [sig_14], [sig_24]])
+            cost = (A.times(x).minus(b)).normF()
+
+            Sigma_new.set(0, 2, sig_13)
+            Sigma_new.set(2, 0, sig_13)
+            Sigma_new.set(1, 2, sig_23)
+            Sigma_new.set(2, 1, sig_23)
+            Sigma_new.set(0, 3, sig_14)
+            Sigma_new.set(3, 0, sig_14)
+            Sigma_new.set(1, 3, sig_24)
+            Sigma_new.set(1, 3, sig_24)
+            det = Sigma_new.det()
+            if det < 0.0:
+                cost += 1e3 * abs(det)
+            
+            return cost
+
+    r_denom_13 = sqrt(Sigma.get(0, 0) * Sigma.get(2, 2))
+    r_denom_23 = sqrt(Sigma.get(1, 1) * Sigma.get(2, 2))
+    r_denom_14 = sqrt(Sigma.get(0, 0) * Sigma.get(3, 3))
+    r_denom_24 = sqrt(Sigma.get(1, 1) * Sigma.get(3, 3))
+    lb = [-r_denom_13, -r_denom_23, -r_denom_14, -r_denom_24]
+    ub = [+r_denom_13, +r_denom_23, +r_denom_14, +r_denom_24]
+    bounds = (lb, ub)
+    guess = 4 * [0.0]
+    scorer = MyScorer()
+    var_names = ['sig_13', 'sig_23', 'sig_14', 'sig_24']
+    sig_13, sig_23, sig_14, sig_24 = xal_helpers.minimize(scorer, guess, var_names, bounds, 
+                                                          tol=1e-15, verbose=2)
+    Sigma_new.set(0, 2, sig_13)
+    Sigma_new.set(2, 0, sig_13)
+    Sigma_new.set(1, 2, sig_23)
+    Sigma_new.set(2, 1, sig_23)
+    Sigma_new.set(0, 3, sig_14)
+    Sigma_new.set(3, 0, sig_14)
+    Sigma_new.set(1, 3, sig_24)
+    Sigma_new.set(1, 3, sig_24)
+    return Sigma_new
 
 
 
