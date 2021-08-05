@@ -139,11 +139,13 @@ def to_mat(moment_vec):
 
 def to_vec(Sigma):
     """Return 10 element moment vector from covariance matrix."""
-    s11, s12, s13, s14 = Sigma[0][:]
-    s22, s23, s24 = Sigma[1][1:]
-    s33, s34 = Sigma[2][2:]
-    s44 = Sigma[3][3]
-    return np.array([s11, s22, s12, s33, s44, s34, s13, s23, s14, s24])
+    sig_11, sig_12, sig_13, sig_14 = Sigma[0][:]
+    sig_22, sig_23, sig_24 = Sigma[1][1:]
+    sig_33, sig_34 = Sigma[2][2:]
+    sig_44 = Sigma[3][3]
+    return np.array([sig_11, sig_22, sig_12, 
+                     sig_33, sig_44, sig_34, 
+                     sig_13, sig_23, sig_14, sig_24])
 
 
 
@@ -235,7 +237,7 @@ class Signal:
     fit : list
         Gaussian fit amplitudes at each position.
     stats : dict
-        Each key is a different statistical parameter: ('Area' or 'Mean' or ...). 
+        Each key is a different statistical parameter: ('Area', 'Mean', etc.). 
         Each value is a Stat object that holds the parameter name, rms value, 
         and Gaussian fit value.
     """
@@ -338,11 +340,10 @@ class Measurement(dict):
             if line.startswith('PVLoggerID'):
                 self.pvloggerid = int(line.split('=')[1])
         file.close()
+        self.node_ids = sorted(list(lines))
 
         # Read the lines
-        profiles = dict()
-        self.node_ids = sorted(list(lines))
-        for node_id in sorted(list(self.node_ids)):
+        for node_id in self.node_ids:
             # Split lines into three sections:
             #     stats: statistical signal parameters;
             #     raw: wire positions and raw signal amplitudes;
@@ -378,13 +379,10 @@ class Measurement(dict):
                 ystats[name] = Stat(name, s_yrms, s_yfit)
                 ustats[name] = Stat(name, s_urms, s_ufit)
 
-            profile = Profile(
-                [xpos, ypos, upos], 
-                [xraw, yraw, uraw], 
-                [xfit, yfit, ufit], 
-                [xstats, ystats, ustats],
-            )
-            self[node_id] = profile
+            self[node_id] = Profile([xpos, ypos, upos], 
+                                    [xraw, yraw, uraw],
+                                    [xfit, yfit, ufit], 
+                                    [xstats, ystats, ustats])
             
     def get_moments(self):
         """Store/return dictionary of measured moments at each profile."""
@@ -408,8 +406,7 @@ class Measurement(dict):
         return self.transfer_mats
 
     def export_files(self):
-        """Write files in nice format (nicer than PTA files at least)."""
-        return
+        raise NotImplementedError
     
     
 def get_scan_info(measurements, tmat_generator, start_node_id):
@@ -417,17 +414,18 @@ def get_scan_info(measurements, tmat_generator, start_node_id):
     print( 'Reading files...')
     moments_dict, tmats_dict = dict(), dict()
     for measurement in measurements:
-        filename = measurement.filename.split('/')[-1]
-        print("  Reading file '{}'  pvloggerid = {}".format(filename, measurement.pvloggerid))
+        print("  Reading file '{}'  pvloggerid = {}".format(measurement.filename_short, 
+                                                            measurement.pvloggerid))
         measurement.get_moments()
-        for node_id, moments in measurement.moments.items():
+        measurement.get_transfer_mats(start_node_id, tmat_generator)
+        for node_id in measurement.node_ids:
             if node_id not in moments_dict:
                 moments_dict[node_id] = []
+            moments = measurement.moments[node_id]
             moments_dict[node_id].append(moments)
-        measurement.get_transfer_mats(start_node_id, tmat_generator)
-        for node_id, tmat in measurement.transfer_mats.items():
             if node_id not in tmats_dict:
                 tmats_dict[node_id] = []
+            tmat = measurement.transfer_mats[node_id]
             tmats_dict[node_id].append(tmat)
     print('Done.')
     return moments_dict, tmats_dict

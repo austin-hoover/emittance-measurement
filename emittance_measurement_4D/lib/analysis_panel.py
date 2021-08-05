@@ -550,6 +550,7 @@ class ExportDataButtonListener(ActionListener):
     def actionPerformed(self, event):
         print('Exporting data...')
         utils.delete_files_not_folders(self.folder)
+        measurements = self.panel.measurements
         tmats_dict = self.panel.tmats_dict
         moments_dict = self.panel.moments_dict
         
@@ -570,16 +571,19 @@ class ExportDataButtonListener(ActionListener):
                 fstr = 4 * '{} ' + '\n'
                 file.write(fstr.format(ws_id, *moments))
         file.close()
-        print("Done. Files are in folder: '_output'")
         
         # Profile data
+        # [...]
+        
+        file.close()
         
         # Other info
-        file = open(os.path.join(self.folder, 'info'), 'w')
+        file = open(os.path.join(self.folder, 'info.dat'), 'w')
         file.write('reconstruction_point = {}\n'.format(self.panel.rec_node_id))
         file.write('beam_energy_GeV = {}\n'.format(self.panel.kin_energy * 1e-9))
         file.close()
         
+        print("Done. Files are in folder: '_output'")       
 
         
 class MeasIndexDropdownListener(ActionListener):
