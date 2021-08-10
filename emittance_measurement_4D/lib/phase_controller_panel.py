@@ -430,7 +430,7 @@ class CalculateModelOpticsButtonListener(ActionListener):
             print 'Setting phases at {}...'.format(self.phase_controller.ref_ws_id)
             self.phase_controller.set_ref_ws_phases(mu_x, mu_y, beta_lims, verbose=1)
             print 'Setting betas at target...'
-            self.phase_controller.constrain_size_on_target(verbose=1)
+#            self.phase_controller.constrain_size_on_target(verbose=1)
             max_betas_anywhere = self.phase_controller.max_betas(stop=None)
             print '  Max betas anywhere: {:.3f}, {:.3f}.'.format(*max_betas_anywhere)
 
