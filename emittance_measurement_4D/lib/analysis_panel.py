@@ -68,13 +68,13 @@ import xal_helpers
 
 class AnalysisPanel(JPanel):
     
-    def __init__(self, kin_energy=1.0e9):
+    def __init__(self):
         JPanel.__init__(self)
         self.setLayout(BorderLayout())
-        self.kin_energy = kin_energy
         self.rec_node_id = 'Begin_Of_RTBT1'
         self.accelerator = XMLDataManager.loadDefaultAccelerator()
         self.sequence = self.accelerator.getComboSequence('RTBT')
+        self.kin_energy = 1e9 # [eV]
         self.tmat_generator = analysis.TransferMatrixGenerator(self.sequence, self.kin_energy)
         self.node_ids = [node.getId() for node in self.sequence.getNodes()]
         self.model_twiss = dict()
@@ -90,7 +90,6 @@ class AnalysisPanel(JPanel):
         self.model_twiss = dict()
         
     def build_panel(self):
-        print 'Energy {:.2e} [eV] is hard coded. Please fix.'.format(self.kin_energy)
         
         # Top panel
         #-------------------------------------------------------------------------------
@@ -98,17 +97,22 @@ class AnalysisPanel(JPanel):
         self.load_files_button.addActionListener(LoadFilesButtonListener(self))
         self.clear_files_button = JButton('Clear files') 
         self.clear_files_button.addActionListener(ClearFilesButtonListener(self))
+        self.export_data_button = JButton('Export data')
+        self.export_data_button.addActionListener(ExportDataButtonListener(self, '_output'))
         self.meas_index_label = JLabel('Measurement index to plot')
         self.meas_index_dropdown = JComboBox([0])
         self.meas_index_dropdown.addActionListener(MeasIndexDropdownListener(self))
-        self.export_data_button = JButton('Export data')
-        self.export_data_button.addActionListener(ExportDataButtonListener(self, '_output'))
+        self.kin_energy_label = JLabel('Energy [GeV]')
+        self.kin_energy_text_field = JTextField('1.000')
+        self.kin_energy_text_field.addActionListener(KinEnergyTextFieldListener(self))
         
         self.top_top_panel = JPanel()
         self.top_top_panel.setLayout(FlowLayout(FlowLayout.LEFT))
         self.top_top_panel.add(self.load_files_button)
         self.top_top_panel.add(self.clear_files_button)
         self.top_top_panel.add(self.export_data_button)
+        self.top_top_panel.add(self.kin_energy_label)
+        self.top_top_panel.add(self.kin_energy_text_field)
         self.top_top_panel.add(self.meas_index_label)
         self.top_top_panel.add(self.meas_index_dropdown)
         
@@ -498,16 +502,35 @@ class LoadFilesButtonListener(ActionListener):
                 files.extend(item.listFiles())
             else:
                 files.append(item)
-        
-        # Parse each file.
-        measurements = []
-        for file in files:
-            filename = file.toString()
-            filename_short = filename.split('/')[-1]
-            if 'WireAnalysisFmt' not in filename or analysis.is_harp_file(filename):
-                continue
-            measurements.append(analysis.Measurement(filename))
-                    
+        filenames = [file.toString() for file in files]
+
+        # Remove non-PTA files.
+        filenames = [filename for filename in filenames if 'WireAnalysisFmt' in filename]
+
+        # Separate harp and wire-scanner files.
+        ws_filenames = [filename for filename in filenames 
+                        if not analysis.is_harp_file(filename)]
+        harp_filenames = [filename for filename in filenames 
+                          if analysis.is_harp_file(filename)]
+
+        # Read all wire-scanner files.
+        measurements = [analysis.Measurement(filename) for filename in ws_filenames]
+
+        # Get PVLoggerID of each harp file.
+        harp_pvloggerid = dict()
+        for filename in harp_filenames:
+            file = open(filename, 'r')
+            for line in file:
+                pass
+            pvloggerid = int(line.split()[-1])
+            harp_pvloggerid[pvloggerid] = filename
+
+        # Read each harp file into the Measurement with the same PVLoggerID.
+        for measurement in measurements:
+            if measurement.pvloggerid in harp_pvloggerid:
+                filename = harp_pvloggerid[measurement.pvloggerid]
+                measurement.read_harp_file(filename)
+
         # Sort files by timestamp (oldest to newest).
         measurements = sorted(measurements, key=lambda measurement: measurement.timestamp)
         
@@ -583,8 +606,21 @@ class ExportDataButtonListener(ActionListener):
         file.write('beam_energy_GeV = {}\n'.format(self.panel.kin_energy * 1e-9))
         file.close()
         
-        print("Done. Files are in folder: '_output'")       
-
+        print("Done. Files are in folder: '_output'")  
+        
+        
+class KinEnergyTextFieldListener(ActionListener):
+    
+    def __init__(self, panel):
+        self.panel = panel
+    
+    def actionPerformed(self, event):
+        kin_energy = 1e9 * float(self.panel.kin_energy_text_field.getText())
+        self.panel.kin_energy = kin_energy
+        self.panel.tmat_generator.set_kin_energy(kin_energy)
+        self.panel.update_tables()
+        print('Updated reconstruction kinetic energy to {:.3e} [eV].'.format(kin_energy))
+        
         
 class MeasIndexDropdownListener(ActionListener):
     
