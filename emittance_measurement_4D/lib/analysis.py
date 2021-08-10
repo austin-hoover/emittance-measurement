@@ -191,12 +191,10 @@ def reconstruct(transfer_mats, moments, **lsq_kws):
         b.append(sig_xy)
 
     # Solve the problem Ax = b.
-    lsq_kws.setdefault('solver', 'lsmr')
+    lsq_kws.setdefault('solver', 'exact')
     moment_vec = lsq_linear(A, b, **lsq_kws)
     Sigma = to_mat(moment_vec)
-    Sigma = Matrix(Sigma)
-    
-    
+    Sigma = Matrix(Sigma)    
     
     # Return the answer if it's okay.
     eps_1, eps_2 = intrinsic_emittances(Sigma)
@@ -235,7 +233,7 @@ def reconstruct(transfer_mats, moments, **lsq_kws):
             Sigma_new.set(1, 3, sig_24)
             det = Sigma_new.det()
             if det < 0.0:
-                cost += 1e3 * abs(det)
+                cost += 1e12 * abs(det)
             
             return cost
 
@@ -447,6 +445,27 @@ class Measurement(dict):
                                     [xraw, yraw, uraw],
                                     [xfit, yfit, ufit], 
                                     [xstats, ystats, ustats])
+            
+    def read_harp_file(self, filename):
+        file = open(filename, 'r')
+        data = []
+        pvloggerid = None
+        for line in file:
+            tokens = line.rstrip().split()
+            if not tokens or tokens[0] in ['start', 'RTBT_Diag:Harp30']:
+                continue
+            if tokens[0] == 'PVLoggerID':
+                pvloggerid = int(tokens[-1])
+                continue
+            data.append([float(token) for token in tokens])
+        file.close()
+        
+        if pvloggerid != self.pvloggerid:
+            raise ValueError('PVLoggerID not the same as the wire-scans in this measurement.')
+        
+        xpos, xraw, ypos, yraw, upos, uraw = utils.transpose(data)
+        self['RTBT_Diag:Harp30'] = Profile([xpos, ypos, upos], 
+                                           [xraw, yraw, uraw])
             
     def get_moments(self):
         """Store/return dictionary of measured moments at each profile."""
