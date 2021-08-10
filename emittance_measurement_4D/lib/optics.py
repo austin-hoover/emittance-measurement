@@ -77,7 +77,7 @@ def safe_sync(scenario, sync_mode):
         try:
             scenario.setSynchronizationMode(Scenario.SYNC_MODE_LIVE)
             scenario.resync()
-        except (SynchronizationException, sync_exception):
+        except SynchronizationException:
             sync_mode = 'design'
             print "Can't sync with live machine. Using design fields."
     if sync_mode == 'design':
@@ -91,11 +91,13 @@ class TransferMatrixGenerator:
     def __init__(self, sequence, kin_energy):
         self.sequence = sequence
         self.scenario = Scenario.newScenarioFor(sequence)
-        self.kin_energy = kin_energy
         self.tracker = AlgorithmFactory.createTransferMapTracker(self.sequence)
         self.probe = ProbeFactory.getTransferMapProbe(self.sequence, self.tracker)
-        self.probe.setKineticEnergy(self.kin_energy)
         self.scenario.setProbe(self.probe)
+        self.set_kin_energy(kin_energy)
+        
+    def set_kin_energy(self, kin_energy):
+        self.probe.setKineticEnergy(kin_energy)
         
     def sync(self, pvloggerid):
         """Sync model with machine state from PVLoggerID."""
@@ -157,7 +159,7 @@ class PhaseController:
         self.scenario.setProbe(self.probe)
         self.track()
         
-         # Get node for each RTBT quad and quad power supply.
+        # Get node for each RTBT quad and quad power supply.
         self.quad_nodes = [node for node in self.sequence.getNodesOfType('quad') 
                            if node.getId().startswith('RTBT') 
                            and not node.getId().endswith('QV01')]
