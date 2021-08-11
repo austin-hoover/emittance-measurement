@@ -7,8 +7,11 @@ for example: 'RTBT_Mag:PS_QH02:B.LOLO, 2.145'. It then extends these limits.
 Note: the script needs to be run with chief operator privileges.
 """
 from xal.ca import Channel, ChannelFactory
-from lib.phase_controller import PhaseController
-from lib.helpers import load_sequence
+from xal.smf import Accelerator
+from xal.smf import AcceleratorSeq 
+from xal.smf.data import XMLDataManager
+
+from lib.optics import PhaseController
 
 
 ILO = 0.0
@@ -16,12 +19,13 @@ IHI = 1000.0
 BLO = 0.0
 BHI = 30.0
 
-sequence = load_sequence('RTBT')
+accelerator = XMLDataManager.loadDefaultAccelerator()
+sequence = accelerator.getComboSequence('RTBT')
 channel_factory = ChannelFactory.defaultFactory()
-controller = PhaseController(sequence)
+phase_controller = PhaseController()
 
 file = open('field_limits/default_field_limits.dat', 'w')
-for ps_id in controller.ind_ps_ids:
+for ps_id in phase_controller.ind_ps_ids:
     for key in ['B.LOLO', 'B.LOW', 'B.HIHI', 'B.HIGH', 
                 'I.LOLO', 'I.LOW', 'I.HIHI', 'I.HIGH']:
         channel_id = ps_id + ':' + key
