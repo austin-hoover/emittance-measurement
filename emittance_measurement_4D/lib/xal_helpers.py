@@ -1,4 +1,6 @@
 """Helper functions for OpenXAL scripts."""
+from __future__ import print_function
+
 from xal.extension.solver import Problem
 from xal.extension.solver import Scorer
 from xal.extension.solver import Solver
@@ -79,7 +81,7 @@ def minimize(scorer, x, var_names, bounds, maxiters=1000, tol=1e-8, verbose=0):
             raise ValueError("OpenXAL Solver cannot use float('inf') as a bound.")
         if x[i] < lb[i] or x[i] > ub[i]:
             raise ValueError('Initial guess is outside bounds.')
-            
+                        
     variables = [Variable(name, val, l, u) for name, val, l, u in zip(var_names, x, lb, ub)]
     stopper = maxEvaluationsStopper(maxiters)
     solver = Solver(SimplexSearchAlgorithm(), stopper)
@@ -88,5 +90,5 @@ def minimize(scorer, x, var_names, bounds, maxiters=1000, tol=1e-8, verbose=0):
     trial = solver.getScoreBoard().getBestSolution()
     result = get_trial_vals(trial, variables)
     if verbose > 0:
-        print solver.getScoreBoard()
+        print(solver.getScoreBoard())
     return result
