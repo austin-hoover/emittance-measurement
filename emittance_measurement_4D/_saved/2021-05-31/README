@@ -1,0 +1,4 @@
+The phase advance at WS24 was scanned 180 degrees. This is unnecessary; we didn't take into
+account the fact that we have multiple wire-scanners.
+
+The optics were calculated for 1.0 GeV, but real machine was approximately 0.963 GeV.
