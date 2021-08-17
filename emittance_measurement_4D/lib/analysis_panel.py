@@ -71,7 +71,7 @@ class AnalysisPanel(JPanel):
     def __init__(self):
         JPanel.__init__(self)
         self.setLayout(BorderLayout())
-        self.rec_node_id = 'Begin_Of_RTBT1'
+        self.rec_node_id = 'RTBT_Diag:WS02'
         self.accelerator = XMLDataManager.loadDefaultAccelerator()
         self.sequence = self.accelerator.getComboSequence('RTBT')
         self.kin_energy = 1e9 # [eV]
@@ -138,6 +138,7 @@ class AnalysisPanel(JPanel):
         self.reconstruct_covariance_button.addActionListener(ReconstructCovarianceButtonListener(self))
         self.rec_point_label = JLabel('Reconstruction point')
         self.rec_point_dropdown = JComboBox(self.node_ids)
+        self.rec_point_dropdown.setSelectedItem(self.rec_node_id)
         self.rec_point_dropdown.addActionListener(RecPointDropdownListener(self))
         self.max_iter_label = JLabel('max iter')
         self.max_iter_text_field = JTextField('100', 5)
@@ -382,9 +383,8 @@ class AnalysisPanel(JPanel):
         # Now track through the RTBT if necessary.
         sequence = self.accelerator.getComboSequence('RTBT')
         scenario = Scenario.newScenarioFor(sequence)
-        rec_node_id = self.rec_node_id
         node_ids = [node.getId() for node in sequence.getNodes()]
-        if node_ids.index(rec_node_id) > 0:
+        if node_ids.index(self.rec_node_id) > 0:
             tracker = AlgorithmFactory.createEnvelopeTracker(sequence)
             tracker.setUseSpacecharge(False)
             probe = ProbeFactory.getEnvelopeProbe(sequence, tracker)
@@ -399,7 +399,7 @@ class AnalysisPanel(JPanel):
             scenario.run()
             trajectory = probe.getTrajectory()
             calculator = CalculationsOnBeams(trajectory)
-            state = trajectory.stateForElement(rec_node_id)
+            state = trajectory.stateForElement(self.rec_node_id)
             twiss_x, twiss_y, _ = calculator.computeTwissParameters(state)
 
         self.design_twiss['alpha_x'] = twiss_x.getAlpha()
