@@ -81,7 +81,7 @@ def safe_sync(scenario, sync_mode):
             sync_mode = 'design'
             print "Can't sync with live machine. Using design fields."
     if sync_mode == 'design':
-        scenario.setSynchronizationMode(Scenario.SYNC_MODE_LIVE)
+        scenario.setSynchronizationMode(Scenario.SYNC_MODE_DESIGN)
         scenario.resync()
     return sync_mode
 
