@@ -1,3 +1,4 @@
+import copy
 import math
 import time
 import warnings
@@ -142,7 +143,7 @@ class PhaseController:
     ----------
     
     """
-    def __init__(self, ref_ws_id='RTBT_Diag:WS24', kin_energy=1.0, sync_mode='live', 
+    def __init__(self, ref_ws_id='RTBT_Diag:WS24', kin_energy=1e9, sync_mode='live', 
                  connect=True):
         self.machine_has_changed = False
         self.connect = connect
@@ -150,6 +151,7 @@ class PhaseController:
         self.accelerator = XMLDataManager.loadDefaultAccelerator()
         self.sequence = self.accelerator.getComboSequence('RTBT')
         self.scenario = Scenario.newScenarioFor(self.sequence)
+        self.tmat_gen = TransferMatrixGenerator(self.sequence, 1e9 * kin_energy)
         self.sync_mode = safe_sync(self.scenario, sync_mode)
         self.tracker = AlgorithmFactory.createEnvelopeTracker(self.sequence)
         self.tracker.setUseSpacecharge(False)
@@ -209,15 +211,15 @@ class PhaseController:
         self.default_betas_at_target = self.beta_funcs('RTBT:Tgt')
         
     def set_kin_energy(self, kin_energy):
-        """Set the probe kinetic energy [GeV]."""
+        """Set the probe kinetic energy [eV]."""
         self.kin_energy = kin_energy
-        self.probe.setKineticEnergy(1e9 * kin_energy)
+        self.probe.setKineticEnergy(kin_energy)
         self.calc_init_twiss()
         
     def initialize_envelope(self):
         """Reset the envelope probe to the start of the lattice."""
         self.scenario.resetProbe()
-        self.probe.setKineticEnergy(1e9 * self.kin_energy)
+        self.probe.setKineticEnergy(self.kin_energy)
         alpha_x = self.init_twiss['alpha_x']
         alpha_y = self.init_twiss['alpha_y']
         beta_x = self.init_twiss['beta_x']
@@ -254,17 +256,12 @@ class PhaseController:
     def beta_funcs(self, node_id):
         """Return beta functions at node entrance."""
         return self.twiss(node_id)[4:6]
-    
-    def transfer_matrix(self, node_id):
-        tmat_generator = TransferMatrixGenerator(self.sequence, self.kin_energy)
-        M = tmat_generator.generate('Begin_Of_RTBT1', node_id)
-        return M
         
     def max_betas(self, start='RTBT_Mag:QH02', stop='RTBT_Diag:WS24'):
         """Return maximum x and y beta functions from start to stop node.
         
-        Setting start=None starts tracks from the beginning of the lattice, and 
-        setting stop=None tracks through the end of the lattice.
+        Setting start=None starts tracks from the beginning of the lattice.
+        Setting stop=None tracks through the end of the lattice.
         """
         lo = None if start is None else self.trajectory.indicesForElement(start)[0]
         hi = None if stop is None else self.trajectory.indicesForElement(stop)[-1]
@@ -274,6 +271,20 @@ class PhaseController:
             beta_xs.append(beta_x)
             beta_ys.append(beta_y)
         return max(beta_xs), max(beta_ys)
+    
+    def transfer_matrix(self, node_id):
+        tracker = AlgorithmFactory.createTransferMapTracker(self.sequence)
+        probe = ProbeFactory.getTransferMapProbe(self.sequence, tracker)
+        probe.setKineticEnergy(self.kin_energy)
+        self.scenario.setProbe(probe)
+        self.scenario.run()
+        trajectory = probe.getTrajectory()
+        state = trajectory.stateForElement(node_id)
+        M = state.getTransferMap().getFirstOrder()
+        M = list_from_xal_matrix(M)
+        M = [row[:4] for row in M[:4]]
+        self.scenario.setProbe(self.probe)
+        return M
 
     def set_ref_ws_phases(self, mu_x, mu_y, beta_lims=(40, 40), verbose=0):
         """Set x and y phases from start to the reference wire-scanner.
@@ -491,7 +502,7 @@ class PhaseController:
         # Get matched Twiss at RTBT entrance
         algorithm = AlgorithmFactory.createTransferMapTracker(sequence)
         probe = ProbeFactory.getTransferMapProbe(sequence, algorithm)
-        probe.setKineticEnergy(1e9 * self.kin_energy)
+        probe.setKineticEnergy(self.kin_energy)
         scenario.setProbe(probe)
         scenario.run()
         trajectory = probe.getTrajectory()
@@ -505,12 +516,12 @@ class PhaseController:
             'beta_y': twiss_y.getBeta(),
         }
         
-    def get_phases_for_scan(self, phase_coverage=180.0, n_steps=3):
+    def get_phases_for_scan(self, phase_coverage=90., n_steps=3):
         """Create array of phases for scan. 
-        
+
         In the first{second} half of the scan, the horizontal{vertical} phase is 
         varied while the {vertical}{horizontal} phase is held fixed.
-        
+
         Example: mux = [1, 2, 3, 2, 2, 2], 
                  muy = [5, 5, 5, 4, 5, 6]
 
@@ -523,29 +534,33 @@ class PhaseController:
         n_steps : int
             The number of steps in the scan. It should be an even number >= 6.
         """              
-        def lin_phase_range(center_phase, n_steps):
-            min_phase = put_angle_in_range(center_phase - 0.5 * radians(phase_coverage))
-            max_phase = put_angle_in_range(center_phase + 0.5 * radians(phase_coverage))
-            # Difference between and max phase is always <= 180 degrees.
-            abs_diff = abs(max_phase - min_phase)
-            if abs_diff > math.pi:
-                abs_diff = 2*math.pi - abs_diff
-            # Return list of phases.
-            step = abs_diff / (n_steps - 1)
-            phases = [min_phase]
-            for _ in range(n_steps - 1):
-                phase = put_angle_in_range(phases[-1] + step)
-                phases.append(phase)
-            return phases
-        
         # Get default phase advances without changing current state.
         model_fields = self.get_fields(self.ind_quad_ids, 'model')
         self.restore_default_optics('model')
-        mu_x0, mu_y0 = self.phases(self.ref_ws_id)
+        mux0, muy0 = self.phases(self.ref_ws_id)
         self.set_fields(self.ind_quad_ids, model_fields, 'model')
-    
+
         n = int(n_steps) // 2
-        phases_x = lin_phase_range(mu_x0, n) + n * [mu_x0]
-        phases_y = n * [mu_y0] + lin_phase_range(mu_y0, n)
-        phases = [(mu_x, mu_y) for mu_x, mu_y in zip(phases_x, phases_y)]
+        phase_coverage = radians(phase_coverage)
+        mux_min = put_angle_in_range(mux0 - 0.5 * phase_coverage)
+        mux_max = put_angle_in_range(mux0 + 0.5 * phase_coverage)
+        muy_min = put_angle_in_range(muy0 - 0.5 * phase_coverage)
+        muy_max = put_angle_in_range(muy0 + 0.5 * phase_coverage)
+        phases_x = lin_phase_range(mux_min, mux_max, n) + n * [mux0]
+        phases_y = n * [muy0] + lin_phase_range(muy_min, muy_max, n)
+        phases = [(mux, muy) for mux, muy in zip(phases_x, phases_y)]
         return phases
+    
+    
+def lin_phase_range(mu_min, mu_max, n_steps):
+    # Difference between min and max phase is always <= 180 degrees.
+    abs_diff = abs(mu_max - mu_min)
+    if abs_diff > math.pi:
+        abs_diff = 2*math.pi - abs_diff
+    # Return list of phases from min_phase to max_phase.
+    step = abs_diff / (n_steps - 1)
+    phases = [mu_min]
+    for _ in range(n_steps - 1):
+        phase = phases[-1] + step
+        phases.append(put_angle_in_range(phase))
+    return phases
