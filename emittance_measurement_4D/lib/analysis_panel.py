@@ -59,7 +59,7 @@ from xal.tools.beam.calc import CalculationsOnRings
 
 # Local
 import analysis
-from optics import PhaseController
+from optics import TransferMatrixGenerator
 import plotting as plt
 import utils
 import xal_helpers
@@ -75,7 +75,7 @@ class AnalysisPanel(JPanel):
         self.accelerator = XMLDataManager.loadDefaultAccelerator()
         self.sequence = self.accelerator.getComboSequence('RTBT')
         self.kin_energy = 1e9 # [eV]
-        self.tmat_generator = analysis.TransferMatrixGenerator(self.sequence, self.kin_energy)
+        self.tmat_generator = TransferMatrixGenerator(self.sequence, self.kin_energy)
         self.node_ids = [node.getId() for node in self.sequence.getNodes()]
         self.model_twiss = dict()
         self.design_twiss = dict()
@@ -296,7 +296,7 @@ class AnalysisPanel(JPanel):
                 yyp_panel.plot(y_vals, yp_vals, color=color, ms=0, lw=2)
                 
     def compute_model_twiss(self):
-        """Get the model Twiss parameters at the reconstruction point.
+        """Compute the model Twiss parameters at the reconstruction point.
         
         We use the pvloggerid of the first measurement, assuming the optics
         don't change between measurements. The method assumes this. If the
@@ -361,8 +361,67 @@ class AnalysisPanel(JPanel):
         self.model_twiss['alpha_x'] = twiss_x.getAlpha()
         self.model_twiss['alpha_y'] = twiss_y.getAlpha()
         self.model_twiss['beta_x'] = twiss_x.getBeta()
-        self.model_twiss['beta_y'] = twiss_y.getBeta()    
+        self.model_twiss['beta_y'] = twiss_y.getBeta()   
         
+        
+    def ws_phases(self):
+        """Compute model phase advance to each wire-scanner for each measurement.
+        
+        Returns dict. Each key is a wire-scanner id. Each value is an (N, 2) list --
+        where N is the number of loaded measurements -- of the horizontal and 
+        vertical phase advances from the start of the RTBT to the wire-scanner. The
+        units are radians mod 2pi. 
+        """
+        if not self.measurements:
+            return
+        
+        phases_dict = dict()
+        
+        for measurement in self.measurements:
+            pvl_data_source = PVLoggerDataSource(measurement.pvloggerid)
+        
+            # Get the model optics at the RTBT entrance in the Ring. 
+            sequence = self.accelerator.getComboSequence('Ring')
+            scenario = Scenario.newScenarioFor(sequence)
+            scenario = pvl_data_source.setModelSource(sequence, scenario)
+            scenario.resync()
+            tracker = AlgorithmFactory.createTransferMapTracker(sequence)
+            probe = ProbeFactory.getTransferMapProbe(sequence, tracker)
+            probe.setKineticEnergy(self.kin_energy)
+            scenario.setProbe(probe)
+            scenario.run()
+            trajectory = probe.getTrajectory()
+            calculator = CalculationsOnRings(trajectory)
+            state = trajectory.stateForElement('Begin_Of_Ring3')
+            twiss_x, twiss_y, twiss_z = calculator.computeMatchedTwissAt(state)
+
+            # Track envelope probe through RTBT.
+            sequence = self.accelerator.getComboSequence('RTBT')
+            scenario = Scenario.newScenarioFor(sequence)
+            scenario = pvl_data_source.setModelSource(sequence, scenario)
+            scenario.resync()
+            tracker = AlgorithmFactory.createEnvelopeTracker(sequence)
+            tracker.setUseSpacecharge(False)
+            probe = ProbeFactory.getEnvelopeProbe(sequence, tracker)
+            probe.setBeamCurrent(0.0)
+            probe.setKineticEnergy(self.kin_energy)            
+            eps_x = eps_y = 20e-5 # [mm mrad] (arbitrary)
+            twiss_x = Twiss(twiss_x.getAlpha(), twiss_x.getBeta(), eps_x)
+            twiss_y = Twiss(twiss_y.getAlpha(), twiss_y.getBeta(), eps_y)
+            twiss_z = Twiss(0, 1, 0)
+            probe.initFromTwiss([twiss_x, twiss_y, twiss_z])
+            scenario.setProbe(probe)
+            scenario.run()
+            trajectory = probe.getTrajectory()
+            calculator = CalculationsOnBeams(trajectory)
+
+            for ws_id in measurement.node_ids:
+                state = trajectory.stateForElement(ws_id)
+                mu_x, mu_y, _ = calculator.computeBetatronPhase(state).toArray()
+                if ws_id not in phases_dict:
+                    phases_dict[ws_id] = []
+                phases_dict[ws_id].append([mu_x, mu_y])
+        return phases_dict
         
     def compute_design_twiss(self):
         """Get the design Twiss parameters at the reconstruction point."""        
@@ -595,6 +654,16 @@ class ExportDataButtonListener(ActionListener):
                 file.write(fstr.format(ws_id, *moments))
         file.close()
         
+        # Phase advances
+        phases_dict = self.panel.ws_phases()
+        file = open(os.path.join(self.folder, 'phase_adv.dat'), 'w')
+        ws_ids = sorted(list(phases_dict))
+        for ws_id in ws_ids:
+            phases = phases_dict[ws_id]
+            for (mux, muy) in phases:
+                file.write('{} {} {}\n'.format(ws_id, mux, muy))
+        file.close()
+        
         # Profile data
         # [...]
         
@@ -676,7 +745,7 @@ class ReconstructCovarianceButtonListener(ActionListener):
         solver = self.panel.llsq_solver_dropdown.getSelectedItem()
         max_iter = int(self.panel.max_iter_text_field.getText())
         lsmr_tol = float(self.panel.tol_text_field.getText())
-        Sigma = analysis.reconstruct(tmats_list, moments_list, verbose=2, 
+        Sigma = analysis.reconstruct(tmats_list, moments_list, constr=True, verbose=2, 
                                      solver=solver, max_iter=max_iter, lsmr_tol=lsmr_tol)
         beam_stats = analysis.BeamStats(Sigma)
         beam_stats.print_all()
