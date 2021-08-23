@@ -32,13 +32,14 @@ def write_traj_to_file(data, positions, filename):
     
 def list_from_xal_matrix(matrix):
     """Return list of lists from XAL matrix object."""
-    M = []
+    matrix_list = []
     for i in range(matrix.getRowCnt()):
         row = []
         for j in range(matrix.getColCnt()):
             row.append(matrix.getElem(i, j))
-        M.append(row)
-    return M
+        matrix_list.append(row)
+    return matrix_list
+
     
 
 # Solver
