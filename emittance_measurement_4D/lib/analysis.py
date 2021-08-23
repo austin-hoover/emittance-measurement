@@ -2,34 +2,24 @@
 from __future__ import print_function
 import sys
 import math
-from math import sqrt
+import random
+from math import sqrt, sin, cos
 from pprint import pprint
 from datetime import datetime
 from Jama import Matrix
 
-from xal.extension.solver import Problem
 from xal.extension.solver import Scorer
-from xal.extension.solver import Solver
-from xal.extension.solver import Stopper
-from xal.extension.solver import Trial
-from xal.extension.solver import Variable
-from xal.extension.solver.algorithm import SimplexSearchAlgorithm
-from xal.extension.solver.ProblemFactory import getInverseSquareMinimizerProblem
-from xal.extension.solver.SolveStopperFactory import maxEvaluationsStopper
-from xal.model.probe import Probe
-from xal.model.probe.traj import Trajectory
-from xal.sim.scenario import AlgorithmFactory
-from xal.sim.scenario import ProbeFactory
+from xal.service.pvlogger.sim import PVLoggerDataSource
 from xal.sim.scenario import Scenario
 from xal.smf import Accelerator
-from xal.smf import AcceleratorSeq 
+from xal.smf import AcceleratorSeq
 from xal.smf.data import XMLDataManager
 
 # Local
 from least_squares import lsq_linear
-from optics import TransferMatrixGenerator
 import utils
-import xal_helpers
+from xal_helpers import minimize
+from xal_helpers import get_trial_vals
 
 
 DIAG_WIRE_ANGLE = utils.radians(-45.0)
@@ -87,13 +77,36 @@ def apparent_emittances(Sigma):
     return eps_x, eps_y
 
 
+def emittances(Sigma):
+    eps_x, eps_y = apparent_emittances(Sigma)
+    eps_1, eps_2 = intrinsic_emittances(Sigma)
+    return eps_x, eps_y, eps_1, eps_2
+
+
 def twiss2D(Sigma):
     eps_x, eps_y = apparent_emittances(Sigma)
     beta_x = Sigma.get(0, 0) / eps_x
     beta_y = Sigma.get(2, 2) / eps_y
     alpha_x = -Sigma.get(0, 1) / eps_x
     alpha_y = -Sigma.get(2, 3) / eps_y
-    return [alpha_x, alpha_y, beta_x, beta_y]
+    return alpha_x, alpha_y, beta_x, beta_y
+
+
+def is_positive_definite(Sigma):
+    """Return True if symmetric matrix is positive definite."""
+    return all([e >= 0 for e in Sigma.eig().getRealEigenvalues()])
+
+
+def is_valid_cov(Sigma):
+    """Return True if the covariance matrix `Sigma` is unphysical."""
+    if not is_positive_definite(Sigma):
+        return False
+    if Sigma.det() < 0:
+        return False
+    eps_x, eps_y, eps_1, eps_2 = emittances(Sigma)
+    if (eps_x * eps_y < eps_1 * eps_2):
+        return False
+    return True
 
 
 def V_matrix_uncoupled(alpha_x, alpha_y, beta_x, beta_y):
@@ -126,15 +139,15 @@ class BeamStats:
         print('beta_x, beta_y = {} {} [m/rad]'.format(self.beta_x, self.beta_y))
 
 
-def to_mat(moment_vec):
+def to_mat(moments):
     """Return covariance matrix from 10 element moment vector."""
     (sig_11, sig_22, sig_12,
      sig_33, sig_44, sig_34, 
-     sig_13, sig_23, sig_14, sig_24) = moment_vec
-    return [[sig_11, sig_12, sig_13, sig_14], 
-            [sig_12, sig_22, sig_23, sig_24], 
-            [sig_13, sig_23, sig_33, sig_34], 
-            [sig_14, sig_24, sig_34, sig_44]]
+     sig_13, sig_23, sig_14, sig_24) = moments
+    return Matrix([[sig_11, sig_12, sig_13, sig_14], 
+                   [sig_12, sig_22, sig_23, sig_24], 
+                   [sig_13, sig_23, sig_33, sig_34], 
+                   [sig_14, sig_24, sig_34, sig_44]])
 
 
 def to_vec(Sigma):
@@ -147,7 +160,7 @@ def to_vec(Sigma):
                      sig_33, sig_44, sig_34, 
                      sig_13, sig_23, sig_14, sig_24])
 
-
+ 
 
 # Covariance matrix reconstruction
 #-------------------------------------------------------------------------------
@@ -162,7 +175,7 @@ def get_sig_xy(sig_xx, sig_yy, sig_uu, diag_wire_angle):
     return sig_xy
 
 
-def reconstruct(transfer_mats, moments, **lsq_kws):
+def reconstruct(transfer_mats, moments, constr=True, **lsq_kws):
     """Reconstruct covariance matrix from measured moments and transfer matrices.
     
     Parameters
@@ -172,6 +185,9 @@ def reconstruct(transfer_mats, moments, **lsq_kws):
     moments : list
         Each element is list containing of [cov(x, x), cov(y, y), cov(x, y)], 
         where cov means covariance.
+    constr: bool
+        Whether to try nonlinear solver if LLSQ answer is unphysical. Default
+        is True.
     **lsq_kws
         Key word arguments passed to `lsq_linear` method.
         
@@ -194,69 +210,129 @@ def reconstruct(transfer_mats, moments, **lsq_kws):
     lsq_kws.setdefault('solver', 'exact')
     moment_vec = lsq_linear(A, b, **lsq_kws)
     Sigma = to_mat(moment_vec)
-    Sigma = Matrix(Sigma)    
     
     # Return the answer if it's okay.
-    eps_1, eps_2 = intrinsic_emittances(Sigma)
-    eps_x, eps_y = apparent_emittances(Sigma)        
-    if eps_1 * eps_2 <= eps_x * eps_y:
+    if not constr:
         return Sigma
     
-    # Otherwise try different fitting. 
-    print('Covariance matrix is unphysical. Running solver.')
+    def is_positive_definite(Sigma):
+        eig_decomp = Sigma.eig()
+        return any([eigval < 0 for eigval in eig_decomp.getRealEigenvalues()])
     
-    A, b = [], []
+    if is_positive_definite(Sigma):
+        return Sigma
+    
+    # Otherwise try different fitting.
+    print('Covariance matrix is unphysical. Running solver.')
+    Axy, bxy = [], []
     for M, (sig_xx, sig_yy, sig_xy) in zip(transfer_mats, moments):
-        A.append([M[0][0]*M[2][2],  M[0][1]*M[2][2],  M[0][0]*M[2][3],  M[0][1]*M[2][3]])
-        b.append([sig_xy])
-    A = Matrix(A)
-    b = Matrix(b)
+        Axy.append([M[0][0]*M[2][2],  M[0][1]*M[2][2],  M[0][0]*M[2][3],  M[0][1]*M[2][3]])
+        bxy.append([sig_xy])
+    Axy = Matrix(Axy)
+    bxy = Matrix(bxy)
     Sigma_new = Sigma.copy()
     
-    class MyScorer(Scorer):
-        
-        def __init__(self):
-            return
-        
-        def score(self, trial, variables):
-            sig_13, sig_23, sig_14, sig_24 = xal_helpers.get_trial_vals(trial, variables)
-            x = Matrix([[sig_13], [sig_23], [sig_14], [sig_24]])
-            cost = (A.times(x).minus(b)).normF()
+    eps_x, eps_y = apparent_emittances(Sigma)  
+    alpha_x, alpha_y, beta_x, beta_y = twiss2D(Sigma)
+    
 
-            Sigma_new.set(0, 2, sig_13)
-            Sigma_new.set(2, 0, sig_13)
-            Sigma_new.set(1, 2, sig_23)
-            Sigma_new.set(2, 1, sig_23)
-            Sigma_new.set(0, 3, sig_14)
-            Sigma_new.set(3, 0, sig_14)
-            Sigma_new.set(1, 3, sig_24)
-            Sigma_new.set(1, 3, sig_24)
-            det = Sigma_new.det()
-            if det < 0.0:
-                cost += 1e12 * abs(det)
-            
-            return cost
+    # This section puts bounds on the cross-plane moments. For some reason, it
+    # doesn't seem to work on real data (it terminates at a solution I know
+    # is wrong).
+    #---------------------------------------------------------------------------
+#     class MyScorer(Scorer):
+        
+#         def __init__(self):
+#             return
+        
+#         def score(self, trial, variables):
+#             sig_13, sig_23, sig_14, sig_24 = get_trial_vals(trial, variables)
+#             vec = Matrix([[sig_13], [sig_23], [sig_14], [sig_24]])
+#             residuals = Axy.times(vec).minus(target)
+#             cost = residuals.normF()**2
+#             print(cost)
+#             return cost
 
-    r_denom_13 = sqrt(Sigma.get(0, 0) * Sigma.get(2, 2))
-    r_denom_23 = sqrt(Sigma.get(1, 1) * Sigma.get(2, 2))
-    r_denom_14 = sqrt(Sigma.get(0, 0) * Sigma.get(3, 3))
-    r_denom_24 = sqrt(Sigma.get(1, 1) * Sigma.get(3, 3))
-    lb = [-r_denom_13, -r_denom_23, -r_denom_14, -r_denom_24]
-    ub = [+r_denom_13, +r_denom_23, +r_denom_14, +r_denom_24]
-    bounds = (lb, ub)
-    guess = 4 * [0.0]
-    scorer = MyScorer()
-    var_names = ['sig_13', 'sig_23', 'sig_14', 'sig_24']
-    sig_13, sig_23, sig_14, sig_24 = xal_helpers.minimize(scorer, guess, var_names, bounds, 
-                                                          tol=1e-15, verbose=2)
-    Sigma_new.set(0, 2, sig_13)
-    Sigma_new.set(2, 0, sig_13)
-    Sigma_new.set(1, 2, sig_23)
-    Sigma_new.set(2, 1, sig_23)
-    Sigma_new.set(0, 3, sig_14)
-    Sigma_new.set(3, 0, sig_14)
-    Sigma_new.set(1, 3, sig_24)
-    Sigma_new.set(1, 3, sig_24)
+#     r_denom_13 = sqrt(Sigma.get(0, 0) * Sigma.get(2, 2))
+#     r_denom_23 = sqrt(Sigma.get(1, 1) * Sigma.get(2, 2))
+#     r_denom_14 = sqrt(Sigma.get(0, 0) * Sigma.get(3, 3))
+#     r_denom_24 = sqrt(Sigma.get(1, 1) * Sigma.get(3, 3))
+#     lb = [-r_denom_13, -r_denom_23, -r_denom_14, -r_denom_24]
+#     ub = [+r_denom_13, +r_denom_23, +r_denom_14, +r_denom_24]
+#     bounds = (lb, ub)
+#     guess = 4 * [0.0]
+#     scorer = MyScorer()
+#     var_names = ['sig_13', 'sig_23', 'sig_14', 'sig_24']
+#     sig_13, sig_23, sig_14, sig_24 = minimize(scorer, guess, var_names, bounds, verbose=2)
+#     Sigma_new.set(0, 2, sig_13)
+#     Sigma_new.set(2, 0, sig_13)
+#     Sigma_new.set(1, 2, sig_23)
+#     Sigma_new.set(2, 1, sig_23)
+#     Sigma_new.set(0, 3, sig_14)
+#     Sigma_new.set(3, 0, sig_14)
+#     Sigma_new.set(1, 3, sig_24)
+#     Sigma_new.set(3, 1, sig_24)
+#     return Sigma_new
+
+
+#     # This section uses the parameterization of Edwards/Teng.
+#     #---------------------------------------------------------------------------    
+#     def get_cov(eps_1, eps_2, alpha_x, alpha_y, beta_x, beta_y, a, b, c):
+#         E = utils.diagonal_matrix([eps_1, eps_1, eps_2, eps_2])
+#         V = Matrix(4, 4, 0.)
+#         V.set(0, 0, sqrt(beta_x))
+#         V.set(1, 0, -alpha_x / sqrt(beta_x))
+#         V.set(1, 1, 1.0 / sqrt(beta_x))
+#         V.set(2, 2, sqrt(beta_y))
+#         V.set(3, 2, -alpha_y / sqrt(beta_y))
+#         V.set(3, 3, 1.0 / sqrt(beta_y))
+#         if a == 0:
+#             if b == 0 or c == 0:
+#                 d = 0
+#             else:
+#                 raise ValueError("a is zero but b * c is not zero.")
+#         else:
+#             d = b * c / a
+#         C = Matrix([[1, 0, a, b], [0, 1, c, d], [-d, b, 1, 0], [c, -a, 0, 1]])
+#         VC = V.times(C)
+#         return VC.times(E.times(VC.transpose()))
+    
+    
+#     class MyScorer(Scorer):
+        
+#         def __init__(self):
+#             return
+        
+#         def score(self, trial, variables):
+#             eps_1, eps_2, a, b, c = get_trial_vals(trial, variables)
+#             S = get_cov(eps_1, eps_2, alpha_x, alpha_y, beta_x, beta_y, a, b, c)
+#             vec = Matrix([[S.get(0, 2)], [S.get(1, 2)], [S.get(0, 3)], [S.get(1, 3)]])
+#             residuals = Axy.times(vec).minus(bxy)
+#             cost = residuals.normF()**2
+#             f = 1.0
+#             cost += f * (S.get(0, 0) - Sigma.get(0, 0))**2
+#             cost += f * (S.get(0, 1) - Sigma.get(0, 1))**2
+#             cost += f * (S.get(1, 1) - Sigma.get(1, 1))**2
+#             cost += f * (S.get(2, 2) - Sigma.get(2, 2))**2
+#             cost += f * (S.get(2, 3) - Sigma.get(2, 3))**2
+#             cost += f * (S.get(3, 3) - Sigma.get(3, 3))**2
+#             return cost
+                
+#     inf = 1e20
+#     lb = [0., 0., -inf, -inf, -inf]
+#     ub = inf
+#     bounds = (lb, ub)
+#     guess = [eps_x, eps_y, random.random(), random.random(), random.random()]
+#     var_names = ['eps_1', 'eps_2', 'a', 'b', 'c']
+#     scorer = MyScorer()   
+    
+#     eps_1, eps_2, a, b, c = minimize(scorer, guess, var_names, bounds, maxiters=50000, tol=1e-15, verbose=2)
+    
+#     S = get_cov(eps_1, eps_2, alpha_x, alpha_y, beta_x, beta_y, a, b, c)
+#     for (i, j) in [(0, 2), (1, 2), (0, 3), (1, 3)]:
+#         Sigma_new.set(i, j, S.get(i, j))
+#         Sigma_new.set(j, i, S.get(i, j))
+
     return Sigma_new
 
 
@@ -460,8 +536,8 @@ class Measurement(dict):
             data.append([float(token) for token in tokens])
         file.close()
         
-        if pvloggerid != self.pvloggerid:
-            raise ValueError('PVLoggerID not the same as the wire-scans in this measurement.')
+#         if pvloggerid != self.pvloggerid:
+#             raise ValueError('PVLoggerID not the same as the wire-scans in this measurement.')
         
         xpos, xraw, ypos, yraw, upos, uraw = utils.transpose(data)
         self['RTBT_Diag:Harp30'] = Profile([xpos, ypos, upos], 
