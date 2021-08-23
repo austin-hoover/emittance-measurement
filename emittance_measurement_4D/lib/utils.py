@@ -86,6 +86,19 @@ def transpose(array):
     return [list(x) for x in zip(*array)]
 
 
+def mean(xx):
+    return sum(xx) / len(xx)
+
+
+def variance(xx):
+    x_avg = mean(xx)
+    return sum([(x - x_avg)**2 for x in xx]) / len(xx)
+
+
+def std(xx):
+    return math.sqrt(variance(xx))
+
+
 # JAMA matrices
 #-------------------------------------------------------------------------------
 def diagonal_matrix(diagonal_elements):
@@ -98,6 +111,50 @@ def diagonal_matrix(diagonal_elements):
 
 def identity_matrix(n):
     return diagonal_matrix(n * [1.0])
+
+
+def col_mat_to_list(M):
+    """Convert Jama matrix of shape (n, 1) to list of shape (n,)."""
+    return [M.get(i, 0) for i in range(M.getRowDimension())]
+
+
+def list_to_col_mat(x):
+    """Convert list of shape (n,) to Jama matrix of shape (n, 1)."""
+    M = Matrix(len(x), 1)
+    for i in range(len(x)):
+        M.set(i, 0, x[i])
+    return M
+
+
+def get_col(M, col):
+    """Get column of Jama matrix as list."""
+    column = M.getMatrix(0, M.getRowDimension() - 1, [col])
+    return col_mat_to_list(column)
+
+
+def get_row(M, row):
+    """Get row of Jama matrix as list."""
+    row = M.getMatrix([row], 0, M.getColumnDimension())
+    return list(row.getArray())
+
+def mean_cols(M):
+    if type(M) is list:
+        M = Matrix(M)
+    return [mean(get_col(M, j)) for j in range(M.getColumnDimension())]
+
+
+def std_cols(M):
+    if type(M) is list:
+        M = Matrix(M)
+    return [std(get_col(M, j)) for j in range(M.getColumnDimension())]
+
+
+def cond(A):
+    """Return condition number of square matrix A."""
+    if type(A) is list:
+        A = Matrix(A)
+    return A.normF() * (A.inverse()).normF()
+
 
 
 # Miscellaneous
