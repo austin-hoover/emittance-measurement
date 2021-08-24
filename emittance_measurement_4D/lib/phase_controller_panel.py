@@ -499,12 +499,12 @@ class SetLiveOpticsButtonListener(ActionListener):
         print field_set_kws
         if scan_index == 'default':
             self.phase_controller.restore_default_optics('model')
-#             self.phase_controller.restore_default_optics('live')
+            self.phase_controller.restore_default_optics('live')
         else:
             scan_index = int(scan_index)
             model_fields = self.panel.model_fields_list[scan_index]
             self.phase_controller.set_fields(quad_ids, model_fields, 'model')
-#             self.phase_controller.set_fields(quad_ids, model_fields, 'live', **field_set_kws)
+            self.phase_controller.set_fields(quad_ids, model_fields, 'live', **field_set_kws)
         self.panel.quad_settings_table.getModel().fireTableDataChanged()
         self.panel.update_plots()
         print 'Done.'
