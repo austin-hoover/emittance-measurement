@@ -546,8 +546,11 @@ class PhaseController:
         mux_max = put_angle_in_range(mux0 + 0.5 * phase_coverage)
         muy_min = put_angle_in_range(muy0 - 0.5 * phase_coverage)
         muy_max = put_angle_in_range(muy0 + 0.5 * phase_coverage)
-        phases_x = lin_phase_range(mux_min, mux_max, n) + n * [mux0]
-        phases_y = n * [muy0] + lin_phase_range(muy_min, muy_max, n)
+        # phases_x = lin_phase_range(mux_min, mux_max, n) + n * [mux0]
+        # phases_y = n * [muy0] + lin_phase_range(muy_min, muy_max, n)
+        phases_x = lin_phase_range(mux_min, mux_max, n_steps)
+        phases_y = lin_phase_range(muy_min, muy_max, n_steps)
+        phases_y = list(reversed(phases_y))
         phases = [(mux, muy) for mux, muy in zip(phases_x, phases_y)]
         return phases
     
