@@ -211,15 +211,24 @@ def reconstruct(transfer_mats, moments, constr=True, **lsq_kws):
     moment_vec = lsq_linear(A, b, **lsq_kws)
     Sigma = to_mat(moment_vec)
     
-    # Return the answer if it's okay.
+    # Return the answer if we don't care if it's physical or not.
     if not constr:
         return Sigma
-    
+
+    # Return the answer if Sigma is physical.
     def is_positive_definite(Sigma):
         eig_decomp = Sigma.eig()
         return any([eigval < 0 for eigval in eig_decomp.getRealEigenvalues()])
-    
-    if is_positive_definite(Sigma):
+
+    def is_physical_cov(Sigma):
+        if is_positive_definite(Sigma) and Sigma.det() >= 0:
+            eps_x, eps_y, eps_1, eps_2 = emittances(Sigma)
+            if (eps_x * eps_y >= eps_1 * eps_2):
+                return True
+        return False
+
+    if is_physical_cov(Sigma):
+        print('Covariance matrix is physical.')
         return Sigma
     
     # Otherwise try different fitting.
@@ -275,65 +284,59 @@ def reconstruct(transfer_mats, moments, constr=True, **lsq_kws):
 #     return Sigma_new
 
 
-#     # This section uses the parameterization of Edwards/Teng.
-#     #---------------------------------------------------------------------------    
-#     def get_cov(eps_1, eps_2, alpha_x, alpha_y, beta_x, beta_y, a, b, c):
-#         E = utils.diagonal_matrix([eps_1, eps_1, eps_2, eps_2])
-#         V = Matrix(4, 4, 0.)
-#         V.set(0, 0, sqrt(beta_x))
-#         V.set(1, 0, -alpha_x / sqrt(beta_x))
-#         V.set(1, 1, 1.0 / sqrt(beta_x))
-#         V.set(2, 2, sqrt(beta_y))
-#         V.set(3, 2, -alpha_y / sqrt(beta_y))
-#         V.set(3, 3, 1.0 / sqrt(beta_y))
-#         if a == 0:
-#             if b == 0 or c == 0:
-#                 d = 0
-#             else:
-#                 raise ValueError("a is zero but b * c is not zero.")
-#         else:
-#             d = b * c / a
-#         C = Matrix([[1, 0, a, b], [0, 1, c, d], [-d, b, 1, 0], [c, -a, 0, 1]])
-#         VC = V.times(C)
-#         return VC.times(E.times(VC.transpose()))
-    
-    
-#     class MyScorer(Scorer):
-        
-#         def __init__(self):
-#             return
-        
-#         def score(self, trial, variables):
-#             eps_1, eps_2, a, b, c = get_trial_vals(trial, variables)
-#             S = get_cov(eps_1, eps_2, alpha_x, alpha_y, beta_x, beta_y, a, b, c)
-#             vec = Matrix([[S.get(0, 2)], [S.get(1, 2)], [S.get(0, 3)], [S.get(1, 3)]])
-#             residuals = Axy.times(vec).minus(bxy)
-#             cost = residuals.normF()**2
-#             f = 1.0
-#             cost += f * (S.get(0, 0) - Sigma.get(0, 0))**2
-#             cost += f * (S.get(0, 1) - Sigma.get(0, 1))**2
-#             cost += f * (S.get(1, 1) - Sigma.get(1, 1))**2
-#             cost += f * (S.get(2, 2) - Sigma.get(2, 2))**2
-#             cost += f * (S.get(2, 3) - Sigma.get(2, 3))**2
-#             cost += f * (S.get(3, 3) - Sigma.get(3, 3))**2
-#             return cost
-                
-#     inf = 1e20
-#     lb = [0., 0., -inf, -inf, -inf]
-#     ub = inf
-#     bounds = (lb, ub)
-#     guess = [eps_x, eps_y, random.random(), random.random(), random.random()]
-#     var_names = ['eps_1', 'eps_2', 'a', 'b', 'c']
-#     scorer = MyScorer()   
-    
-#     eps_1, eps_2, a, b, c = minimize(scorer, guess, var_names, bounds, maxiters=50000, tol=1e-15, verbose=2)
-    
-#     S = get_cov(eps_1, eps_2, alpha_x, alpha_y, beta_x, beta_y, a, b, c)
-#     for (i, j) in [(0, 2), (1, 2), (0, 3), (1, 3)]:
-#         Sigma_new.set(i, j, S.get(i, j))
-#         Sigma_new.set(j, i, S.get(i, j))
+    # This section uses the parameterization of Edwards/Teng.
+    #---------------------------------------------------------------------------
+    def get_cov(eps_1, eps_2, alpha_x, alpha_y, beta_x, beta_y, a, b, c):
+        E = utils.diagonal_matrix([eps_1, eps_1, eps_2, eps_2])
+        V = Matrix(4, 4, 0.)
+        V.set(0, 0, sqrt(beta_x))
+        V.set(1, 0, -alpha_x / sqrt(beta_x))
+        V.set(1, 1, 1 / sqrt(beta_x))
+        V.set(2, 2, sqrt(beta_y))
+        V.set(3, 2, -alpha_y / sqrt(beta_y))
+        V.set(3, 3, 1 / sqrt(beta_y))
+        if a == 0:
+            if b == 0 or c == 0:
+                d = 0
+            else:
+                raise ValueError("a is zero but b * c is not zero.")
+        else:
+            d = b * c / a
+        C = Matrix([[1, 0, a, b], [0, 1, c, d], [-d, b, 1, 0], [c, -a, 0, 1]])
+        VC = V.times(C)
+        return VC.times(E.times(VC.transpose()))
 
-    return Sigma_new
+    class MyScorer(Scorer):
+        
+        def __init__(self):
+            return
+        
+        def score(self, trial, variables):
+            eps_1, eps_2, a, b, c = get_trial_vals(trial, variables)
+            S = get_cov(eps_1, eps_2, alpha_x, alpha_y, beta_x, beta_y, a, b, c)
+            vec = Matrix([[S.get(0, 2)], [S.get(1, 2)], [S.get(0, 3)], [S.get(1, 3)]])
+            residuals = Axy.times(vec).minus(bxy)
+            cost = residuals.normF()**2
+            f = 1.0
+            cost += f * (S.get(0, 0) - Sigma.get(0, 0))**2
+            cost += f * (S.get(0, 1) - Sigma.get(0, 1))**2
+            cost += f * (S.get(1, 1) - Sigma.get(1, 1))**2
+            cost += f * (S.get(2, 2) - Sigma.get(2, 2))**2
+            cost += f * (S.get(2, 3) - Sigma.get(2, 3))**2
+            cost += f * (S.get(3, 3) - Sigma.get(3, 3))**2
+            return cost
+                
+    inf = 1e20
+    lb = [0., 0., -inf, -inf, -inf]
+    ub = inf
+    bounds = (lb, ub)
+    guess = [1.0 * eps_x, 1.0 * eps_y, 0.1 * random.random(), 0.1 * random.random(), -0.1 * random.random()]
+    var_names = ['eps_1', 'eps_2', 'a', 'b', 'c']
+    scorer = MyScorer()
+    
+    eps_1, eps_2, a, b, c = minimize(scorer, guess, var_names, bounds, maxiters=50000, tol=1e-15, verbose=2)
+    S = get_cov(eps_1, eps_2, alpha_x, alpha_y, beta_x, beta_y, a, b, c)
+    return S
 
 
 

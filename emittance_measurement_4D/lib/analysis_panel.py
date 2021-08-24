@@ -27,6 +27,7 @@ from javax.swing import BorderFactory
 from javax.swing import BoxLayout
 from javax.swing import GroupLayout
 from javax.swing import JButton
+from javax.swing import JCheckBox
 from javax.swing import JComboBox
 from javax.swing import JFileChooser
 from javax.swing import JFrame
@@ -166,12 +167,16 @@ class AnalysisPanel(JPanel):
         bottom_left_top_panel1.add(self.rec_point_dropdown)
         bottom_left_top_panel2 = JPanel()
         bottom_left_top_panel2.setLayout(FlowLayout(FlowLayout.LEFT))
-        bottom_left_top_panel2.add(self.llsq_solver_label)
-        bottom_left_top_panel2.add(self.llsq_solver_dropdown)
-        bottom_left_top_panel2.add(self.max_iter_label)
-        bottom_left_top_panel2.add(self.max_iter_text_field)
-        bottom_left_top_panel2.add(self.tol_label)
-        bottom_left_top_panel2.add(self.tol_text_field)
+        # bottom_left_top_panel2.add(self.llsq_solver_label)
+        # bottom_left_top_panel2.add(self.llsq_solver_dropdown)
+        # bottom_left_top_panel2.add(self.max_iter_label)
+        # bottom_left_top_panel2.add(self.max_iter_text_field)
+        # bottom_left_top_panel2.add(self.tol_label)
+        # bottom_left_top_panel2.add(self.tol_text_field)
+
+        self.keep_physical_checkbox = JCheckBox('Keep answer physical', False)
+        bottom_left_top_panel2.add(self.keep_physical_checkbox)
+
         bottom_left_top_panel.add(bottom_left_top_panel1)
         bottom_left_top_panel.add(bottom_left_top_panel2)
         self.bottom_left_panel.add(bottom_left_top_panel, BorderLayout.NORTH)
@@ -742,11 +747,14 @@ class ReconstructCovarianceButtonListener(ActionListener):
             tmats_list.extend(tmats_dict[node_id])
             
         # Reconstruct the covariance matrix.
-        solver = self.panel.llsq_solver_dropdown.getSelectedItem()
-        max_iter = int(self.panel.max_iter_text_field.getText())
-        lsmr_tol = float(self.panel.tol_text_field.getText())
-        Sigma = analysis.reconstruct(tmats_list, moments_list, constr=True, verbose=2, 
-                                     solver=solver, max_iter=max_iter, lsmr_tol=lsmr_tol)
+        # solver = self.panel.llsq_solver_dropdown.getSelectedItem()
+        # max_iter = int(self.panel.max_iter_text_field.getText())
+        # lsmr_tol = float(self.panel.tol_text_field.getText())
+        # Sigma = analysis.reconstruct(tmats_list, moments_list, constr=True, verbose=2,
+        #                              solver=solver, max_iter=max_iter, lsmr_tol=lsmr_tol)
+        constr = self.panel.keep_physical_checkbox.isSelected()
+        Sigma = analysis.reconstruct(tmats_list, moments_list, constr=constr, verbose=2,
+                                     solver='exact', max_iter=10000)
         beam_stats = analysis.BeamStats(Sigma)
         beam_stats.print_all()
         self.panel.beam_stats = beam_stats
