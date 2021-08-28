@@ -4,6 +4,17 @@ import os
 from Jama import Matrix
 
 
+def list_files(path, join=True):
+    files = []
+    for file in os.listdir(path):
+        file_path = os.path.join(path, file)
+        if os.path.isfile(file_path) and not file.startswith('.'):
+            if join:
+                files.append(file_path)
+            else:
+                files.append(file)
+    return files
+
 # Lists
 #-------------------------------------------------------------------------------
 def split(items, token):
