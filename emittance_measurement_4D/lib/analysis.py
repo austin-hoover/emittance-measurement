@@ -23,6 +23,7 @@ from xal_helpers import get_trial_vals
 
 
 DIAG_WIRE_ANGLE = utils.radians(-45.0)
+INF = 1e20
 
 
 # Covariance matrix analysis
@@ -94,19 +95,16 @@ def twiss2D(Sigma):
 
 def is_positive_definite(Sigma):
     """Return True if symmetric matrix is positive definite."""
-    return all([e >= 0 for e in Sigma.eig().getRealEigenvalues()])
+    return any([eigval < 0 for eigval in Sigma.eig().getRealEigenvalues()])
 
 
-def is_valid_cov(Sigma):
-    """Return True if the covariance matrix `Sigma` is unphysical."""
-    if not is_positive_definite(Sigma):
-        return False
-    if Sigma.det() < 0:
-        return False
-    eps_x, eps_y, eps_1, eps_2 = emittances(Sigma)
-    if (eps_x * eps_y < eps_1 * eps_2):
-        return False
-    return True
+def is_valid_covariance_matrix(Sigma):
+    """Return True if the covariance matrix `Sigma` makes physical sense."""
+    if is_positive_definite(Sigma) and Sigma.det() >= 0:
+        eps_x, eps_y, eps_1, eps_2 = emittances(Sigma)
+        if (eps_x * eps_y >= eps_1 * eps_2):
+            return True
+    return False
 
 
 def V_matrix_uncoupled(alpha_x, alpha_y, beta_x, beta_y):
@@ -196,95 +194,40 @@ def reconstruct(transfer_mats, moments, constr=True, **lsq_kws):
     list, shape (4, 4)
         Reconstructed covariance matrix.
     """
-    # Form A and b.
-    A, b = [], []
+    A, target = [], []
     for M, (sig_xx, sig_yy, sig_xy) in zip(transfer_mats, moments):
         A.append([M[0][0]**2, M[0][1]**2, 2*M[0][0]*M[0][1], 0, 0, 0, 0, 0, 0, 0])
         A.append([0, 0, 0, M[2][2]**2, M[2][3]**2, 2*M[2][2]*M[2][3], 0, 0, 0, 0])
         A.append([0, 0, 0, 0, 0, 0, M[0][0]*M[2][2],  M[0][1]*M[2][2],  M[0][0]*M[2][3],  M[0][1]*M[2][3]])
-        b.append(sig_xx)
-        b.append(sig_yy)
-        b.append(sig_xy)
+        target.append(sig_xx)
+        target.append(sig_yy)
+        target.append(sig_xy)
 
-    # Solve the problem Ax = b.
     lsq_kws.setdefault('solver', 'exact')
-    moment_vec = lsq_linear(A, b, **lsq_kws)
-    Sigma = to_mat(moment_vec)
+    Sigma = to_mat(lsq_linear(A, target, **lsq_kws))
     
-    # Return the answer if we don't care if it's physical or not.
     if not constr:
         return Sigma
 
-    # Return the answer if Sigma is physical.
-    def is_positive_definite(Sigma):
-        eig_decomp = Sigma.eig()
-        return any([eigval < 0 for eigval in eig_decomp.getRealEigenvalues()])
-
-    def is_physical_cov(Sigma):
-        if is_positive_definite(Sigma) and Sigma.det() >= 0:
-            eps_x, eps_y, eps_1, eps_2 = emittances(Sigma)
-            if (eps_x * eps_y >= eps_1 * eps_2):
-                return True
-        return False
-
-    if is_physical_cov(Sigma):
+    if is_valid_covariance_matrix(Sigma):
         print('Covariance matrix is physical.')
         return Sigma
     
-    # Otherwise try different fitting.
     print('Covariance matrix is unphysical. Running solver.')
-    Axy, bxy = [], []
-    for M, (sig_xx, sig_yy, sig_xy) in zip(transfer_mats, moments):
-        Axy.append([M[0][0]*M[2][2],  M[0][1]*M[2][2],  M[0][0]*M[2][3],  M[0][1]*M[2][3]])
-        bxy.append([sig_xy])
-    Axy = Matrix(Axy)
-    bxy = Matrix(bxy)
-    Sigma_new = Sigma.copy()
+    A = Matrix(A)
+    target = list_to_col_mat(target)
     
     eps_x, eps_y = apparent_emittances(Sigma)  
     alpha_x, alpha_y, beta_x, beta_y = twiss2D(Sigma)
     
-
-    # This section puts bounds on the cross-plane moments. For some reason, it
-    # doesn't seem to work on real data (it terminates at a solution I know
-    # is wrong).
-    #---------------------------------------------------------------------------
-#     class MyScorer(Scorer):
-        
-#         def __init__(self):
-#             return
-        
-#         def score(self, trial, variables):
-#             sig_13, sig_23, sig_14, sig_24 = get_trial_vals(trial, variables)
-#             vec = Matrix([[sig_13], [sig_23], [sig_14], [sig_24]])
-#             residuals = Axy.times(vec).minus(target)
-#             cost = residuals.normF()**2
-#             print(cost)
-#             return cost
-
-#     r_denom_13 = sqrt(Sigma.get(0, 0) * Sigma.get(2, 2))
-#     r_denom_23 = sqrt(Sigma.get(1, 1) * Sigma.get(2, 2))
-#     r_denom_14 = sqrt(Sigma.get(0, 0) * Sigma.get(3, 3))
-#     r_denom_24 = sqrt(Sigma.get(1, 1) * Sigma.get(3, 3))
-#     lb = [-r_denom_13, -r_denom_23, -r_denom_14, -r_denom_24]
-#     ub = [+r_denom_13, +r_denom_23, +r_denom_14, +r_denom_24]
-#     bounds = (lb, ub)
-#     guess = 4 * [0.0]
-#     scorer = MyScorer()
-#     var_names = ['sig_13', 'sig_23', 'sig_14', 'sig_24']
-#     sig_13, sig_23, sig_14, sig_24 = minimize(scorer, guess, var_names, bounds, verbose=2)
-#     Sigma_new.set(0, 2, sig_13)
-#     Sigma_new.set(2, 0, sig_13)
-#     Sigma_new.set(1, 2, sig_23)
-#     Sigma_new.set(2, 1, sig_23)
-#     Sigma_new.set(0, 3, sig_14)
-#     Sigma_new.set(3, 0, sig_14)
-#     Sigma_new.set(1, 3, sig_24)
-#     Sigma_new.set(3, 1, sig_24)
-#     return Sigma_new
-
-
     # This section uses the parameterization of Edwards/Teng.
+    #
+    # We parameterize Sigma as Sigma = V * C * Sigma_n * C^T * V^T. V is simply
+    # the block-diagonal normalization matrix in terms of the 2D Twiss 
+    # parameters. Sigma_n = diag(eps_1, eps_1, eps_2, eps_2). C is a symplectic
+    # matrix with three free parameters: a, b, c. When a = b = c = 0, we have
+    # eps_x = eps_1, eps_y = eps_2 (no coupling). When they are nonzero, there
+    # is coupling.
     #---------------------------------------------------------------------------
     def get_cov(eps_1, eps_2, alpha_x, alpha_y, beta_x, beta_y, a, b, c):
         E = utils.diagonal_matrix([eps_1, eps_1, eps_2, eps_2])
@@ -312,31 +255,21 @@ def reconstruct(transfer_mats, moments, constr=True, **lsq_kws):
             return
         
         def score(self, trial, variables):
-            eps_1, eps_2, a, b, c = get_trial_vals(trial, variables)
-            S = get_cov(eps_1, eps_2, alpha_x, alpha_y, beta_x, beta_y, a, b, c)
-            vec = Matrix([[S.get(0, 2)], [S.get(1, 2)], [S.get(0, 3)], [S.get(1, 3)]])
-            residuals = Axy.times(vec).minus(bxy)
-            cost = residuals.normF()**2
-            f = 1.0
-            cost += f * (S.get(0, 0) - Sigma.get(0, 0))**2
-            cost += f * (S.get(0, 1) - Sigma.get(0, 1))**2
-            cost += f * (S.get(1, 1) - Sigma.get(1, 1))**2
-            cost += f * (S.get(2, 2) - Sigma.get(2, 2))**2
-            cost += f * (S.get(2, 3) - Sigma.get(2, 3))**2
-            cost += f * (S.get(3, 3) - Sigma.get(3, 3))**2
-            return cost
+            Sigma = get_cov(*get_trial_vals(trial, variables))
+            vec = list_to_col_mat(to_vec(Sigma.getArray()))
+            residuals = (A.times(vec).minus(target)).normF()**2
                 
-    inf = 1e20
-    lb = [0., 0., -inf, -inf, -inf]
-    ub = inf
+    lb = [0., 0., -INF, -INF, 0., 0., -INF, -INF, -INF]
+    ub = INF
     bounds = (lb, ub)
-    guess = [1.0 * eps_x, 1.0 * eps_y, 0.1 * random.random(), 0.1 * random.random(), -0.1 * random.random()]
-    var_names = ['eps_1', 'eps_2', 'a', 'b', 'c']
+    guess = [eps_x, eps_y, alpha_x, alpha_y, beta_x, beta_y,
+             0.1 * random.random(), -0.1 * random.random(), +0.1 * random.random()]
+    var_names = ['eps_1', 'eps_2', 'alpha_x', 'alpha_y', 'beta_x', 'beta_y', 'a', 'b', 'c']
     scorer = MyScorer()
     
-    eps_1, eps_2, a, b, c = minimize(scorer, guess, var_names, bounds, maxiters=50000, tol=1e-15, verbose=2)
-    S = get_cov(eps_1, eps_2, alpha_x, alpha_y, beta_x, beta_y, a, b, c)
-    return S
+    params = minimize(scorer, guess, var_names, bounds, maxiters=50000, tol=1e-15, verbose=2)
+    Sigma = get_cov(*params)
+    return Sigma
 
 
 
@@ -538,13 +471,9 @@ class Measurement(dict):
                 continue
             data.append([float(token) for token in tokens])
         file.close()
-        
-#         if pvloggerid != self.pvloggerid:
-#             raise ValueError('PVLoggerID not the same as the wire-scans in this measurement.')
-        
+                
         xpos, xraw, ypos, yraw, upos, uraw = utils.transpose(data)
-        self['RTBT_Diag:Harp30'] = Profile([xpos, ypos, upos], 
-                                           [xraw, yraw, uraw])
+        self['RTBT_Diag:Harp30'] = Profile([xpos, ypos, upos], [xraw, yraw, uraw])
             
     def get_moments(self):
         """Store/return dictionary of measured moments at each profile."""
@@ -569,25 +498,59 @@ class Measurement(dict):
 
     def export_files(self):
         raise NotImplementedError
+
+
+def process(filenames):
+    filenames = [filename for filename in filenames if 'WireAnalysisFmt' in filename]
+    ws_filenames = [filename for filename in filenames if not is_harp_file(filename)]
+    harp_filenames = [filename for filename in filenames if is_harp_file(filename)]
+
+    # Read all wire-scanner files.
+    measurements = [Measurement(filename) for filename in ws_filenames]
+
+    # Read each harp file into the Measurement with the same PVLoggerID.(It seems that the 
+    # Harp files will not have the same PVLoggerID as the wire-scanner files, even if they 
+    # were taken immediately after. So this section needs to change.
+    harp_pvloggerid = dict()
+    for filename in harp_filenames:
+        file = open(filename, 'r')
+        for line in file:
+            pass
+        pvloggerid = int(line.split()[-1])
+        harp_pvloggerid[pvloggerid] = filename
+    for measurement in measurements:
+        if measurement.pvloggerid in harp_pvloggerid:
+            filename = harp_pvloggerid[measurement.pvloggerid]
+            measurement.read_harp_file(filename)
+
+    measurements = sorted(measurements, key=lambda measurement: measurement.timestamp)
+    measurements = [measurement for measurement in measurements 
+                    if measurement.pvloggerid > 0
+                    and measurement.pvloggerid is not None]
+    return measurements
+
+
+class DictOfLists(dict):
+    def __init__(self):
+        dict.__init__(self)
+        
+    def add(self, key, value):
+        if key not in self:
+            self[key] = []
+        self[key].append(value)
     
-    
+
 def get_scan_info(measurements, tmat_generator, start_node_id):
     """Make dictionaries of measured moments and transfer matrices at each wire-scanner."""
     print( 'Reading files...')
-    moments_dict, tmats_dict = dict(), dict()
+    moments_dict, tmats_dict = DictOfLists(), DictOfLists()
     for measurement in measurements:
         print("  Reading file '{}'  pvloggerid = {}".format(measurement.filename_short, 
                                                             measurement.pvloggerid))
         measurement.get_moments()
         measurement.get_transfer_mats(start_node_id, tmat_generator)
         for node_id in measurement.node_ids:
-            if node_id not in moments_dict:
-                moments_dict[node_id] = []
-            moments = measurement.moments[node_id]
-            moments_dict[node_id].append(moments)
-            if node_id not in tmats_dict:
-                tmats_dict[node_id] = []
-            tmat = measurement.transfer_mats[node_id]
-            tmats_dict[node_id].append(tmat)
+            moments_dict.add(node_id, measurement.moments[node_id])
+            tmats_dict.add(node_id, measurement.transfer_mats[node_id])
     print('Done.')
     return moments_dict, tmats_dict
