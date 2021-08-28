@@ -1,9 +1,4 @@
-"""Perform analysis of wire-scanner files.
-
-To do
-    * Make 'Load files' button just add files instead of overwriting?
-    * Clean up.
-"""
+"""Analyze wire-scanner files."""
 import os
 import math
 from math import sqrt
@@ -72,11 +67,11 @@ class AnalysisPanel(JPanel):
     def __init__(self):
         JPanel.__init__(self)
         self.setLayout(BorderLayout())
-        self.rec_node_id = 'RTBT_Diag:WS02'
+        self.reconstruction_node_id = 'RTBT_Diag:WS02'
         self.accelerator = XMLDataManager.loadDefaultAccelerator()
         self.sequence = self.accelerator.getComboSequence('RTBT')
-        self.kin_energy = 1e9 # [eV]
-        self.tmat_generator = TransferMatrixGenerator(self.sequence, self.kin_energy)
+        self.kinetic_energy = 1e9 # [eV]
+        self.tmat_generator = TransferMatrixGenerator(self.sequence, self.kinetic_energy)
         self.node_ids = [node.getId() for node in self.sequence.getNodes()]
         self.model_twiss = dict()
         self.design_twiss = dict()
@@ -88,6 +83,7 @@ class AnalysisPanel(JPanel):
         self.moments_dict = dict()
         self.tmats_dict = dict()
         self.beam_stats = None
+        self.beam_stats_ind = None
         self.model_twiss = dict()
         
     def build_panel(self):
@@ -103,17 +99,17 @@ class AnalysisPanel(JPanel):
         self.meas_index_label = JLabel('Measurement index to plot')
         self.meas_index_dropdown = JComboBox([0])
         self.meas_index_dropdown.addActionListener(MeasIndexDropdownListener(self))
-        self.kin_energy_label = JLabel('Energy [GeV]')
-        self.kin_energy_text_field = JTextField('1.000')
-        self.kin_energy_text_field.addActionListener(KinEnergyTextFieldListener(self))
+        self.kinetic_energy_label = JLabel('Energy [GeV]')
+        self.kinetic_energy_text_field = JTextField('1.000')
+        self.kinetic_energy_text_field.addActionListener(KinEnergyTextFieldListener(self))
         
         self.top_top_panel = JPanel()
         self.top_top_panel.setLayout(FlowLayout(FlowLayout.LEFT))
         self.top_top_panel.add(self.load_files_button)
         self.top_top_panel.add(self.clear_files_button)
         self.top_top_panel.add(self.export_data_button)
-        self.top_top_panel.add(self.kin_energy_label)
-        self.top_top_panel.add(self.kin_energy_text_field)
+        self.top_top_panel.add(self.kinetic_energy_label)
+        self.top_top_panel.add(self.kinetic_energy_text_field)
         self.top_top_panel.add(self.meas_index_label)
         self.top_top_panel.add(self.meas_index_dropdown)
         
@@ -137,16 +133,10 @@ class AnalysisPanel(JPanel):
         #-------------------------------------------------------------------------------
         self.reconstruct_covariance_button = JButton('Reconstruct covariance matrix')  
         self.reconstruct_covariance_button.addActionListener(ReconstructCovarianceButtonListener(self))
-        self.rec_point_label = JLabel('Reconstruction point')
-        self.rec_point_dropdown = JComboBox(self.node_ids)
-        self.rec_point_dropdown.setSelectedItem(self.rec_node_id)
-        self.rec_point_dropdown.addActionListener(RecPointDropdownListener(self))
-        self.max_iter_label = JLabel('max iter')
-        self.max_iter_text_field = JTextField('100', 5)
-        self.llsq_solver_label = JLabel('LLSQ solver')
-        self.llsq_solver_dropdown = JComboBox(['exact', 'lsmr'])
-        self.tol_label = JLabel('tol')
-        self.tol_text_field = JTextField('1e-12')
+        self.reconstruction_point_label = JLabel('Reconstruction point')
+        self.reconstruction_point_dropdown = JComboBox(self.node_ids)
+        self.reconstruction_point_dropdown.setSelectedItem(self.reconstruction_node_id)
+        self.reconstruction_point_dropdown.addActionListener(ReconstructionPointDropdownListener(self))
         self.results_table = JTable(ResultsTableModel(self))
         self.results_table.setShowGrid(True)
         self.norm_label = JLabel('Normalization')
@@ -163,16 +153,10 @@ class AnalysisPanel(JPanel):
         bottom_left_top_panel.add(temp_panel)
         bottom_left_top_panel1 = JPanel()
         bottom_left_top_panel1.setLayout(FlowLayout(FlowLayout.LEFT))
-        bottom_left_top_panel1.add(self.rec_point_label)
-        bottom_left_top_panel1.add(self.rec_point_dropdown)
+        bottom_left_top_panel1.add(self.reconstruction_point_label)
+        bottom_left_top_panel1.add(self.reconstruction_point_dropdown)
         bottom_left_top_panel2 = JPanel()
         bottom_left_top_panel2.setLayout(FlowLayout(FlowLayout.LEFT))
-        # bottom_left_top_panel2.add(self.llsq_solver_label)
-        # bottom_left_top_panel2.add(self.llsq_solver_dropdown)
-        # bottom_left_top_panel2.add(self.max_iter_label)
-        # bottom_left_top_panel2.add(self.max_iter_text_field)
-        # bottom_left_top_panel2.add(self.tol_label)
-        # bottom_left_top_panel2.add(self.tol_text_field)
 
         self.keep_physical_checkbox = JCheckBox('Keep answer physical', False)
         bottom_left_top_panel2.add(self.keep_physical_checkbox)
@@ -278,12 +262,12 @@ class AnalysisPanel(JPanel):
             y_max = math.sqrt(sig_yy)
             x_vals, xp_vals, y_vals, yp_vals = [], [], [], []            
             for slope in [-100, 100]:
-                vec_1 = Matrix([[x_max], [slope], [0], [0]])
+                vec_1 = utils.list_to_col_mat([x_max, slope, 0, 0])
                 vec_0 = Minv.times(vec_1)
                 vec_0 = Vinv.times(vec_0)
                 x_vals.append(vec_0.get(0, 0))
                 xp_vals.append(vec_0.get(1, 0))
-                vec_1 = Matrix([[0], [0], [y_max], [slope]])
+                vec_1 = utils.list_to_col_mat([0, 0, y_max, slope])
                 vec_0 = Minv.times(vec_1)
                 vec_0 = Vinv.times(vec_0)
                 y_vals.append(vec_0.get(2, 0))
@@ -323,7 +307,7 @@ class AnalysisPanel(JPanel):
         # Get the model optics at the RTBT entrance in the ring. 
         tracker = AlgorithmFactory.createTransferMapTracker(sequence)
         probe = ProbeFactory.getTransferMapProbe(sequence, tracker)
-        probe.setKineticEnergy(self.kin_energy)
+        probe.setKineticEnergy(self.kinetic_energy)
         scenario.setProbe(probe)
         scenario.run()
         trajectory = probe.getTrajectory()
@@ -336,21 +320,21 @@ class AnalysisPanel(JPanel):
         scenario = Scenario.newScenarioFor(sequence)
         scenario = pvl_data_source.setModelSource(sequence, scenario)
         scenario.resync()
-        rec_node_id = self.rec_node_id
+        reconstruction_node_id = self.reconstruction_node_id
         node_ids = [node.getId() for node in sequence.getNodes()]
-        rec_node_index = node_ids.index(rec_node_id)                
-        if rec_node_index > node_ids.index('RTBT_Mag:QH18'):
+        reconstruction_node_index = node_ids.index(reconstruction_node_id)                
+        if reconstruction_node_index > node_ids.index('RTBT_Mag:QH18'):
             string = ''.join([
                 'Reconstruction point is downstream of first varied quad (RTBT_Mag:QH18). ',
                 'Method will be inaccurate if optics were changed between measurements.',
             ])
             print string
-        if rec_node_index > 0:
+        if reconstruction_node_index > 0:
             tracker = AlgorithmFactory.createEnvelopeTracker(sequence)
             tracker.setUseSpacecharge(False)
             probe = ProbeFactory.getEnvelopeProbe(sequence, tracker)
             probe.setBeamCurrent(0.0)
-            probe.setKineticEnergy(self.kin_energy)            
+            probe.setKineticEnergy(self.kinetic_energy)            
             eps_x = eps_y = 20e-5 # [mm mrad] (arbitrary)
             twiss_x = Twiss(twiss_x.getAlpha(), twiss_x.getBeta(), eps_x)
             twiss_y = Twiss(twiss_y.getAlpha(), twiss_y.getBeta(), eps_y)
@@ -360,7 +344,7 @@ class AnalysisPanel(JPanel):
             scenario.run()
             trajectory = probe.getTrajectory()
             calculator = CalculationsOnBeams(trajectory)
-            state = trajectory.stateForElement(rec_node_id)
+            state = trajectory.stateForElement(reconstruction_node_id)
             twiss_x, twiss_y, _ = calculator.computeTwissParameters(state)
 
         self.model_twiss['alpha_x'] = twiss_x.getAlpha()
@@ -392,7 +376,7 @@ class AnalysisPanel(JPanel):
             scenario.resync()
             tracker = AlgorithmFactory.createTransferMapTracker(sequence)
             probe = ProbeFactory.getTransferMapProbe(sequence, tracker)
-            probe.setKineticEnergy(self.kin_energy)
+            probe.setKineticEnergy(self.kinetic_energy)
             scenario.setProbe(probe)
             scenario.run()
             trajectory = probe.getTrajectory()
@@ -409,7 +393,7 @@ class AnalysisPanel(JPanel):
             tracker.setUseSpacecharge(False)
             probe = ProbeFactory.getEnvelopeProbe(sequence, tracker)
             probe.setBeamCurrent(0.0)
-            probe.setKineticEnergy(self.kin_energy)            
+            probe.setKineticEnergy(self.kinetic_energy)            
             eps_x = eps_y = 20e-5 # [mm mrad] (arbitrary)
             twiss_x = Twiss(twiss_x.getAlpha(), twiss_x.getBeta(), eps_x)
             twiss_y = Twiss(twiss_y.getAlpha(), twiss_y.getBeta(), eps_y)
@@ -436,7 +420,7 @@ class AnalysisPanel(JPanel):
         # Get the design optics at the RTBT entrance in the ring. 
         tracker = AlgorithmFactory.createTransferMapTracker(sequence)
         probe = ProbeFactory.getTransferMapProbe(sequence, tracker)
-        probe.setKineticEnergy(self.kin_energy)
+        probe.setKineticEnergy(self.kinetic_energy)
         scenario.setProbe(probe)
         scenario.run()
         trajectory = probe.getTrajectory()
@@ -448,12 +432,12 @@ class AnalysisPanel(JPanel):
         sequence = self.accelerator.getComboSequence('RTBT')
         scenario = Scenario.newScenarioFor(sequence)
         node_ids = [node.getId() for node in sequence.getNodes()]
-        if node_ids.index(self.rec_node_id) > 0:
+        if node_ids.index(self.reconstruction_node_id) > 0:
             tracker = AlgorithmFactory.createEnvelopeTracker(sequence)
             tracker.setUseSpacecharge(False)
             probe = ProbeFactory.getEnvelopeProbe(sequence, tracker)
             probe.setBeamCurrent(0.0)
-            probe.setKineticEnergy(self.kin_energy)            
+            probe.setKineticEnergy(self.kinetic_energy)            
             eps_x = eps_y = 20e-5 # [mm mrad] (arbitrary)
             twiss_x = Twiss(twiss_x.getAlpha(), twiss_x.getBeta(), eps_x)
             twiss_y = Twiss(twiss_y.getAlpha(), twiss_y.getBeta(), eps_y)
@@ -463,7 +447,7 @@ class AnalysisPanel(JPanel):
             scenario.run()
             trajectory = probe.getTrajectory()
             calculator = CalculationsOnBeams(trajectory)
-            state = trajectory.stateForElement(self.rec_node_id)
+            state = trajectory.stateForElement(self.reconstruction_node_id)
             twiss_x, twiss_y, _ = calculator.computeTwissParameters(state)
 
         self.design_twiss['alpha_x'] = twiss_x.getAlpha()
@@ -553,13 +537,13 @@ class LoadFilesButtonListener(ActionListener):
         self.tmat_generator = panel.tmat_generator
     
     def actionPerformed(self, event):
-
         # Open file chooser dialog.
         file_chooser = JFileChooser(os.getcwd())        
         file_chooser.setFileSelectionMode(JFileChooser.FILES_AND_DIRECTORIES);
         file_chooser.setMultiSelectionEnabled(True)
         return_value = file_chooser.showOpenDialog(self.panel)
         selected_items = file_chooser.getSelectedFiles()
+        # Only keep files, not directories.
         files = []
         for item in selected_items:
             if item.isDirectory():
@@ -567,45 +551,11 @@ class LoadFilesButtonListener(ActionListener):
             else:
                 files.append(item)
         filenames = [file.toString() for file in files]
-
-        # Remove non-PTA files.
-        filenames = [filename for filename in filenames if 'WireAnalysisFmt' in filename]
-
-        # Separate harp and wire-scanner files.
-        ws_filenames = [filename for filename in filenames 
-                        if not analysis.is_harp_file(filename)]
-        harp_filenames = [filename for filename in filenames 
-                          if analysis.is_harp_file(filename)]
-
-        # Read all wire-scanner files.
-        measurements = [analysis.Measurement(filename) for filename in ws_filenames]
-
-        # Get PVLoggerID of each harp file.
-        harp_pvloggerid = dict()
-        for filename in harp_filenames:
-            file = open(filename, 'r')
-            for line in file:
-                pass
-            pvloggerid = int(line.split()[-1])
-            harp_pvloggerid[pvloggerid] = filename
-
-        # Read each harp file into the Measurement with the same PVLoggerID.
-        for measurement in measurements:
-            if measurement.pvloggerid in harp_pvloggerid:
-                filename = harp_pvloggerid[measurement.pvloggerid]
-                measurement.read_harp_file(filename)
-
-        # Sort files by timestamp (oldest to newest).
-        measurements = sorted(measurements, key=lambda measurement: measurement.timestamp)
-        
-        # Remove measurements without PVLoggerID.
-        measurements = [measurement for measurement in measurements
-                        if measurement.pvloggerid > 0 
-                        and measurement.pvloggerid is not None]
-        
         # Make dictionaries of measured moments and transfer matrices at each wire-scanner.
-        moments_dict, tmats_dict = analysis.get_scan_info(measurements, self.tmat_generator, 
-                                                          self.panel.rec_node_id)
+        measurements = analysis.process(filenames)
+        moments_dict, tmats_dict = analysis.get_scan_info(measurements, 
+                                                          self.tmat_generator, 
+                                                          self.panel.reconstruction_node_id)
         # Save data and update GUI.
         self.panel.measurements = measurements
         self.panel.moments_dict = moments_dict
@@ -617,7 +567,7 @@ class LoadFilesButtonListener(ActionListener):
         
         
 class ClearFilesButtonListener(ActionListener):
-    
+
     def __init__(self, panel):
         self.panel = panel
     
@@ -629,7 +579,7 @@ class ClearFilesButtonListener(ActionListener):
         
                
 class ExportDataButtonListener(ActionListener):
-    
+
     def __init__(self, panel, folder):
         self.panel = panel
         self.folder = folder
@@ -671,33 +621,31 @@ class ExportDataButtonListener(ActionListener):
         
         # Profile data
         # [...]
-        
-        file.close()
-        
+                
         # Other info
         file = open(os.path.join(self.folder, 'info.dat'), 'w')
-        file.write('reconstruction_point = {}\n'.format(self.panel.rec_node_id))
-        file.write('beam_energy_GeV = {}\n'.format(self.panel.kin_energy * 1e-9))
+        file.write('reconstruction_point = {}\n'.format(self.panel.reconstruction_node_id))
+        file.write('beam_energy_GeV = {}\n'.format(self.panel.kinetic_energy * 1e-9))
         file.close()
         
         print("Done. Files are in folder: '_output'")  
         
         
 class KinEnergyTextFieldListener(ActionListener):
-    
+
     def __init__(self, panel):
         self.panel = panel
     
     def actionPerformed(self, event):
-        kin_energy = 1e9 * float(self.panel.kin_energy_text_field.getText())
-        self.panel.kin_energy = kin_energy
-        self.panel.tmat_generator.set_kin_energy(kin_energy)
+        kinetic_energy = 1e9 * float(self.panel.kinetic_energy_text_field.getText())
+        self.panel.kinetic_energy = kinetic_energy
+        self.panel.tmat_generator.set_kinetic_energy(kinetic_energy)
         self.panel.update_tables()
-        print('Updated reconstruction kinetic energy to {:.3e} [eV].'.format(kin_energy))
+        print('Updated reconstruction kinetic energy to {:.3e} [eV].'.format(kinetic_energy))
         
         
 class MeasIndexDropdownListener(ActionListener):
-    
+
     def __init__(self, panel):
         self.panel = panel
         self.dropdown = panel.meas_index_dropdown
@@ -707,18 +655,18 @@ class MeasIndexDropdownListener(ActionListener):
             self.panel.update_plots()
             
             
-class RecPointDropdownListener(ActionListener):
-    
+class ReconstructionPointDropdownListener(ActionListener):
+
     def __init__(self, panel):
         self.panel = panel
-        self.dropdown = panel.rec_point_dropdown
+        self.dropdown = panel.reconstruction_point_dropdown
         
     def actionPerformed(self, event):
-        rec_node_id = self.dropdown.getSelectedItem()
-        measurements = self.panel.measurements
-        tmat_generator = self.panel.tmat_generator
-        moments_dict, tmats_dict = analysis.get_scan_info(measurements, tmat_generator, rec_node_id)
-        self.panel.rec_node_id = rec_node_id
+        reconstruction_node_id = self.dropdown.getSelectedItem()
+        moments_dict, tmats_dict = analysis.get_scan_info(self.panel.measurements, 
+                                                          self.panel.tmat_generator, 
+                                                          reconstruction_node_id)
+        self.panel.reconstruction_node_id = reconstruction_node_id
         self.panel.moments_dict = moments_dict
         self.panel.tmats_dict = tmats_dict
         self.panel.corner_plot_panel.clear()
@@ -727,7 +675,7 @@ class RecPointDropdownListener(ActionListener):
               
             
 class ReconstructCovarianceButtonListener(ActionListener):
-    
+
     def __init__(self, panel):
         self.panel = panel
         
@@ -739,7 +687,7 @@ class ReconstructCovarianceButtonListener(ActionListener):
         if not measurements:
             raise ValueError('No wire-scanner files have been loaded.')        
 
-        # Form list of transfer matrices and measured moments.
+        # Form list of transfer matrices and measured moments.        
         moments_list, tmats_list = [], []
         node_ids = list(moments_dict.keys())
         for node_id in node_ids:
@@ -747,24 +695,29 @@ class ReconstructCovarianceButtonListener(ActionListener):
             tmats_list.extend(tmats_dict[node_id])
             
         # Reconstruct the covariance matrix.
-        # solver = self.panel.llsq_solver_dropdown.getSelectedItem()
-        # max_iter = int(self.panel.max_iter_text_field.getText())
-        # lsmr_tol = float(self.panel.tol_text_field.getText())
-        # Sigma = analysis.reconstruct(tmats_list, moments_list, constr=True, verbose=2,
-        #                              solver=solver, max_iter=max_iter, lsmr_tol=lsmr_tol)
         constr = self.panel.keep_physical_checkbox.isSelected()
-        Sigma = analysis.reconstruct(tmats_list, moments_list, constr=constr, verbose=2,
-                                     solver='exact', max_iter=10000)
+        Sigma = analysis.reconstruct(tmats_list, moments_list, constr=constr, verbose=2)
         beam_stats = analysis.BeamStats(Sigma)
         beam_stats.print_all()
         self.panel.beam_stats = beam_stats
-        # Update panel.
+        
+        # Reconstruct at each individual measurement.
+        beam_stats_ind = []
+        for i, measurement in enumerate(measurements):
+            moments_list = [moments_dict[node_id][i] for node_id in node_ids]
+            tmats_list = [tmats_dict[node_id][i] for node_id in node_ids]
+            Sigma = analysis.reconstruct(tmats_list, moments_list, constr=constr)
+            beam_stats_ind.append(analysis.BeamStats(Sigma))
+            beam_stats_ind[-1].print_all()
+        self.panel.beam_stats_ind = beam_stats_ind
+        
+        # Update the panel.
         self.panel.update_tables()
         self.panel.update_plots()
         
 
 class NormDropdownListener(ActionListener):
-    
+    """Normalize the plotted phase space."""
     def __init__(self, panel):
         self.panel = panel
         
