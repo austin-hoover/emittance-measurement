@@ -68,7 +68,7 @@ def compute_twiss(state, calculator):
     alpha_y, beta_y = twiss_y.getAlpha(), twiss_y.getBeta()
     eps_x, eps_y = twiss_x.getEmittance(), twiss_y.getEmittance()
     mu_x, mu_y, _ = calculator.computeBetatronPhase(state).toArray()
-    return mu_x, mu_y, alpha_x, alpha_y, beta_x, beta_y, eps_x, eps_y
+    return [mu_x, mu_y, alpha_x, alpha_y, beta_x, beta_y, eps_x, eps_y]
 
 
 def safe_sync(scenario, sync_mode):
