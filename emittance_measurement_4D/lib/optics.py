@@ -1,3 +1,4 @@
+from __future__ import print_function
 import copy
 import math
 import time
@@ -71,6 +72,59 @@ def compute_twiss(state, calculator):
     return [mu_x, mu_y, alpha_x, alpha_y, beta_x, beta_y, eps_x, eps_y]
 
 
+def compute_model_twiss(node_id, kinetic_energy, pvloggerid=None, sync_mode='design'):
+    """Get the model Twiss parameters in the RTBT."""
+    accelerator = XMLDataManager.loadDefaultAccelerator()
+    pvl_data_source = None
+    if pvloggerid:
+        pvl_data_source = PVLoggerDataSource(pvloggerid)
+    
+    def get_seq_scenario(seq_name):
+        sequence = accelerator.getComboSequence(seq_name)
+        scenario = Scenario.newScenarioFor(sequence)
+        if pvloggerid:
+            scenario = pvl_data_source.setModelSource(sequence, scenario)
+            scenario.resync()
+        else:
+            safe_sync(scenario, sync_mode)
+        return sequence, scenario
+
+    # Get the model optics at the RTBT entrance.
+    sequence, scenario = get_seq_scenario('Ring')
+    tracker = AlgorithmFactory.createTransferMapTracker(sequence)
+    probe = ProbeFactory.getTransferMapProbe(sequence, tracker)
+    probe.setKineticEnergy(kinetic_energy)
+    scenario.setProbe(probe)
+    scenario.run()
+    trajectory = probe.getTrajectory()
+    calculator = CalculationsOnRings(trajectory)
+    state = trajectory.statesForElement('Begin_Of_Ring3')[0]
+    twiss_x, twiss_y, twiss_z = calculator.computeMatchedTwissAt(state)
+
+    # Track through the RTBT if necessary.
+    sequence, scenario = get_seq_scenario('RTBT')
+    node_ids = [node.getId() for node in sequence.getNodes()]
+    node_index = node_ids.index(node_id)                
+    if node_index > 0:
+        tracker = AlgorithmFactory.createEnvelopeTracker(sequence)
+        tracker.setUseSpacecharge(False)
+        probe = ProbeFactory.getEnvelopeProbe(sequence, tracker)
+        probe.setBeamCurrent(0.0)
+        probe.setKineticEnergy(kinetic_energy)            
+        eps_x = eps_y = 20e-5 # [mm mrad] (arbitrary)
+        twiss_x = Twiss(twiss_x.getAlpha(), twiss_x.getBeta(), eps_x)
+        twiss_y = Twiss(twiss_y.getAlpha(), twiss_y.getBeta(), eps_y)
+        twiss_z = Twiss(0, 1, 0)
+        probe.initFromTwiss([twiss_x, twiss_y, twiss_z])
+        scenario.setProbe(probe)
+        scenario.run()
+        trajectory = probe.getTrajectory()
+        calculator = CalculationsOnBeams(trajectory)
+        state = trajectory.stateForElement(node_id)
+        twiss_x, twiss_y, _ = calculator.computeTwissParameters(state)
+    return [twiss_x.getAlpha(), twiss_y.getAlpha(), twiss_x.getBeta(), twiss_y.getBeta()] 
+    
+    
 def safe_sync(scenario, sync_mode):
     if sync_mode not in ['live', 'design']:
         raise ValueError("`sync_mode` must be in {'live', 'design'}")
@@ -80,7 +134,7 @@ def safe_sync(scenario, sync_mode):
             scenario.resync()
         except SynchronizationException:
             sync_mode = 'design'
-            print "Can't sync with live machine. Using design fields."
+            print("Can't sync with live machine. Using design fields.")
     if sync_mode == 'design':
         scenario.setSynchronizationMode(Scenario.SYNC_MODE_DESIGN)
         scenario.resync()
@@ -89,16 +143,16 @@ def safe_sync(scenario, sync_mode):
 
 class TransferMatrixGenerator:
     """Class to compute transfer matrix between two nodes."""
-    def __init__(self, sequence, kin_energy):
+    def __init__(self, sequence, kinetic_energy):
         self.sequence = sequence
         self.scenario = Scenario.newScenarioFor(sequence)
         self.tracker = AlgorithmFactory.createTransferMapTracker(self.sequence)
         self.probe = ProbeFactory.getTransferMapProbe(self.sequence, self.tracker)
         self.scenario.setProbe(self.probe)
-        self.set_kin_energy(kin_energy)
+        self.set_kinetic_energy(kinetic_energy)
         
-    def set_kin_energy(self, kin_energy):
-        self.probe.setKineticEnergy(kin_energy)
+    def set_kinetic_energy(self, kinetic_energy):
+        self.probe.setKineticEnergy(kinetic_energy)
         
     def sync(self, pvloggerid):
         """Sync model with machine state from PVLoggerID."""
@@ -143,7 +197,7 @@ class PhaseController:
     ----------
     
     """
-    def __init__(self, ref_ws_id='RTBT_Diag:WS24', kin_energy=1e9, sync_mode='live', 
+    def __init__(self, ref_ws_id='RTBT_Diag:WS24', kinetic_energy=1e9, sync_mode='live', 
                  connect=True):
         self.machine_has_changed = False
         self.connect = connect
@@ -151,13 +205,13 @@ class PhaseController:
         self.accelerator = XMLDataManager.loadDefaultAccelerator()
         self.sequence = self.accelerator.getComboSequence('RTBT')
         self.scenario = Scenario.newScenarioFor(self.sequence)
-        self.tmat_gen = TransferMatrixGenerator(self.sequence, 1e9 * kin_energy)
+        self.tmat_gen = TransferMatrixGenerator(self.sequence, 1e9 * kinetic_energy)
         self.sync_mode = safe_sync(self.scenario, sync_mode)
         self.tracker = AlgorithmFactory.createEnvelopeTracker(self.sequence)
         self.tracker.setUseSpacecharge(False)
         self.probe = ProbeFactory.getEnvelopeProbe(self.sequence, self.tracker)
         self.probe.setBeamCurrent(0.0)
-        self.set_kin_energy(kin_energy)
+        self.set_kinetic_energy(kinetic_energy)
         self.scenario.setProbe(self.probe)
         self.track()
         
@@ -210,16 +264,16 @@ class PhaseController:
         self.default_fields = self.get_fields(self.ind_quad_ids, 'model')    
         self.default_betas_at_target = self.beta_funcs('RTBT:Tgt')
         
-    def set_kin_energy(self, kin_energy):
+    def set_kinetic_energy(self, kinetic_energy):
         """Set the probe kinetic energy [eV]."""
-        self.kin_energy = kin_energy
-        self.probe.setKineticEnergy(kin_energy)
+        self.kinetic_energy = kinetic_energy
+        self.probe.setKineticEnergy(kinetic_energy)
         self.calc_init_twiss()
         
     def initialize_envelope(self):
         """Reset the envelope probe to the start of the lattice."""
         self.scenario.resetProbe()
-        self.probe.setKineticEnergy(self.kin_energy)
+        self.probe.setKineticEnergy(self.kinetic_energy)
         alpha_x = self.init_twiss['alpha_x']
         alpha_y = self.init_twiss['alpha_y']
         beta_x = self.init_twiss['beta_x']
@@ -275,7 +329,7 @@ class PhaseController:
     def transfer_matrix(self, node_id):
         tracker = AlgorithmFactory.createTransferMapTracker(self.sequence)
         probe = ProbeFactory.getTransferMapProbe(self.sequence, tracker)
-        probe.setKineticEnergy(self.kin_energy)
+        probe.setKineticEnergy(self.kinetic_energy)
         self.scenario.setProbe(probe)
         self.scenario.run()
         trajectory = probe.getTrajectory()
@@ -336,10 +390,10 @@ class PhaseController:
         self.restore_default_optics()
         fields = minimize(scorer, init_fields, var_names, bounds)
         if verbose > 0:
-            print '  Desired phases : {:.3f}, {:.3f}'.format(mu_x, mu_y)
-            print '  Calc phases    : {:.3f}, {:.3f}'.format(*self.phases(self.ref_ws_id))
-            print '  Max betas (Q03 - WS24): {:.3f}, {:.3f}'.format(*self.max_betas())
-            print '  Betas at target: {:.3f}, {:.3f}'.format(*self.beta_funcs('RTBT:Tgt'))
+            print('  Desired phases : {:.3f}, {:.3f}'.format(mu_x, mu_y))
+            print('  Calc phases    : {:.3f}, {:.3f}'.format(*self.phases(self.ref_ws_id)))
+            print('  Max betas (Q03 - WS24): {:.3f}, {:.3f}'.format(*self.max_betas()))
+            print('  Betas at target: {:.3f}, {:.3f}'.format(*self.beta_funcs('RTBT:Tgt')))
         return fields
     
     def constrain_size_on_target(self, max_beta_before_target=100., verbose=0):
@@ -378,8 +432,8 @@ class PhaseController:
         fields = minimize(scorer, init_fields, var_names, bounds)
         self.set_fields(self.ind_quad_ids[-5:], fields, 'model')
         if verbose > 0:
-            print '  Desired betas: {:.3f}, {:.3f}'.format(*self.default_betas_at_target)
-            print '  Calc betas   : {:.3f}, {:.3f}'.format(*self.beta_funcs('RTBT:Tgt'))
+            print('  Desired betas: {:.3f}, {:.3f}'.format(*self.default_betas_at_target))
+            print('  Calc betas   : {:.3f}, {:.3f}'.format(*self.beta_funcs('RTBT:Tgt')))
 
     def get_field(self, quad_id, opt='model'):
         """Return quadrupole field strength [T/m].
@@ -494,26 +548,15 @@ class PhaseController:
         
     def calc_init_twiss(self):
         """Calculate Twiss parameters at RTBT entrance using the ring."""
-        # Load SNS ring
-        accelerator = XMLDataManager.loadDefaultAccelerator()
-        sequence = accelerator.getComboSequence('Ring')
-        scenario = Scenario.newScenarioFor(sequence)
-        safe_sync(scenario, self.sync_mode)
-        # Get matched Twiss at RTBT entrance
-        algorithm = AlgorithmFactory.createTransferMapTracker(sequence)
-        probe = ProbeFactory.getTransferMapProbe(sequence, algorithm)
-        probe.setKineticEnergy(self.kin_energy)
-        scenario.setProbe(probe)
-        scenario.run()
-        trajectory = probe.getTrajectory()
-        calculator = CalculationsOnRings(trajectory)
-        state = trajectory.statesForElement('Begin_Of_Ring3')[0]
-        twiss_x, twiss_y, twiss_z = calculator.computeMatchedTwissAt(state)
+        node_id = 'Begin_Of_RTBT1'
+        params = compute_model_twiss(node_id, self.kinetic_energy, 
+                                     sync_mode=self.sync_mode)
+        alpha_x, alpha_y, beta_x, beta_y = params
         self.init_twiss = {
-            'alpha_x': twiss_x.getAlpha(),
-            'alpha_y': twiss_y.getAlpha(),
-            'beta_x': twiss_x.getBeta(),
-            'beta_y': twiss_y.getBeta(),
+            'alpha_x': alpha_x,
+            'alpha_y': alpha_y,
+            'beta_x': beta_x,
+            'beta_y': beta_y
         }
         
     def get_phases_for_scan(self, phase_coverage=90., n_steps=3):

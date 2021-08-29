@@ -1,4 +1,5 @@
 """Analyze wire-scanner files."""
+from __future__ import print_function
 import os
 import math
 from math import sqrt
@@ -56,6 +57,7 @@ from xal.tools.beam.calc import CalculationsOnRings
 # Local
 import analysis
 from optics import TransferMatrixGenerator
+import optics
 import plotting as plt
 import utils
 import xal_helpers
@@ -295,63 +297,29 @@ class AnalysisPanel(JPanel):
         """
         if not self.measurements:
             return
+
+        alpha_x, alpha_y, beta_x, beta_y = optics.compute_model_twiss(
+            self.reconstruction_node_id, 
+            self.kinetic_energy, 
+            pvloggerid=self.measurements[0].pvloggerid,
+        )
+        self.model_twiss['alpha_x'] = alpha_x
+        self.model_twiss['alpha_y'] = alpha_y
+        self.model_twiss['beta_x'] = beta_x
+        self.model_twiss['beta_y'] = beta_y
         
-        # Set up
-        pvloggerid = self.measurements[0].pvloggerid
-        pvl_data_source = PVLoggerDataSource(pvloggerid)
-        sequence = self.accelerator.getComboSequence('Ring')
-        scenario = Scenario.newScenarioFor(sequence)
-        scenario = pvl_data_source.setModelSource(sequence, scenario)
-        scenario.resync()
-
-        # Get the model optics at the RTBT entrance in the ring. 
-        tracker = AlgorithmFactory.createTransferMapTracker(sequence)
-        probe = ProbeFactory.getTransferMapProbe(sequence, tracker)
-        probe.setKineticEnergy(self.kinetic_energy)
-        scenario.setProbe(probe)
-        scenario.run()
-        trajectory = probe.getTrajectory()
-        calculator = CalculationsOnRings(trajectory)
-        state = trajectory.statesForElement('Begin_Of_Ring3')[0]
-        twiss_x, twiss_y, twiss_z = calculator.computeMatchedTwissAt(state)
-
-        # Now track through the RTBT if necessary.
-        sequence = self.accelerator.getComboSequence('RTBT')
-        scenario = Scenario.newScenarioFor(sequence)
-        scenario = pvl_data_source.setModelSource(sequence, scenario)
-        scenario.resync()
-        reconstruction_node_id = self.reconstruction_node_id
-        node_ids = [node.getId() for node in sequence.getNodes()]
-        reconstruction_node_index = node_ids.index(reconstruction_node_id)                
-        if reconstruction_node_index > node_ids.index('RTBT_Mag:QH18'):
-            string = ''.join([
-                'Reconstruction point is downstream of first varied quad (RTBT_Mag:QH18). ',
-                'Method will be inaccurate if optics were changed between measurements.',
-            ])
-            print string
-        if reconstruction_node_index > 0:
-            tracker = AlgorithmFactory.createEnvelopeTracker(sequence)
-            tracker.setUseSpacecharge(False)
-            probe = ProbeFactory.getEnvelopeProbe(sequence, tracker)
-            probe.setBeamCurrent(0.0)
-            probe.setKineticEnergy(self.kinetic_energy)            
-            eps_x = eps_y = 20e-5 # [mm mrad] (arbitrary)
-            twiss_x = Twiss(twiss_x.getAlpha(), twiss_x.getBeta(), eps_x)
-            twiss_y = Twiss(twiss_y.getAlpha(), twiss_y.getBeta(), eps_y)
-            twiss_z = Twiss(0, 1, 0)
-            probe.initFromTwiss([twiss_x, twiss_y, twiss_z])
-            scenario.setProbe(probe)
-            scenario.run()
-            trajectory = probe.getTrajectory()
-            calculator = CalculationsOnBeams(trajectory)
-            state = trajectory.stateForElement(reconstruction_node_id)
-            twiss_x, twiss_y, _ = calculator.computeTwissParameters(state)
-
-        self.model_twiss['alpha_x'] = twiss_x.getAlpha()
-        self.model_twiss['alpha_y'] = twiss_y.getAlpha()
-        self.model_twiss['beta_x'] = twiss_x.getBeta()
-        self.model_twiss['beta_y'] = twiss_y.getBeta()   
-        
+    def compute_design_twiss(self):
+        """Get the design Twiss parameters at the reconstruction point."""        
+        alpha_x, alpha_y, beta_x, beta_y = optics.compute_model_twiss(
+            self.reconstruction_node_id, 
+            self.kinetic_energy, 
+            pvloggerid=None,
+            sync_mode='design',
+        )
+        self.design_twiss['alpha_x'] = alpha_x
+        self.design_twiss['alpha_y'] = alpha_y
+        self.design_twiss['beta_x'] = beta_x
+        self.design_twiss['beta_y'] = beta_y
         
     def ws_phases(self):
         """Compute model phase advance to each wire-scanner for each measurement.
@@ -411,49 +379,6 @@ class AnalysisPanel(JPanel):
                     phases_dict[ws_id] = []
                 phases_dict[ws_id].append([mu_x, mu_y])
         return phases_dict
-        
-    def compute_design_twiss(self):
-        """Get the design Twiss parameters at the reconstruction point."""        
-        sequence = self.accelerator.getComboSequence('Ring')
-        scenario = Scenario.newScenarioFor(sequence)
-
-        # Get the design optics at the RTBT entrance in the ring. 
-        tracker = AlgorithmFactory.createTransferMapTracker(sequence)
-        probe = ProbeFactory.getTransferMapProbe(sequence, tracker)
-        probe.setKineticEnergy(self.kinetic_energy)
-        scenario.setProbe(probe)
-        scenario.run()
-        trajectory = probe.getTrajectory()
-        calculator = CalculationsOnRings(trajectory)
-        state = trajectory.statesForElement('Begin_Of_Ring3')[0]
-        twiss_x, twiss_y, twiss_z = calculator.computeMatchedTwissAt(state)
-
-        # Now track through the RTBT if necessary.
-        sequence = self.accelerator.getComboSequence('RTBT')
-        scenario = Scenario.newScenarioFor(sequence)
-        node_ids = [node.getId() for node in sequence.getNodes()]
-        if node_ids.index(self.reconstruction_node_id) > 0:
-            tracker = AlgorithmFactory.createEnvelopeTracker(sequence)
-            tracker.setUseSpacecharge(False)
-            probe = ProbeFactory.getEnvelopeProbe(sequence, tracker)
-            probe.setBeamCurrent(0.0)
-            probe.setKineticEnergy(self.kinetic_energy)            
-            eps_x = eps_y = 20e-5 # [mm mrad] (arbitrary)
-            twiss_x = Twiss(twiss_x.getAlpha(), twiss_x.getBeta(), eps_x)
-            twiss_y = Twiss(twiss_y.getAlpha(), twiss_y.getBeta(), eps_y)
-            twiss_z = Twiss(0, 1, 0)
-            probe.initFromTwiss([twiss_x, twiss_y, twiss_z])
-            scenario.setProbe(probe)
-            scenario.run()
-            trajectory = probe.getTrajectory()
-            calculator = CalculationsOnBeams(trajectory)
-            state = trajectory.stateForElement(self.reconstruction_node_id)
-            twiss_x, twiss_y, _ = calculator.computeTwissParameters(state)
-
-        self.design_twiss['alpha_x'] = twiss_x.getAlpha()
-        self.design_twiss['alpha_y'] = twiss_y.getAlpha()
-        self.design_twiss['beta_x'] = twiss_x.getBeta()
-        self.design_twiss['beta_y'] = twiss_y.getBeta() 
             
             
 # Tables
@@ -575,7 +500,7 @@ class ClearFilesButtonListener(ActionListener):
         self.panel.clear_data()   
         self.panel.update_plots()
         self.panel.update_tables()
-        print 'Cleared data.'
+        print('Cleared data.')
         
                
 class ExportDataButtonListener(ActionListener):
@@ -702,14 +627,15 @@ class ReconstructCovarianceButtonListener(ActionListener):
         self.panel.beam_stats = beam_stats
         
         # Reconstruct at each individual measurement.
-        beam_stats_ind = []
-        for i, measurement in enumerate(measurements):
-            moments_list = [moments_dict[node_id][i] for node_id in node_ids]
-            tmats_list = [tmats_dict[node_id][i] for node_id in node_ids]
-            Sigma = analysis.reconstruct(tmats_list, moments_list, constr=constr)
-            beam_stats_ind.append(analysis.BeamStats(Sigma))
-            beam_stats_ind[-1].print_all()
-        self.panel.beam_stats_ind = beam_stats_ind
+#         beam_stats_ind = []
+#         for i, measurement in enumerate(measurements):
+#             moments_list = [moments_dict[node_id][i] for node_id in node_ids]
+#             tmats_list = [tmats_dict[node_id][i] for node_id in node_ids]
+#             Sigma = analysis.reconstruct(tmats_list, moments_list, constr=constr)
+#             beam_stats_ind.append(analysis.BeamStats(Sigma))
+#             print()
+#             beam_stats_ind[-1].print_all()
+#         self.panel.beam_stats_ind = beam_stats_ind
         
         # Update the panel.
         self.panel.update_tables()
