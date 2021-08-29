@@ -150,13 +150,10 @@ def to_mat(moments):
 
 def to_vec(Sigma):
     """Return 10 element moment vector from covariance matrix."""
-    sig_11, sig_12, sig_13, sig_14 = Sigma[0][:]
-    sig_22, sig_23, sig_24 = Sigma[1][1:]
-    sig_33, sig_34 = Sigma[2][2:]
-    sig_44 = Sigma[3][3]
-    return np.array([sig_11, sig_22, sig_12, 
-                     sig_33, sig_44, sig_34, 
-                     sig_13, sig_23, sig_14, sig_24])
+    return utils.list_to_col_mat(
+        [Sigma.get(0, 0), Sigma.get(1, 1), Sigma.get(0, 1),
+         Sigma.get(2, 2), Sigma.get(3, 3), Sigma.get(2, 3),
+         Sigma.get(0, 2), Sigma.get(1, 2), Sigma.get(0, 3), Sigma.get(1, 3)])
 
  
 
@@ -215,10 +212,7 @@ def reconstruct(transfer_mats, moments, constr=True, **lsq_kws):
     
     print('Covariance matrix is unphysical. Running solver.')
     A = Matrix(A)
-    target = list_to_col_mat(target)
-    
-    eps_x, eps_y = apparent_emittances(Sigma)  
-    alpha_x, alpha_y, beta_x, beta_y = twiss2D(Sigma)
+    target = utils.list_to_col_mat(target)
     
     # This section uses the parameterization of Edwards/Teng.
     #
@@ -234,10 +228,10 @@ def reconstruct(transfer_mats, moments, constr=True, **lsq_kws):
         V = Matrix(4, 4, 0.)
         V.set(0, 0, sqrt(beta_x))
         V.set(1, 0, -alpha_x / sqrt(beta_x))
-        V.set(1, 1, 1 / sqrt(beta_x))
+        V.set(1, 1, 1. / sqrt(beta_x))
         V.set(2, 2, sqrt(beta_y))
         V.set(3, 2, -alpha_y / sqrt(beta_y))
-        V.set(3, 3, 1 / sqrt(beta_y))
+        V.set(3, 3, 1. / sqrt(beta_y))
         if a == 0:
             if b == 0 or c == 0:
                 d = 0
@@ -256,20 +250,54 @@ def reconstruct(transfer_mats, moments, constr=True, **lsq_kws):
         
         def score(self, trial, variables):
             Sigma = get_cov(*get_trial_vals(trial, variables))
-            vec = list_to_col_mat(to_vec(Sigma.getArray()))
-            residuals = (A.times(vec).minus(target)).normF()**2
-                
+            vec = to_vec(Sigma)
+            residuals = A.times(vec).minus(target)
+            return residuals.normF()**2
+        
+    eps_x, eps_y = apparent_emittances(Sigma)  
+    alpha_x, alpha_y, beta_x, beta_y = twiss2D(Sigma)
+    guess = [eps_x, eps_y, alpha_x, alpha_y, beta_x, beta_y,
+             0.1 * random.random(), -0.1 * random.random(), +0.1 * random.random()]
     lb = [0., 0., -INF, -INF, 0., 0., -INF, -INF, -INF]
     ub = INF
     bounds = (lb, ub)
-    guess = [eps_x, eps_y, alpha_x, alpha_y, beta_x, beta_y,
-             0.1 * random.random(), -0.1 * random.random(), +0.1 * random.random()]
     var_names = ['eps_1', 'eps_2', 'alpha_x', 'alpha_y', 'beta_x', 'beta_y', 'a', 'b', 'c']
     scorer = MyScorer()
     
     params = minimize(scorer, guess, var_names, bounds, maxiters=50000, tol=1e-15, verbose=2)
     Sigma = get_cov(*params)
     return Sigma
+
+
+#     # This section uses inverse Cholesky factorization Sigma = L * L^T, where
+#     # L is a lower triangular matrix.
+#     #---------------------------------------------------------------------------
+#     def get_cov(x):
+#         L = Matrix([[x[0], 0, 0, 0],
+#                     [x[1], x[2], 0, 0],
+#                     [x[3], x[4], x[5], 0],
+#                     [x[6], x[7], x[8], x[9]]])
+#         return L.times(L.transpose())
+        
+#     class MyScorer(Scorer):
+        
+#         def __init__(self):
+#             return
+        
+#         def score(self, trial, variables):
+#             Sigma = get_cov(get_trial_vals(trial, variables))
+#             vec = to_vec(Sigma)
+#             residuals = A.times(vec).minus(target)
+#             return residuals.normF()**2
+                
+#     bounds = (-INF, INF)
+#     guess = [random.random() - 0.5 for _ in range(10)]
+#     var_names = ['v_{}'.format(i) for i in range(10)]
+#     scorer = MyScorer()
+    
+#     x = minimize(scorer, guess, var_names, bounds, maxiters=50000, tol=1e-15, verbose=2)
+#     Sigma = get_cov(x)
+#     return Sigma
 
 
 
