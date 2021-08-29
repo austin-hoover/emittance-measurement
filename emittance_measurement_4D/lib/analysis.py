@@ -95,16 +95,19 @@ def twiss2D(Sigma):
 
 def is_positive_definite(Sigma):
     """Return True if symmetric matrix is positive definite."""
-    return any([eigval < 0 for eigval in Sigma.eig().getRealEigenvalues()])
+    return all([eigval >= 0 for eigval in Sigma.eig().getRealEigenvalues()])
 
 
 def is_valid_covariance_matrix(Sigma):
     """Return True if the covariance matrix `Sigma` makes physical sense."""
-    if is_positive_definite(Sigma) and Sigma.det() >= 0:
-        eps_x, eps_y, eps_1, eps_2 = emittances(Sigma)
-        if (eps_x * eps_y >= eps_1 * eps_2):
-            return True
-    return False
+    if not is_positive_definite(Sigma):
+        return False
+    if Sigma.det() < 0:
+        return False
+    eps_x, eps_y, eps_1, eps_2 = emittances(Sigma)
+    if (eps_x * eps_y < eps_1 * eps_2):
+        return False
+    return True
 
 
 def V_matrix_uncoupled(alpha_x, alpha_y, beta_x, beta_y):
@@ -123,9 +126,12 @@ class BeamStats:
             Sigma = Matrix(Sigma)
         self.Sigma = Sigma
         self.eps_x, self.eps_y = apparent_emittances(Sigma)
-        self.eps_1, self.eps_2 = intrinsic_emittances(Sigma)
+        if is_valid_covariance_matrix(Sigma):
+            self.eps_1, self.eps_2 = intrinsic_emittances(Sigma)
+            self.coupling_coeff = 1.0 - sqrt(self.eps_1 * self.eps_2 / (self.eps_x * self.eps_y))
+        else:
+            self.eps_1 = self.eps_2 = self.coupling_coeff = None
         self.alpha_x, self.alpha_y, self.beta_x, self.beta_y = twiss2D(Sigma)
-        self.coupling_coeff = 1.0 - sqrt(self.eps_1 * self.eps_2 / (self.eps_x * self.eps_y))
         
     def rms_ellipse_dims(dim1, dim2):
         return rms_ellipse_dims(self.Sigma, dim1, dim2)

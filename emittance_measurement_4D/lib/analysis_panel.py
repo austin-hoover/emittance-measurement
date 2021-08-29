@@ -144,6 +144,7 @@ class AnalysisPanel(JPanel):
         self.norm_label = JLabel('Normalization')
         self.norm_dropdown = JComboBox(['None', '2D', '4D'])
         self.norm_dropdown.addActionListener(NormDropdownListener(self))
+        self.keep_physical_checkbox = JCheckBox('Keep answer physical', False)
         
         self.bottom_left_panel = JPanel()
         self.bottom_left_panel.setLayout(BorderLayout())
@@ -159,8 +160,6 @@ class AnalysisPanel(JPanel):
         bottom_left_top_panel1.add(self.reconstruction_point_dropdown)
         bottom_left_top_panel2 = JPanel()
         bottom_left_top_panel2.setLayout(FlowLayout(FlowLayout.LEFT))
-
-        self.keep_physical_checkbox = JCheckBox('Keep answer physical', False)
         bottom_left_top_panel2.add(self.keep_physical_checkbox)
 
         bottom_left_top_panel.add(bottom_left_top_panel1)
@@ -172,28 +171,42 @@ class AnalysisPanel(JPanel):
         bottom_left_bottom_panel.add(self.results_table)
         self.bottom_left_panel.add(bottom_left_bottom_panel)
         
-        
-        self.bottom_right_panel = JPanel()
-        self.bottom_right_panel.setLayout(BorderLayout())
-        self.bottom_right_top_panel = JPanel()
-        self.bottom_right_top_panel.add(self.norm_label)
-        self.bottom_right_top_panel.add(self.norm_dropdown)
+        self.bottom_right_panel_A = JPanel()
+        self.bottom_right_panel_A.setLayout(BorderLayout())
+        self.bottom_right_panel_A_top = JPanel()
+        self.bottom_right_panel_A_top.add(self.norm_label)
+        self.bottom_right_panel_A_top.add(self.norm_dropdown)
         self.corner_plot_panel = plt.CornerPlotPanel()
         self.corner_plot_panel.setPreferredSize(Dimension(500, 500))
-        # Turn off ticklabels (is there a tool in XAL to nicely format ticklabels?)
         for panel in self.corner_plot_panel.plots.values():
             panel.xMarkersOn(False)
             panel.yMarkersOn(False)
-        self.bottom_right_panel.add(self.bottom_right_top_panel)
-        self.bottom_right_panel.add(self.bottom_right_top_panel, BorderLayout.NORTH)
-        self.bottom_right_panel.add(self.corner_plot_panel)
+        self.bottom_right_panel_A.add(self.bottom_right_panel_A_top, BorderLayout.NORTH)
+        self.bottom_right_panel_A.add(self.corner_plot_panel, BorderLayout.WEST)
+                
+        self.bottom_right_panel_B = JPanel()
+        self.bottom_right_panel_B.setLayout(BoxLayout(self.bottom_right_panel_B, BoxLayout.Y_AXIS))
+        self.emittance_plot_panels = [
+            plt.LinePlotPanel(n_lines=4, grid='y', xlabel='Measurement index', 
+                              ylabel='[mm mrad]', title='Emittance'),
+            plt.LinePlotPanel(n_lines=4, grid='y', xlabel='Measurement index', 
+                              ylabel='[mm^2 mrad^2]', title='4D emittance'),
+        ]
+        for panel in self.emittance_plot_panels:
+            self.bottom_right_panel_B.add(panel)
+        
+        self.bottom_right_pane = JTabbedPane()
+        self.bottom_right_pane.setPreferredSize(Dimension(725, 500))
+        self.bottom_right_pane.addTab('Graphics', self.bottom_right_panel_A)        
+        self.bottom_right_pane.addTab('Data', self.bottom_right_panel_B)  
         
         self.bottom_panel = JPanel()
         self.bottom_panel.setBorder(BorderFactory.createLineBorder(Color.black))
         self.bottom_panel.setLayout(BorderLayout())
+
         self.bottom_panel.setPreferredSize(Dimension(1100, 550))
         self.bottom_panel.add(self.bottom_left_panel, BorderLayout.WEST)
-        self.bottom_panel.add(self.bottom_right_panel, BorderLayout.EAST)
+        self.bottom_panel.add(self.bottom_right_pane, BorderLayout.EAST)
         
         # Build the main panel
         self.add(self.top_panel, BorderLayout.NORTH)
@@ -214,6 +227,8 @@ class AnalysisPanel(JPanel):
                 panel.removeAllGraphData()
             self.corner_plot_panel.clear()
             return
+        for panel in self.emittance_plot_panels:
+            panel.removeAllGraphData()
         
         # Plot profiles for selected measurement.
         meas_index = int(self.meas_index_dropdown.getSelectedItem())
@@ -285,6 +300,59 @@ class AnalysisPanel(JPanel):
                 x_vals, xp_vals, y_vals, yp_vals = possible_points(M, sig_xx, sig_yy)
                 xxp_panel.plot(x_vals, xp_vals, color=color, ms=0, lw=2)
                 yyp_panel.plot(y_vals, yp_vals, color=color, ms=0, lw=2)
+                
+        # Plot emittance vs. measurement index. Each emittance is calculated only from that
+        # measurement index.
+        meas_indices = []
+        eps_x_list = []
+        eps_y_list = []
+        eps_1_list = []
+        eps_2_list = []
+        eps_x_eps_y_list = []
+        eps_1_eps_2_list = []
+        for meas_index, beam_stats in enumerate(self.beam_stats_ind):
+            meas_indices.append(meas_index)
+            eps_x_list.append(beam_stats.eps_x)
+            eps_y_list.append(beam_stats.eps_y)
+            eps_1_list.append(beam_stats.eps_1)
+            eps_2_list.append(beam_stats.eps_2)
+            eps_x_eps_y_list.append(beam_stats.eps_x * beam_stats.eps_y)
+            if beam_stats.eps_1 and beam_stats.eps_2:
+                eps_1_eps_2_list.append(beam_stats.eps_1 * beam_stats.eps_2)
+            else:
+                eps_1_eps_2_list.append(None)
+        
+        plt_kws = dict(ms=10, lw=2)
+        self.emittance_plot_panels[0].plot(meas_indices, eps_x_list, color=plt.COLOR_CYCLE[0], **plt_kws)
+        self.emittance_plot_panels[0].plot(meas_indices, eps_y_list, color=plt.COLOR_CYCLE[1], **plt_kws)
+        self.emittance_plot_panels[1].plot(meas_indices, eps_x_eps_y_list, color=Color.RED, **plt_kws)
+
+        _meas_indices = [i for i, eps_1 in zip(meas_indices, eps_1_list) if eps_1]
+        eps_1_list = [eps_1 for eps_1 in eps_1_list if eps_1]
+        if eps_1_list and any(eps_1_list):
+            self.emittance_plot_panels[0].plot(_meas_indices, eps_1_list, color=plt.COLOR_CYCLE[2], **plt_kws)
+        
+        _meas_indices = [i for i, eps_2 in zip(meas_indices, eps_2_list) if eps_2]
+        eps_2_list = [eps_2 for eps_2 in eps_2_list if eps_2]
+        if eps_2_list and any(eps_2_list):
+            self.emittance_plot_panels[0].plot(_meas_indices, eps_2_list, color=plt.COLOR_CYCLE[3], **plt_kws)
+        
+        _meas_indices = [i for i, eps_1_eps_2 in zip(meas_indices, eps_1_eps_2_list) if eps_1_eps_2]
+        eps_1_eps_2_list = [eps_1_eps_2 for eps_1_eps_2 in eps_1_eps_2_list if eps_1_eps_2]
+        self.emittance_plot_panels[1].plot(_meas_indices, eps_1_eps_2_list, color=Color.BLUE, **plt_kws)
+        
+        self.emittance_plot_panels[0].setLegendVisible(True)
+        self.emittance_plot_panels[0].setLegendButtonVisible(True)
+        labels = ['eps_x', 'eps_y', 'eps_1', 'eps_2']
+        for label, gd in zip(labels, self.emittance_plot_panels[0].getAllGraphData()):
+            gd.setGraphProperty('Legend', label)
+        
+        self.emittance_plot_panels[1].setLegendVisible(True)
+        self.emittance_plot_panels[1].setLegendButtonVisible(True)
+        labels = ['eps_x*eps_y', 'eps_1*eps_2']
+        for label, gd in zip(labels, self.emittance_plot_panels[1].getAllGraphData()):
+            gd.setGraphProperty('Legend', label)
+    
                 
     def compute_model_twiss(self):
         """Compute the model Twiss parameters at the reconstruction point.
@@ -627,15 +695,16 @@ class ReconstructCovarianceButtonListener(ActionListener):
         self.panel.beam_stats = beam_stats
         
         # Reconstruct at each individual measurement.
-#         beam_stats_ind = []
-#         for i, measurement in enumerate(measurements):
-#             moments_list = [moments_dict[node_id][i] for node_id in node_ids]
-#             tmats_list = [tmats_dict[node_id][i] for node_id in node_ids]
-#             Sigma = analysis.reconstruct(tmats_list, moments_list, constr=constr)
-#             beam_stats_ind.append(analysis.BeamStats(Sigma))
-#             print()
-#             beam_stats_ind[-1].print_all()
-#         self.panel.beam_stats_ind = beam_stats_ind
+        self.panel.beam_stats_ind = []
+        for i, measurement in enumerate(measurements):
+            print('Measurement index = {}'.format(i))
+            moments_list = [moments_dict[node_id][i] for node_id in node_ids]
+            tmats_list = [tmats_dict[node_id][i] for node_id in node_ids]
+            Sigma = analysis.reconstruct(tmats_list, moments_list, constr=constr)
+            stats = analysis.BeamStats(Sigma)
+            stats.print_all()
+            print()
+            self.panel.beam_stats_ind.append(stats)
         
         # Update the panel.
         self.panel.update_tables()
