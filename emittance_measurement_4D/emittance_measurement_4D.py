@@ -60,7 +60,7 @@ class EmittanceMeasurement4D:
         
         # Add tabbed pane to frame.
         self.frame = JFrame("4D Emittance Measurement")
-        self.frame.setSize(Dimension(1100, 875))
+        self.frame.setSize(Dimension(1100, 900))
         self.frame.add(self.pane)
         
         # Add time stamp at the bottom of the frame.
