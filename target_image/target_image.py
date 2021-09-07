@@ -1,3 +1,4 @@
+from __future__ import print_function
 import time
 from xal.ca import Channel
 from xal.ca import ChannelFactory
@@ -9,8 +10,11 @@ target_channel.connectAndWait(0.1)
 array = target_channel.getArrDbl() 
 
 
-current_time = time.strftime("%m.%d.%y %H:%M", time.localtime())
-filename = 'image%s.txt' % current_time
+lt = time.localtime()
+lt_string = '{}.{}.{}_{}.{}.{}'.format(lt.tm_year, lt.tm_mon, lt.tm_mday, 
+                                       lt.tm_hour, lt.tm_min, lt.tm_sec)
+
+filename = 'image_{}.dat'.format(lt_string)
 
 file = open(filename, 'w')
 for x in array:
