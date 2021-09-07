@@ -91,9 +91,9 @@ class EmittanceMeasurement4D:
                 
             def windowClosing(self, event):
                 """Reset the real machine to its default state before closing window."""
-                if self.phase_controller.machine_has_changed:
-                    print 'Restoring machine to default state.'
-                    self.phase_controller.restore_default_optics('live', **self.field_set_kws)
+                #if self.phase_controller.machine_has_changed:
+                    #print 'Restoring machine to default state.'
+                    #self.phase_controller.restore_default_optics('live', **self.field_set_kws)
                 sys.exit(1)
 
         field_set_kws = self.get_field_set_kws()
