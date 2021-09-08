@@ -226,7 +226,10 @@ class AnalysisPanel(JPanel):
             for panel in self.profile_plot_panels:
                 panel.removeAllGraphData()
             self.corner_plot_panel.clear()
+            for panel in self.emittance_plot_panels:
+                panel.removeAllGraphData()
             return
+        
         for panel in self.emittance_plot_panels:
             panel.removeAllGraphData()
         
@@ -583,10 +586,10 @@ class ExportDataButtonListener(ActionListener):
         measurements = self.panel.measurements
         tmats_dict = self.panel.tmats_dict
         moments_dict = self.panel.moments_dict
+        ws_ids = self.panel.measurements[0].node_ids
         
         # Transfer matrices
         file = open(os.path.join(self.folder, 'transfer_mats.dat'), 'w')
-        ws_ids = self.panel.measurements[0].node_ids
         for ws_id in ws_ids:
             for tmat in tmats_dict[ws_id]:
                 tmat_elems = [elem for row in tmat for elem in row]
@@ -605,7 +608,6 @@ class ExportDataButtonListener(ActionListener):
         # Phase advances
         phases_dict = self.panel.ws_phases()
         file = open(os.path.join(self.folder, 'phase_adv.dat'), 'w')
-        ws_ids = sorted(list(phases_dict))
         for ws_id in ws_ids:
             phases = phases_dict[ws_id]
             for (mux, muy) in phases:
@@ -613,8 +615,49 @@ class ExportDataButtonListener(ActionListener):
         file.close()
         
         # Profile data
-        # [...]
-                
+        file1 = open(os.path.join(self.folder, 'pos_x.dat'), 'w')
+        file2 = open(os.path.join(self.folder, 'raw_x.dat'), 'w')
+        for ws_id in ws_ids:
+            for measurement in measurements:
+                profile = measurement[ws_id]
+                for file in [file1, file2]:
+                    file.write(ws_id + ' ')
+                for pos, raw in zip(profile.hor.pos, profile.hor.raw):
+                    file1.write('{} '.format(pos))
+                    file2.write('{} '.format(raw))
+                for file in [file1, file2]:
+                    file.write('\n')
+        for file in [file1, file2]:
+            file.close()
+        file1 = open(os.path.join(self.folder, 'pos_y.dat'), 'w')
+        file2 = open(os.path.join(self.folder, 'raw_y.dat'), 'w')
+        for ws_id in ws_ids:
+            for measurement in measurements:
+                profile = measurement[ws_id]
+                for file in [file1, file2]:
+                    file.write(ws_id + ' ')
+                for pos, raw in zip(profile.ver.pos, profile.ver.raw):
+                    file1.write('{} '.format(pos))
+                    file2.write('{} '.format(raw))
+                for file in [file1, file2]:
+                    file.write('\n')
+        for file in [file1, file2]:
+            file.close()
+        file1 = open(os.path.join(self.folder, 'pos_u.dat'), 'w')
+        file2 = open(os.path.join(self.folder, 'raw_u.dat'), 'w')
+        for ws_id in ws_ids:
+            for measurement in measurements:
+                profile = measurement[ws_id]
+                for file in [file1, file2]:
+                    file.write(ws_id + ' ')
+                for pos, raw in zip(profile.dia.pos, profile.dia.raw):
+                    file1.write('{} '.format(pos))
+                    file2.write('{} '.format(raw))
+                for file in [file1, file2]:
+                    file.write('\n')
+        for file in [file1, file2]:
+            file.close()
+            
         # Other info
         file = open(os.path.join(self.folder, 'info.dat'), 'w')
         file.write('reconstruction_point = {}\n'.format(self.panel.reconstruction_node_id))
