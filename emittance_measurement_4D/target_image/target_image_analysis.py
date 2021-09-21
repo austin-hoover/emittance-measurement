@@ -3,8 +3,10 @@ from datetime import datetime
 import collections
 
 import numpy as np
-from scipy import ndimage
 from scipy import optimize as opt
+from skimage import filters
+from skimage import transform
+
 
 
 PIXEL_WIDTH = 1.0 / 1.77
@@ -35,10 +37,11 @@ class Image:
         self.yy *= pixel_width
         
     def filter(self, sigma, **kws):
-        self.Zf = ndimage.gaussian_filter(self.Z, sigma=2*[sigma], order=0, **kws)
+        self.Zf = filters.gaussian(self.Z, sigma=sigma, **kws)
         return self.Zf
         
     def fit_gauss2d(self, use_filtered=False):
+        """Fit 2D Gaussian to the image."""
         Z = self.Zf if use_filtered else self.Z 
         self.Zfit, params = fit_gauss2d(self.X, self.Y, Z)
         sig_xx, sig_yy, sig_xy, mean_x, mean_y, amp = params
