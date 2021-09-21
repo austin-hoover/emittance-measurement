@@ -34,6 +34,7 @@ from java.text import DecimalFormat
 # Local
 import optics
 import plotting as plt
+import utils
 
 
 class PhaseControllerPanel(JPanel):
@@ -108,15 +109,6 @@ class PhaseControllerPanel(JPanel):
 
         # Machine update panel
         #------------------------------------------------------------------------
-
-        # Add checkbox. One option is to set phases from pre-calculated scan.
-        # The other option is to set them manually.
-        # delta_mux_label = JLabel("<html>&delta&mu;<SUB>x</SUB> [deg]<html>")
-        # delta_mux_text_field = JTextField('0.00')
-        #
-        # delta_muy_label = JLabel("<html>&delta&mu;<SUB>y</SUB> [deg]<html>")
-        # delta_muy_text_field = JTextField('0.00')
-
         # Labels
         sleep_time_label = JLabel('Sleep time [s]')
         max_frac_change_label = JLabel('Max. frac. field change')
@@ -143,7 +135,21 @@ class PhaseControllerPanel(JPanel):
         temp_panel = AlignedLabeledComponentsPanel()
         temp_panel.add_row(sleep_time_label, self.sleep_time_text_field)
         temp_panel.add_row(max_frac_change_label, self.max_frac_change_text_field)
-        temp_panel.add_row(scan_index_label, self.scan_index_dropdown)
+        
+        
+        
+#         temp_panel.add_row(scan_index_label, self.scan_index_dropdown)
+
+        self.delta_mux_label = JLabel("<html>&Delta&mu;<SUB>x</SUB> [deg]<html>")
+        self.delta_mux_text_field = JTextField('0.00')
+        self.delta_muy_label = JLabel("<html>&Delta&mu;<SUB>y</SUB> [deg]<html>")
+        self.delta_muy_text_field = JTextField('0.00')        
+        temp_panel.add_row(self.delta_mux_label, self.delta_mux_text_field)
+        temp_panel.add_row(self.delta_muy_label, self.delta_muy_text_field)
+        
+        
+        
+        
         self.machine_update_panel.add(temp_panel)
         self.machine_update_panel.add(self.set_live_optics_button)
         self.machine_update_panel.add(self.quad_settings_table.getTableHeader())
@@ -494,17 +500,64 @@ class SetLiveOpticsButtonListener(ActionListener):
     def actionPerformed(self, action):
         quad_ids = self.phase_controller.ind_quad_ids
         field_set_kws = self.panel.get_field_set_kws()
-        scan_index = self.panel.scan_index_dropdown.getSelectedItem()
+        
+        
+        
+        
+        
+        # This is the new method to use the text boxes.
+        # -----------------------------------------------
+        self.phase_controller.restore_default_optics('model')
+        mux0, muy0 = self.phase_controller.phases(self.phase_controller.ref_ws_id)
+        delta_mux = utils.radians(float(self.panel.delta_mux_text_field.getText()))
+        delta_muy = utils.radians(float(self.panel.delta_muy_text_field.getText()))
+        mux = utils.put_angle_in_range(mux0 + delta_mux)
+        muy = utils.put_angle_in_range(muy0 + delta_muy)
+        print('mux0, muy0 = {}, {} [deg]'.format(utils.degrees(mux0), utils.degrees(muy0)))
+        print('mux, muy = {}, {} [deg]'.format(utils.degrees(mux), utils.degrees(muy)))
+        print('Setting model phase advances...')
+        self.phase_controller.set_ref_ws_phases(mux, muy, verbose=2)
+        
+        # Constrain beam size on target if it's too far from the default.
+        beta_x_target, beta_y_target = self.phase_controller.beta_funcs('RTBT:Tgt')
+        beta_x_default, beta_y_default = self.phase_controller.default_betas_at_target
+        frac_change_x = abs(beta_x_target - beta_x_default) / beta_x_default
+        frac_change_y = abs(beta_y_target - beta_y_default) / beta_y_default
+        tol = 0.05
+        if frac_change_x > tol or frac_change_y > tol:
+            print 'Setting betas at target...'
+            self.phase_controller.constrain_size_on_target(verbose=1)
+        max_betas_anywhere = self.phase_controller.max_betas(stop=None)
+        print '  Max betas anywhere: {:.3f}, {:.3f}.'.format(*max_betas_anywhere)
+        
+        # Sync live with model.
         print 'Syncing live quads with model...'
         print field_set_kws
-        if scan_index == 'default':
-            self.phase_controller.restore_default_optics('model')
-            self.phase_controller.restore_default_optics('live')
-        else:
-            scan_index = int(scan_index)
-            model_fields = self.panel.model_fields_list[scan_index]
-            self.phase_controller.set_fields(quad_ids, model_fields, 'model')
-            self.phase_controller.set_fields(quad_ids, model_fields, 'live', **field_set_kws)
+        self.phase_controller.sync_live_with_model(**field_set_kws)
+                
+        
+        
+        
+        
+        
+        # This is the normal method using the scan index.
+        # -----------------------------------------------
+#         scan_index = self.panel.scan_index_dropdown.getSelectedItem()
+#         print 'Syncing live quads with model...'
+#         print field_set_kws
+#         if scan_index == 'default':
+#             self.phase_controller.restore_default_optics('model')
+#             self.phase_controller.restore_default_optics('live')
+#         else:
+#             scan_index = int(scan_index)
+#             model_fields = self.panel.model_fields_list[scan_index]
+#             self.phase_controller.set_fields(quad_ids, model_fields, 'model')
+#             self.phase_controller.set_fields(quad_ids, model_fields, 'live', **field_set_kws)
+            
+            
+            
+            
+            
         self.panel.quad_settings_table.getModel().fireTableDataChanged()
         self.panel.update_plots()
         print 'Done.'
