@@ -2,6 +2,7 @@
 from __future__ import print_function
 import sys
 import os
+import time
 from pprint import pprint
 
 from xal.model.probe import Probe
@@ -26,7 +27,7 @@ from lib import optics
 from lib import utils
 
 
-controller = optics.PhaseController(sync_mode='design', connect=False)
+controller = optics.PhaseController()
 
 phase_coverage = 179.0 # [deg]
 n_steps = 15
@@ -57,6 +58,8 @@ file.write('\n')
 for i, mux in enumerate(muxx): 
     for j, muy in enumerate(muyy):
         
+        start_time = time.time()
+        
         print('i, j = {}, {}'.format(i, j))
         
         # Save phase advances at WS24.
@@ -86,6 +89,7 @@ for i, mux in enumerate(muxx):
         phases_at_tgt.append([mux_tgt, muy_tgt])
         print('  Phase advances at WS24   = {:.2f}, {:.2f} [deg]'.format(mux_deg, muy_deg))
         print('  Phase advances at target = {:.2f}, {:.2f} [deg]'.format(mux_tgt, muy_tgt))
+        print('time = {}'.format(time.time() - start_time))
         print()
 
         # Write quad fields to a file.
@@ -93,7 +97,7 @@ for i, mux in enumerate(muxx):
         for field in fields:
             file.write('{} '.format(field))
         file.write('\n')
-        
+                
 file.close()
     
     
