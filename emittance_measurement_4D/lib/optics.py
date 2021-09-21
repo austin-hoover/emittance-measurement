@@ -258,7 +258,7 @@ class PhaseController:
             if lb > ub:
                 lb, ub = ub, lb
             self.ps_lb.append(lb)
-            self.ps_ub.append(ub)
+            self.ps_ub.append(ub)  
             
         # Store the default field settings
         self.default_fields = self.get_fields(self.ind_quad_ids, 'model')    
@@ -385,7 +385,9 @@ class PhaseController:
         quad_ids = self.ind_quad_ids[lo : hi + 1]
         scorer = MyScorer(self, self.ind_quad_ids[lo : hi + 1])
         var_names = self.ind_quad_ids[lo : hi + 1]
-        bounds = (self.ps_lb[lo : hi + 1], self.ps_ub[lo : hi + 1])
+        lb = self.ps_lb[lo : hi + 1]
+        ub = self.ps_ub[lo : hi + 1]
+        bounds = (lb, ub)
         init_fields = self.default_fields[lo : hi + 1]    
         self.restore_default_optics()
         fields = minimize(scorer, init_fields, var_names, bounds)
@@ -559,7 +561,7 @@ class PhaseController:
             'beta_y': beta_y
         }
         
-    def get_phases_for_scan(self, phase_coverage=90., n_steps=3):
+    def get_phases_for_scan(self, phase_coverage=90., n_steps=3, method=1):
         """Create array of phases for scan. 
 
         In the first{second} half of the scan, the horizontal{vertical} phase is 
@@ -589,14 +591,15 @@ class PhaseController:
         mux_max = put_angle_in_range(mux0 + 0.5 * phase_coverage)
         muy_min = put_angle_in_range(muy0 - 0.5 * phase_coverage)
         muy_max = put_angle_in_range(muy0 + 0.5 * phase_coverage)
-        # phases_x = lin_phase_range(mux_min, mux_max, n) + n * [mux0]
-        # phases_y = n * [muy0] + lin_phase_range(muy_min, muy_max, n)
-        phases_x = lin_phase_range(mux_min, mux_max, n_steps)
-        phases_y = lin_phase_range(muy_min, muy_max, n_steps)
-        phases_y = list(reversed(phases_y))
-        phases = [(mux, muy) for mux, muy in zip(phases_x, phases_y)]
+        if method == 1:
+            phases_x = lin_phase_range(mux_min, mux_max, n_steps)
+            phases_y = lin_phase_range(muy_min, muy_max, n_steps)
+            phases_y = list(reversed(phases_y))
+        elif method == 2:
+            phases_x = lin_phase_range(mux_min, mux_max, n) + n * [mux0]
+            phases_y = n * [muy0] + lin_phase_range(muy_min, muy_max, n)
+        phases = [[mux, muy] for mux, muy in zip(phases_x, phases_y)]
         return phases
-    
     
 def lin_phase_range(mu_min, mu_max, n_steps):
     # Difference between min and max phase is always <= 180 degrees.
