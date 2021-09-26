@@ -353,7 +353,7 @@ class EnergyTextFieldListener(ActionListener):
         kin_energy = 1e9 * float(self.text_field.getText())
         if kin_energy < 0:
             raise ValueError('Kinetic energy must be postive.')
-        self.phase_controller.set_kin_energy(kin_energy)
+        self.phase_controller.set_kinetic_energy(kin_energy)
         self.panel.init_twiss_table.getModel().fireTableDataChanged()
         self.phase_controller.track()
         self.panel.update_plots()
