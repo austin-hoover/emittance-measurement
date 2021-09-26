@@ -15,15 +15,24 @@ from xal.tools.beam import Twiss
 from xal.tools.beam.calc import CalculationsOnRings
 
 
-kin_energy = 1.0e9 # [eV]
+kin_energy = 0.8e9 # [eV]
 ypmax = 1.7 # [mrad]
-
+sync_live = True
 
 accelerator = XMLDataManager.loadDefaultAccelerator()
 sequence = accelerator.getComboSequence('Ring')
 scenario = Scenario.newScenarioFor(sequence)
-scenario.setSynchronizationMode(Scenario.SYNC_MODE_LIVE)
-scenario.resync()
+
+if sync_live:
+    scenario.setSynchronizationMode(Scenario.SYNC_MODE_LIVE)
+    scenario.resync()
+    
+    
+print('Kinetic energy = {:.3e} [eV]'.format(kin_energy))
+print('ypmax = {} [mrad]'.format(ypmax))
+print('Sync live = {}'.format(sync_live))
+
+    
 
 algorithm = AlgorithmFactory.createTransferMapTracker(sequence)
 probe = ProbeFactory.getTransferMapProbe(sequence, algorithm)
