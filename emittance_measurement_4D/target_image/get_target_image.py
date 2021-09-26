@@ -1,4 +1,7 @@
+"""Save the current image to a file."""
 from __future__ import print_function
+import sys
+import os
 import time
 from datetime import datetime
 from xal.ca import Channel
@@ -33,16 +36,17 @@ class TargetImageGetter:
                 time.sleep(sleep_time)
         return images, timestamps
 
-
     
-# Save current image to file.
 ig = TargetImageGetter()
+images, timestamps = ig.get_images(n=5, sleep_time=1.1)
 
-image, timestamp = ig.get_image()
-
-file = open('_output/images/image_{}.dat'.format(timestamp), 'w')
-for x in image:
-    file.write('{} '.format(x))
+# Save the batch of images in one file. Label the file with the 
+# timestamp of the first image. 
+file = open('_output/images/image_{}.dat'.format(timestamps[0]), 'w')
+for image in images:
+    for x in image:
+        file.write('{} '.format(x))
+    file.write('\n')
 file.close()
-        
+
 exit()
