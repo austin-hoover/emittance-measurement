@@ -4,6 +4,9 @@ import sys
 import os
 from pprint import pprint
 
+from xal.ca import Channel
+from xal.ca import ChannelFactory
+from xal.extension.scan import WrappedChannel
 from xal.model.probe import Probe
 from xal.model.probe.traj import Trajectory
 from xal.service.pvlogger.sim import PVLoggerDataSource
@@ -24,7 +27,17 @@ from xal.tools.beam.calc import CalculationsOnRings
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from lib import optics
 from lib import utils
+from lib.beam_trigger_lib import BeamTrigger
 
+from get_target_image import TargetImageGetter
+
+
+# Create channels
+# trigger_channel = WrappedChannel('ICS_Tim:Gate_BeamOn:SSMode')
+trigger = BeamTrigger()
+ig = TargetImageGetter()
+
+    
 
 # Read optics file.
 file = open('_output/optics.dat', 'r')
@@ -34,25 +47,43 @@ fields_list = [[float(s) for s in line.split()] for line in lines[1:]]
     
 
 # Perform the scan.
-controller = optics.PhaseController()
+phase_controller = optics.PhaseController()
+
+images = []
+timestamps = []
     
 for i, fields in enumerate(fields_list):
-    
     print('i = {}'.format(i))
     
     # Set the machine optics.
-    controller.set_fields(quad_ids, fields, 'live')
+    print('    Setting machine optics.')
+    phase_controller.set_fields(quad_ids, fields, 'live')
+    print('    Done.')
     
     # Pause?
     
-    
     # Turn the beam on.
-    
-    
-    # Collect target image data.
-    
-    
-    # Turn the beam off.
-    
+    trigger.makeShot()
 
+    # Get the target image.
+    image, timestamp = ig.get_image()
+    images.append(image)
+    timestamps.append(timestamp)
+    
+    # Turn the beam off?
+
+
+# Save the data. 
+file1 = open('_output/images.dat', 'w')
+file2 = open('_output/timestamps.dat', 'w')
+
+for image, timestamp in zip(images, timestamps):
+    for x in image:
+        file1.write(str(x) + ' ')
+    file1.write('\n')
+    file2.write(timestamp + '\n')
+
+file1.close()
+file2.close()
+        
 exit()
