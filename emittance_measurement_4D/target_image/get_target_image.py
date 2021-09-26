@@ -35,20 +35,14 @@ class TargetImageGetter:
 
 
     
+# Save current image to file.
 ig = TargetImageGetter()
 
-images, timestamps = ig.get_images(n=10, sleep_time=1.0)
+image, timestamp = ig.get_image()
 
-file1 = open('_output/images.dat', 'w')
-file2 = open('_output/timestamps.dat', 'w')
-
-for image, timestamp in zip(images, timestamps):
-    for x in image:
-        file1.write(str(x) + ' ')
-    file1.write('\n')
-    file2.write(timestamp + '\n')
-
-file1.close()
-file2.close()
+file = open('_output/images/image_{}.dat'.format(timestamp), 'w')
+for x in image:
+    file.write('{} '.format(x))
+file.close()
         
 exit()
