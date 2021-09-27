@@ -1,7 +1,10 @@
 """
 To do:
-    * Progress bar doesn't actually update live, and it ends up displaying an inaccurate
-      number.
+    * Progress bar doesn't update until process is complete.
+    * Both model and live optics should be plotted.
+    * Should be able to control model optics separately/before changin live
+      optics. There should be a button to sync model with live optics.
+    * Button to reset default fields from current machine state.
 """
 
 from java.awt import BorderLayout

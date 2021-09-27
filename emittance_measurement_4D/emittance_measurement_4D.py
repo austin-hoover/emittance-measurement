@@ -1,7 +1,8 @@
 """
 To do:
-    * The GUI-building parts of the code are hard to read. I don't think I'm doing it 
-      correctly. Maybe try the EdgeLayout class from OpenXAL.
+    * The GUI-building parts of the code are hard to read. 
+    * Some of the GUI components have hard-coded dimensions, so they 
+      don't scale with the window.
 """
 import math
 import time
