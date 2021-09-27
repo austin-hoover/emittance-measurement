@@ -42,7 +42,7 @@ class PhaseControllerPanel(JPanel):
     def __init__(self):
         JPanel.__init__(self)
         self.setLayout(BorderLayout())
-        self.phase_controller = optics.PhaseController()
+        self.phase_controller = optics.PhaseController(kinetic_energy=0.8e9)
         self.model_fields_list = []
         # Get wire-scanner positions.
         self.ws_ids = optics.RTBT_WS_IDS
@@ -74,7 +74,7 @@ class PhaseControllerPanel(JPanel):
         self.ref_ws_id_dropdown = JComboBox(self.ws_ids)
         self.init_twiss_table = JTable(InitTwissTableModel(self))
         self.init_twiss_table.setShowGrid(True)
-        self.energy_text_field = JTextField('1.0', text_field_width)
+        self.energy_text_field = JTextField('0.8', text_field_width)
         self.phase_coverage_text_field = JTextField('30.0', text_field_width)
         formatter = NumberFormat.getIntegerInstance()
         formatter.setGroupingUsed(False)
