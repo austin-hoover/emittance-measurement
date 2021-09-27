@@ -1,0 +1,32 @@
+"""Save the target image to a file."""
+from __future__ import print_function
+import sys
+import os
+from os.path import join
+import time
+from xal.ca import Channel
+from xal.ca import ChannelFactory
+
+
+folder = '/homes/physics/Hoover/hoover-scripts/emittance_measurement_4D/_saved/2021-09-26/setting1/ramp_turns/target_images/'
+
+
+channel_factory = ChannelFactory.defaultFactory()
+target_channel = channel_factory.getChannel('Target_Diag:TIS:Image')
+target_channel.connectAndWait(0.1)
+array = target_channel.getArrDbl() 
+
+
+lt = time.localtime()
+lt = '{}.{}.{}_{}.{}.{}'.format(lt.tm_year, lt.tm_mon, lt.tm_mday, 
+                                       lt.tm_hour, lt.tm_min, lt.tm_sec)
+
+filename = join(folder, 'image_{}.dat'.format(lt_string))
+
+file = open(filename, 'w')
+for x in array:
+    file.write(str(x) + ' ')
+file.close()
+
+
+exit()

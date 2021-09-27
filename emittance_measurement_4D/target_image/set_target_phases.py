@@ -1,5 +1,6 @@
 """Scan live phase advances at WS24, collect target image data."""
 from __future__ import print_function
+import time
 import sys
 import os
 from pprint import pprint
@@ -33,24 +34,25 @@ from get_target_image import TargetImageGetter
 
 
 # Create channels
-# trigger_channel = WrappedChannel('ICS_Tim:Gate_BeamOn:SSMode')
+trigger_channel = WrappedChannel('ICS_Tim:Gate_BeamOn:SSMode')
 trigger = BeamTrigger()
 ig = TargetImageGetter()
 
     
 
 # Read optics file.
-file = open('_output/optics.dat', 'r')
+file = open('_output/scan/optics.dat', 'r')
 lines = [line.rstrip() for line in file]
 quad_ids = lines[0].split()
 fields_list = [[float(s) for s in line.split()] for line in lines[1:]]
     
 
 # Perform the scan.
-phase_controller = optics.PhaseController()
+phase_controller = optics.PhaseController(kinetic_energy=0.8e9)
 
 images = []
 timestamps = []
+
     
 for i, fields in enumerate(fields_list):
     print('i = {}'.format(i))
@@ -61,9 +63,12 @@ for i, fields in enumerate(fields_list):
     print('    Done.')
     
     # Pause?
+    time.sleep(0.1)
     
     # Turn the beam on.
     trigger.makeShot()
+
+    time.sleep(1.0)
 
     # Get the target image.
     image, timestamp = ig.get_image()

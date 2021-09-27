@@ -36,17 +36,18 @@ class TargetImageGetter:
                 time.sleep(sleep_time)
         return images, timestamps
 
-    
-ig = TargetImageGetter()
-images, timestamps = ig.get_images(n=5, sleep_time=1.1)
 
-# Save the batch of images in one file. Label the file with the 
-# timestamp of the first image. 
-file = open('_output/images/image_{}.dat'.format(timestamps[0]), 'w')
-for image in images:
-    for x in image:
-        file.write('{} '.format(x))
-    file.write('\n')
-file.close()
+if __name__ == '__main__':
+    ig = TargetImageGetter()
+    images, timestamps = ig.get_images(n=15, sleep_time=1.)
 
-exit()
+    # Save the batch of images in one file. Label the file with the 
+    # timestamp of the first image. 
+    file = open('_output/images/image_{}.dat'.format(timestamps[0]), 'w')
+    for image in images:
+        for x in image:
+            file.write('{} '.format(x))
+        file.write('\n')
+    file.close()
+
+    exit()
