@@ -13,7 +13,7 @@ PIXEL_WIDTH = 1.0 / 1.77
 
 
 class Image:
-    def __init__(self, Z, pixel_width=1):
+    def __init__(self, Z, pixel_width=1, pad_y=True):
         self.Z = Z
         self.Zf = None
         self.n_rows, self.n_cols = Z.shape
@@ -49,29 +49,50 @@ class Image:
         self.cov = np.array([[sig_xx, sig_xy], [sig_xy, sig_yy]])
         self.mean_x = mean_x
         self.mean_y = mean_y
+        
+    def estimate_mean(self, use_filtered=False):
+        Z = self.Zf if use_filtered else self.Z 
+        fx = np.sum(Z, axis=0)
+        fy = np.sum(Z, axis=1)
+        mean_x = np.sum(fx * self.xx) / np.sum(fx)
+        mean_y = np.sum(fy * self.yy) / np.sum(fy)
+        return mean_x, mean_y
+        
+        
+def read_file(filename, make_square=True):
+    arrays = np.loadtxt(filename)
+    if arrays.ndim == 1:
+        arrays = [arrays]
+    Z_list = []
+    for array in arrays:
+        Z = array.reshape(200, 400)
+        Z_list.append(Z)
+    n_avg = 5
+    if n_avg > len(Z_list):
+        n_avg = len(Z_list)
+    Z = np.mean(np.array(Z_list[:n_avg]), axis=0) # average over the images
+    if make_square:
+        Z = np.vstack([np.zeros((100, 400)), Z, np.zeros((100, 400))]) # make image square
+    image = Image(Z, pixel_width=PIXEL_WIDTH)
+    return image
 
         
-def read_files(filenames):
+def read_files(filenames, make_square=True):
     TFile = collections.namedtuple('TFile', ['filename', 'timestamp'])
     tfiles = []
     for filename in filenames:
         datetime_str = filename.split('image_')[-1].split('.dat')[0]
         date_str, time_str = datetime_str.split('_')
-        year, month, day = [int(s) for s in date_str.split('.')]
-        hour, minute, second = [int(s) for s in time_str.split('.')]
-        tfiles.append(TFile(filename, datetime(year, month, day, hour, minute, second)))
-        
+        times = []
+        times += [int(s) for s in date_str.split('.')]
+        times += [int(s) for s in time_str.split('.')]
+        tfiles.append(TFile(filename, datetime(*times)))
     tfiles = sorted(tfiles, key=lambda tfile: tfile.timestamp)
-    
-    images = []
-    for tfile in tfiles:
-        Z = np.loadtxt(tfile.filename).reshape(200, 400)
-        Z = np.vstack([np.zeros((100, 400)), Z, np.zeros((100, 400))]) # make square image
-        images.append(Image(Z, pixel_width=PIXEL_WIDTH))
-    return images
+    return [read_file(tfile.filename, make_square) for tfile in tfiles]
 
 
 def fit_gauss2d(X, Y, Z):
+    
     def gauss2d(XY, sig_xx, sig_yy, sig_xy, mean_x, mean_y, amp):
         X, Y = XY
         x = X - mean_x

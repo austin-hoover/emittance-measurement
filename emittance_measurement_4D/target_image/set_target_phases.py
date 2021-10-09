@@ -38,22 +38,17 @@ trigger_channel = WrappedChannel('ICS_Tim:Gate_BeamOn:SSMode')
 trigger = BeamTrigger()
 ig = TargetImageGetter()
 
-    
-
 # Read optics file.
 file = open('_output/scan/optics.dat', 'r')
 lines = [line.rstrip() for line in file]
 quad_ids = lines[0].split()
 fields_list = [[float(s) for s in line.split()] for line in lines[1:]]
     
-
 # Perform the scan.
 phase_controller = optics.PhaseController(kinetic_energy=0.8e9)
-
 images = []
 timestamps = []
 
-    
 for i, fields in enumerate(fields_list):
     print('i = {}'.format(i))
     
@@ -65,26 +60,22 @@ for i, fields in enumerate(fields_list):
     # Pause?
     time.sleep(0.1)
     
-    # Turn the beam on.
+    # Send one beam pulse to the target.
     trigger.makeShot()
-
     time.sleep(1.0)
 
     # Get the target image.
     image, timestamp = ig.get_image()
     images.append(image)
     timestamps.append(timestamp)
-    
-    # Turn the beam off?
-
 
 # Save the data. 
 file1 = open('_output/images.dat', 'w')
 file2 = open('_output/timestamps.dat', 'w')
 
 for image, timestamp in zip(images, timestamps):
-    for x in image:
-        file1.write(str(x) + ' ')
+    for pixel in image:
+        file1.write(str(pixel) + ' ')
     file1.write('\n')
     file2.write(timestamp + '\n')
 

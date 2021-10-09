@@ -1,4 +1,4 @@
-"""Try to gain better control of the phase advances at the target."""
+"""This script controls the phase advances at the target."""
 from __future__ import print_function
 import sys
 import os
@@ -19,7 +19,7 @@ from lib.xal_helpers import write_traj_to_file
 
 
 def set_target_phases(mux, muy, beta_max_before_ws24, beta_max_after_ws24,
-                      default_target_betas, target_beta_frac_tol, controller):
+                      default_target_betas, target_beta_frac_tol, controller, guess=None):
     """Set x and y phases at the target.
 
     Parameters
@@ -52,7 +52,7 @@ def set_target_phases(mux, muy, beta_max_before_ws24, beta_max_after_ws24,
             cost = norm(residuals)**2
             cost += self.penalty_max_beta()
             cost += self.penalty_target_betas()
-            # print('  cost = {}'.format(cost))
+            print('  cost = {}'.format(cost))
             return cost
 
         def penalty_max_beta(self):
@@ -83,7 +83,8 @@ def set_target_phases(mux, muy, beta_max_before_ws24, beta_max_after_ws24,
     lb = controller.ps_lb[lo: hi + 1]
     ub = controller.ps_ub[lo: hi + 1]
     bounds = (lb, ub)
-    guess = controller.get_fields(quad_ids, 'model')
+    if guess is None:
+        guess = controller.get_fields(quad_ids, 'model')
     minimize(scorer, guess, var_names, bounds)
 
 
@@ -113,9 +114,9 @@ muxx = optics.lin_phase_range(mux0 + dmux_min, mux0 + dmux_max, n_steps)
 muyy = optics.lin_phase_range(muy0 + dmuy_min, muy0 + dmuy_max, n_steps)
 
 
-file_phase_adv = open('_output/phase_adv.dat', 'w')
-file_fields = open('_output/fields.dat', 'w')
-file_default_fields = open('_output/default_fields.dat', 'w')
+file_phase_adv = open('_output/data/phase_adv.dat', 'w')
+file_fields = open('_output/data/fields.dat', 'w')
+file_default_fields = open('_output/data/default_fields.dat', 'w')
 
 for quad_id in quad_ids:
     file_fields.write(quad_id + ' ')
@@ -133,21 +134,30 @@ for i, mux in enumerate(muxx):
         print('i, j, time = {}, {}, {}'.format(i, j, time.time() - start_time))
 
         set_target_phases(mux, muy, beta_max_before_ws24, beta_max_after_ws24,
-                          default_target_betas, target_beta_frac_tol, controller)
+                          default_target_betas, target_beta_frac_tol, controller, 
+                          guess=default_fields)
 
         mux_calc, muy_calc = controller.phases('RTBT:Tgt')
+        
+        
+        
+        # If it didn't work, just change the initial guess slightly. I don't know why it 
+        # doesn't converge in certain cases.
+        # [...]
+        
+        
         fields = controller.get_fields(quad_ids, 'model')
 
-        # print('Final:')
-        # print('  Phase advances at target = {:.2f}, {:.2f} [deg]'.format(degrees(mux_calc), degrees(muy_calc)))
-        # print('  Expected                 = {:.2f}, {:.2f} [deg]'.format(degrees(mux), degrees(muy)))
-        # print('  Max betas anywhere (< WS24) = {:.2f}, {:.2f}'.format(*controller.max_betas(stop='RTBT_Diag:WS24')))
-        # print('  Max betas anywhere (> WS24) = {:.2f}, {:.2f}'.format(*controller.max_betas(start='RTBT_Diag:WS24', stop='RTBT:Tgt')))
-        # print('  Betas at target = {:.2f}, {:.2f}'.format(*controller.beta_funcs('RTBT:Tgt')))
-        # print('Magnet changes (id, new, old, abs(frac_change):')
-        # for quad_id, field, default_field in zip(quad_ids, fields, default_fields):
-        #     frac_change = abs(field - default_field) / default_field
-        #     print('  {}: {} {} {}'.format(quad_id, field, default_field, frac_change))
+        print('Final:')
+        print('  Phase advances at target = {:.2f}, {:.2f} [deg]'.format(degrees(mux_calc), degrees(muy_calc)))
+        print('  Expected                 = {:.2f}, {:.2f} [deg]'.format(degrees(mux), degrees(muy)))
+        print('  Max betas anywhere (< WS24) = {:.2f}, {:.2f}'.format(*controller.max_betas(stop='RTBT_Diag:WS24')))
+        print('  Max betas anywhere (> WS24) = {:.2f}, {:.2f}'.format(*controller.max_betas(start='RTBT_Diag:WS24', stop='RTBT:Tgt')))
+        print('  Betas at target = {:.2f}, {:.2f}'.format(*controller.beta_funcs('RTBT:Tgt')))
+        print('Magnet changes (id, new, old, abs(frac_change):')
+        for quad_id, field, default_field in zip(quad_ids, fields, default_fields):
+            frac_change = abs(field - default_field) / default_field
+            print('  {}: {} {} {}'.format(quad_id, field, default_field, frac_change))
 
         file_phase_adv.write('{} {}\n'.format(mux_calc, muy_calc))
 
@@ -157,7 +167,8 @@ for i, mux in enumerate(muxx):
         file_fields.write('\n')
         file_default_fields.write('\n')
 
-        write_traj_to_file(controller.tracked_twiss(), controller.positions, '_output/twiss_{}.dat'.format(counter))
+        write_traj_to_file(controller.tracked_twiss(), controller.positions, 
+                           '_output/data/twiss_{}.dat'.format(counter))
         counter += 1
 
 

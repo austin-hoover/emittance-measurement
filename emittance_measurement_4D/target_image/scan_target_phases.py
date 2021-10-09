@@ -27,12 +27,13 @@ from lib import optics
 from lib import utils
 
 
-controller = optics.PhaseController()
-
+kinetic_energy = 0.8e9 # [eV]
 phase_coverage = 179.0 # [deg]
 n_steps = 15
 max_beta = 35.0 # [m/rad]
 beta_lims = (max_beta, max_beta)
+
+controller = optics.PhaseController(kinetic_energy=kinetic_energy)
 
 
 # Get list of phases for x and y (low to high)
@@ -49,7 +50,6 @@ quad_ids = ['RTBT_Mag:QH18', 'RTBT_Mag:QV19', 'RTBT_Mag:QH26', 'RTBT_Mag:QV27',
 phases_at_tgt = []
 phases_at_ws24 = []
 
-
 file = open('_output/optics.dat', 'w')
 for quad_id in quad_ids:
     file.write(quad_id + ' ')
@@ -62,7 +62,7 @@ for i, mux in enumerate(muxx):
         
         print('i, j = {}, {}'.format(i, j))
         
-        # Save phase advances at WS24.
+        # Store phase advances at WS24.
         mux_deg = utils.degrees(mux)
         muy_deg = utils.degrees(muy)
         phases_at_ws24.append([mux_deg, muy_deg])
