@@ -234,7 +234,7 @@ class PhaseController:
             
         # Create dictionary of shared power supplies. Each key is an 
         # independent quad id, and each value is a list of quad ids which share
-        # power with the indepent quad. We need this because the quads in the 
+        # power with the independent quad. We need this because the quads in the
         # online model can be changed independently.
         self.shared_power = dict()
         for quad_id, ps_id in zip(self.quad_ids, self.ps_ids):
@@ -260,7 +260,7 @@ class PhaseController:
             self.ps_lb.append(lb)
             self.ps_ub.append(ub)  
             
-        # Store the default field settings
+        # Store the default field settings.
         self.default_fields = self.get_fields(self.ind_quad_ids, 'model')    
         self.default_betas_at_target = self.beta_funcs('RTBT:Tgt')
         
