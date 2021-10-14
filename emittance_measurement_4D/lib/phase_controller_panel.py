@@ -1,12 +1,11 @@
-"""
+"""This panel is to control the RTBT optics.
+
 To do:
     * Progress bar doesn't update until process is complete.
     * Both model and live optics should be plotted.
-    * Should be able to control model optics separately/before changin live
-      optics. There should be a button to sync model with live optics.
-    * Button to reset default fields from current machine state.
+    * Should be able to control model optics separate from live
+      optics. There should be a button to sync model with live.
 """
-
 from java.awt import BorderLayout
 from java.awt import Color
 from java.awt import Component
@@ -248,6 +247,7 @@ class PhaseControllerPanel(JPanel):
         return x_avgs, y_avgs
 
     def update_plots(self):
+        # Plot model beta functions and phase advances.
         betas_x, betas_y = [], []
         phases_x, phases_y = [], []
         self.phase_controller.track()
@@ -260,9 +260,12 @@ class PhaseControllerPanel(JPanel):
         positions = self.phase_controller.positions
         self.beta_plot_panel.set_data(positions, [betas_x, betas_y])
         self.phase_plot_panel.set_data(positions, [phases_x, phases_y])
+        
+        # Plot BPM readings.
         x_avgs, y_avgs = self.read_bpms()
         self.bpm_plot_panel.set_data(self.bpm_positions, [x_avgs, y_avgs])
 
+        # Add a vertical line at each wire-scanner locations.
         ref_ws_index = self.ws_ids.index(self.ref_ws_id_dropdown.getSelectedItem())
         for plot_panel in [self.beta_plot_panel, self.phase_plot_panel, self.bpm_plot_panel]:
             for i, ws_position in enumerate(self.ws_positions):
@@ -315,10 +318,12 @@ class InitTwissTableModel(AbstractTableModel):
     def __init__(self, panel):
         self.panel = panel
         self.phase_controller = panel.phase_controller
-        self.column_names = ["<html>&alpha;<SUB>x</SUB> [m/rad]<html>",
-                             "<html>&alpha;<SUB>y</SUB> [m/rad]<html>",
-                             "<html>&beta;<SUB>x</SUB> [m/rad]<html>",
-                             "<html>&beta;<SUB>y</SUB> [m/rad]<html>"]
+        self.column_names = [
+            "<html>&alpha;<SUB>x</SUB> [m/rad]<html>",
+            "<html>&alpha;<SUB>y</SUB> [m/rad]<html>",
+            "<html>&beta;<SUB>x</SUB> [m/rad]<html>",
+            "<html>&beta;<SUB>y</SUB> [m/rad]<html>"
+        ]
 
     def getValueAt(self, row, col):
         if col == 0:
@@ -419,25 +424,7 @@ class CalculateModelOpticsButtonListener(ActionListener):
         self.ind_quad_ids = self.phase_controller.ind_quad_ids
 
     def actionPerformed(self, event):
-        """Calculate/store correct optics settings for each step in the scan.
-        
-        Output files
-        ------------
-        
-        Let w = [WS20, WS21, WS23, WS24] be a list of the RTBT wire-scanners.
-        Let i be the scan index. The following files are produced for each i:
-        - 'model_transfer_matr_elems_i.dat': 
-             The jth row in the file gives the 16 transfer matrix elements from 
-             s = 0 to wire-scanner w[j]. The elements are written in the order: 
-             [M11, M12, M13, M14, M21, M22, M23, M24, M31, M32, M33, M34, M41, 
-             M42, M43, M44].
-        - 'model_moments_i.dat': 
-             The jth row in the file gives [Sigma_11, Sigma_33, Sigma_13] at 
-             wire-scanner w[j], where Sigma_mn is the (m, n) entry in the 
-             transverse covariance matrix.
-        - 'model_fields_i.dat':
-             Node ID and field strength of the independent quadrupoles [T/m].
-        """
+        """Calculate/store correct optics settings for each step in the scan."""
         self.panel.model_fields_list = []
 
         phase_coverage = float(self.panel.phase_coverage_text_field.getText())
@@ -457,7 +444,7 @@ class CalculateModelOpticsButtonListener(ActionListener):
         for scan_index, (mu_x, mu_y) in enumerate(phases):
 
             # Set model optics.
-            print 'Scan index {}/{}.'.format(scan_index, n_steps - 1)
+            print 'Scan index = {}/{}.'.format(scan_index, n_steps - 1)
             print 'Setting phases at {}...'.format(self.phase_controller.ref_ws_id)
             self.phase_controller.set_ref_ws_phases(mu_x, mu_y, beta_lims, verbose=1)
 
@@ -486,7 +473,6 @@ class CalculateModelOpticsButtonListener(ActionListener):
             # Update the panel progress bar. (This doesn't work currently;
             # we would need to run on a separate thread.)
             self.panel.progress_bar.setValue(scan_index + 1)
-
             print ''
 
         # Put the model back to its original state.
@@ -503,9 +489,6 @@ class SetLiveOpticsButtonListener(ActionListener):
     def actionPerformed(self, action):
         quad_ids = self.phase_controller.ind_quad_ids
         field_set_kws = self.panel.get_field_set_kws()
-        
-        
-        
         
         
         # This is the new method to use the text boxes.
@@ -537,9 +520,6 @@ class SetLiveOpticsButtonListener(ActionListener):
         print 'Syncing live quads with model...'
         print field_set_kws
         self.phase_controller.sync_live_with_model(**field_set_kws)
-                
-        
-        
         
         
         
@@ -556,9 +536,6 @@ class SetLiveOpticsButtonListener(ActionListener):
 #             model_fields = self.panel.model_fields_list[scan_index]
 #             self.phase_controller.set_fields(quad_ids, model_fields, 'model')
 #             self.phase_controller.set_fields(quad_ids, model_fields, 'live', **field_set_kws)
-            
-            
-            
             
             
         self.panel.quad_settings_table.getModel().fireTableDataChanged()
