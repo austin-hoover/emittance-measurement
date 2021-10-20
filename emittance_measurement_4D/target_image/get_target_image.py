@@ -1,4 +1,4 @@
-"""Save the current image to a file."""
+"""Get/save the target image."""
 from __future__ import print_function
 import sys
 import os
@@ -39,7 +39,7 @@ class TargetImageGetter:
 
 if __name__ == '__main__':
     ig = TargetImageGetter()
-    images, timestamps = ig.get_images(n=15, sleep_time=1.)
+    images, timestamps = ig.get_images(n=15, sleep_time=1.0)
 
     # Save the batch of images in one file. Label the file with the 
     # timestamp of the first image. 
