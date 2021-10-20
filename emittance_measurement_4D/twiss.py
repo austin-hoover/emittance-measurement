@@ -1,4 +1,4 @@
-"""Compute ring Twiss parameters."""
+"""Compute and print the model ring Twiss parameters at the injection point."""
 from __future__ import print_function
 import math
 
