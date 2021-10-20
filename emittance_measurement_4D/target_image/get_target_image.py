@@ -15,7 +15,7 @@ class TargetImageGetter:
         self.channel_factory = ChannelFactory.defaultFactory()
         self.target_channel = self.channel_factory.getChannel(self.pv)
         self.target_channel.connectAndWait()
-        
+
     def get_image(self):
         image = self.target_channel.getArrDbl() 
         now = datetime.utcnow()
@@ -37,17 +37,18 @@ class TargetImageGetter:
         return images, timestamps
 
 
-if __name__ == '__main__':
-    ig = TargetImageGetter()
-    images, timestamps = ig.get_images(n=15, sleep_time=1.0)
-
-    # Save the batch of images in one file. Label the file with the 
-    # timestamp of the first image. 
-    file = open('_output/images/image_{}.dat'.format(timestamps[0]), 'w')
+def save_image_batch(images, filename):
+    file = open(filename, 'w')
     for image in images:
         for x in image:
             file.write('{} '.format(x))
         file.write('\n')
     file.close()
 
+
+if __name__ == '__main__':
+    ig = TargetImageGetter()
+    images, timestamps = ig.get_images(n=15, sleep_time=1.1)
+    filename = '_output/data/image_{}.dat'.format(timestamps[0])
+    save_image_batch(images, filename)
     exit()
