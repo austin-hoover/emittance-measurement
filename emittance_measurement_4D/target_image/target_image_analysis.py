@@ -8,7 +8,6 @@ from skimage import filters
 from skimage import transform
 
 
-
 PIXEL_WIDTH = 1.0 / 1.77
 
 
@@ -57,25 +56,27 @@ class Image:
         mean_x = np.sum(fx * self.xx) / np.sum(fx)
         mean_y = np.sum(fy * self.yy) / np.sum(fy)
         return mean_x, mean_y
+    
+    
+def process_image_array(array, make_square=False):
+    Z = array.reshape(200, 400) 
+    Z = Z.T # rows for x, columns for y
+    Z = np.flip(Z, axis=1) # Z[i, j] is for (x[i], y[j])
+    if make_square:
+        pad = np.zeros((400, 100))
+        Z = np.hstack([pad, Z, pad])
+    return Z
         
-        
+    
 def read_file(filename, n_avg='all', make_square=True):
     arrays = np.loadtxt(filename)
     if arrays.ndim == 1:
         arrays = [arrays]
-    Z_list = []
-    for array in arrays:
-        Z = array.reshape(200, 400) 
-        Z = Z.T # rows for x, columns for y
-        Z = np.flip(Z, axis=1) # Z[i, j] is for (x[i], y[j])
-        Z_list.append(Z)
+    Z_list = [process_image_array(array, make_square) for array in arrays]
     if n_avg == 'all':
         n_avg = len(Z_list)
     Z_list = np.array(Z_list[:n_avg])
     Z = np.mean(Z_list, axis=0) 
-    if make_square:
-        pad = np.zeros((400, 100))
-        Z = np.hstack([pad, Z, pad])
     return Image(Z, pixel_width=PIXEL_WIDTH)
 
         
