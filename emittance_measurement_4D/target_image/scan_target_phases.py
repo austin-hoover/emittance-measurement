@@ -1,115 +1,101 @@
-"""Scan phase advances at WS24; save magnet strengths."""
+"""This script scans the phase advances at the target.
+
+The model is first synchronized with the live machine state. Then the phase
+advances (mux, muy) are scanned over a grid. The model phase advances and
+quad strengths at each step are saved to a file after the script runs. The
+model Twiss parameters throughout the RTBT are saved to a separate file at
+each step.
+
+IMPORTANT: set the correct kinetic energy!
+"""
 from __future__ import print_function
 import sys
 import os
 import time
-from pprint import pprint
-
-from xal.model.probe import Probe
-from xal.model.probe.traj import Trajectory
-from xal.service.pvlogger.sim import PVLoggerDataSource
-from xal.sim.scenario import AlgorithmFactory
-from xal.sim.scenario import ProbeFactory
-from xal.sim.scenario import Scenario
-from xal.sim.sync import SynchronizationException
-from xal.smf import Accelerator
-from xal.smf import AcceleratorSeq
-from xal.smf.data import XMLDataManager
-from xal.smf.impl import MagnetMainSupply
-from xal.tools.beam import CovarianceMatrix
-from xal.tools.beam import PhaseVector
-from xal.tools.beam import Twiss
-from xal.tools.beam.calc import CalculationsOnBeams
-from xal.tools.beam.calc import CalculationsOnRings
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from lib import optics
-from lib import utils
+from lib.utils import radians, degrees
+from lib.xal_helpers import write_traj_to_file
 
+# Settings
+kinetic_energy = 1.0e9
+n_steps = 4
+dmux_min = dmuy_min = radians(-50.)
+dmux_max = dmuy_max = radians(124.)
+beta_max_before_ws24 = 35.0
+beta_max_after_ws24 = 95.0
+target_beta_frac_tol = 0.16
+quad_ids = ['RTBT_Mag:QH18', 'RTBT_Mag:QV19',
+            'RTBT_Mag:QH26', 'RTBT_Mag:QV27', 'RTBT_Mag:QH28', 'RTBT_Mag:QV29', 'RTBT_Mag:QH30']
 
-kinetic_energy = 0.8e9 # [eV]
-phase_coverage = 179.0 # [deg]
-n_steps = 15
-max_beta = 35.0 # [m/rad]
-beta_lims = (max_beta, max_beta)
-
+# Create PhaseController and save default machine state.
 controller = optics.PhaseController(kinetic_energy=kinetic_energy)
+mux0, muy0 = controller.phases('RTBT:Tgt')
+default_target_betas = controller.beta_funcs('RTBT:Tgt')
+default_fields = controller.get_fields(quad_ids, 'model')
+print('Initial (default):')
+print('  Phase advances at target = {:.2f}, {:.2f}'.format(mux0, muy0))
+print('  Max betas anywhere (< WS24) = {:.2f}, {:.2f}'.format(*controller.max_betas(stop='RTBT_Diag:WS24')))
+print('  Max betas anywhere (> WS24) = {:.2f}, {:.2f}'.format(*controller.max_betas(start='RTBT_Diag:WS24', stop='RTBT:Tgt')))
+print('  Betas at target = {:.2f}, {:.2f}'.format(*controller.beta_funcs('RTBT:Tgt')))
 
+# Create grid of phase advances.
+muxx = optics.lin_phase_range(mux0 + dmux_min, mux0 + dmux_max, n_steps, endpoint=False)
+muyy = optics.lin_phase_range(muy0 + dmuy_min, muy0 + dmuy_max, n_steps, endpoint=False)
 
-# Get list of phases for x and y (low to high)
-phases = controller.get_phases_for_scan(phase_coverage, n_steps, method=1)
-muxx = [mux for (mux, muy) in phases]
-muyy = [muy for (mux, muy) in phases]
-muyy = list(reversed(muyy))
-
-# These are the quads that will will be varied.
-quad_ids = ['RTBT_Mag:QH18', 'RTBT_Mag:QV19', 'RTBT_Mag:QH26', 'RTBT_Mag:QV27', 
-            'RTBT_Mag:QH28', 'RTBT_Mag:QV29', 'RTBT_Mag:QH30']
-
-
-phases_at_tgt = []
-phases_at_ws24 = []
-
-file = open('_output/optics.dat', 'w')
+# Initialize files.
+file_phase_adv = open('_output/data/phase_adv.dat', 'w')
+file_fields = open('_output/data/fields.dat', 'w')
+file_default_fields = open('_output/data/default_fields.dat', 'w')
 for quad_id in quad_ids:
-    file.write(quad_id + ' ')
-file.write('\n')
+    file_fields.write(quad_id + ' ')
+    file_default_fields.write(quad_id + ' ')
+file_fields.write('\n')
+file_default_fields.write('\n')
 
-for i, mux in enumerate(muxx): 
+# Perform the scan.
+start_time = time.time()
+counter = 0
+for i, mux in enumerate(muxx):
     for j, muy in enumerate(muyy):
-        
-        start_time = time.time()
-        
-        print('i, j = {}, {}'.format(i, j))
-        
-        # Store phase advances at WS24.
-        mux_deg = utils.degrees(mux)
-        muy_deg = utils.degrees(muy)
-        phases_at_ws24.append([mux_deg, muy_deg])
+        print('i, j, time = {}, {}, {}'.format(i, j, time.time() - start_time))
 
-        # Set model phase advances.
-        controller.set_ref_ws_phases(mux, muy, beta_lims, verbose=1)
+        controller.set_target_phases(mux, muy, beta_max_before_ws24, beta_max_after_ws24,
+                                     default_target_betas, target_beta_frac_tol,
+                                     guess=default_fields)
 
-        # Constrain beta functions on target if too far from default.
-        beta_x_target, beta_y_target = controller.beta_funcs('RTBT:Tgt')
-        beta_x_default, beta_y_default = controller.default_betas_at_target
-        frac_change_x = abs(beta_x_target - beta_x_default) / beta_x_default
-        frac_change_y = abs(beta_y_target - beta_y_default) / beta_y_default
-        tol = 0.05
-        if frac_change_x > tol or frac_change_y > tol:
-            print('  Setting betas at target...')
-            controller.constrain_size_on_target(verbose=0)
-        max_betas_anywhere = controller.max_betas(stop=None)
-        print('  Max betas anywhere: {:.3f}, {:.3f}.'.format(*max_betas_anywhere))
-
-        # Save phase advances at WS24.
-        mux_tgt, muy_tgt = controller.phases('RTBT:Tgt')
-        mux_tgt = utils.degrees(mux_tgt)
-        muy_tgt = utils.degrees(muy_tgt)
-        phases_at_tgt.append([mux_tgt, muy_tgt])
-        print('  Phase advances at WS24   = {:.2f}, {:.2f} [deg]'.format(mux_deg, muy_deg))
-        print('  Phase advances at target = {:.2f}, {:.2f} [deg]'.format(mux_tgt, muy_tgt))
-        print('time = {}'.format(time.time() - start_time))
-        print()
-
-        # Write quad fields to a file.
+        mux_calc, muy_calc = controller.phases('RTBT:Tgt')
         fields = controller.get_fields(quad_ids, 'model')
-        for field in fields:
-            file.write('{} '.format(field))
-        file.write('\n')
-                
-file.close()
-    
-    
-# Save phase advances to file.
-file = open('_output/phases_at_tgt.dat', 'w')
-for (mux, muy) in phases_at_tgt:
-    file.write('{} {}\n'.format(mux, muy))
-file.close()
 
-file = open('_output/phases_at_ws24.dat', 'w')
-for (mux, muy) in phases_at_ws24:
-    file.write('{} {}\n'.format(mux, muy))
-file.close()
+        # Print a progress report.
+        print('Final:')
+        print('  Phase advances at target = {:.2f}, {:.2f} [deg]'.format(degrees(mux_calc), degrees(muy_calc)))
+        print('  Expected                 = {:.2f}, {:.2f} [deg]'.format(degrees(mux), degrees(muy)))
+        print('  Max betas anywhere (< WS24) = {:.2f}, {:.2f}'.format(*controller.max_betas(stop='RTBT_Diag:WS24')))
+        print('  Max betas anywhere (> WS24) = {:.2f}, {:.2f}'.format(*controller.max_betas(start='RTBT_Diag:WS24', stop='RTBT:Tgt')))
+        print('  Betas at target = {:.2f}, {:.2f}'.format(*controller.beta_funcs('RTBT:Tgt')))
+        print('Magnet changes (id, new, old, abs(frac_change):')
+        for quad_id, field, default_field in zip(quad_ids, fields, default_fields):
+            frac_change = abs(field - default_field) / default_field
+            print('  {}: {} {} {}'.format(quad_id, field, default_field, frac_change))
+
+        # Save model phase advances, quadrupole fields, and tracked Twiss parameters to a file.
+        file_phase_adv.write('{} {}\n'.format(mux_calc, muy_calc))
+        for field, default_field in zip(fields, default_fields):
+            file_fields.write('{} '.format(field))
+            file_default_fields.write('{} '.format(default_field))
+        file_fields.write('\n')
+        file_default_fields.write('\n')
+        write_traj_to_file(controller.tracked_twiss(), controller.positions, 
+                           '_output/data/twiss_{}.dat'.format(counter))
+
+        counter += 1
+
+
+print('Runtime = {}'.format(time.time() - start_time))
+file_phase_adv.close()
+file_fields.close()
+file_default_fields.close()
 
 exit()
