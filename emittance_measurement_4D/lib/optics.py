@@ -603,6 +603,8 @@ class PhaseController:
     
 def lin_phase_range(mu_min, mu_max, n_steps, endpoint=True):
     # Difference between min and max phase is always <= 180 degrees.
+    mu_min = float(mu_min)
+    mu_max = float(mu_max)
     abs_diff = abs(mu_max - mu_min)
     if abs_diff > math.pi:
         abs_diff = 2*math.pi - abs_diff
