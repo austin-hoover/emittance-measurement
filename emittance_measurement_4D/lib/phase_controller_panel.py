@@ -490,7 +490,8 @@ class SetLiveOpticsButtonListener(ActionListener):
         quad_ids = self.phase_controller.ind_quad_ids
         field_set_kws = self.panel.get_field_set_kws()
         
-        
+
+
         # This is the new method to use the text boxes.
         # -----------------------------------------------
         self.phase_controller.restore_default_optics('model')
@@ -520,9 +521,9 @@ class SetLiveOpticsButtonListener(ActionListener):
         print 'Syncing live quads with model...'
         print field_set_kws
         self.phase_controller.sync_live_with_model(**field_set_kws)
-        
-        
-        
+
+
+
         # This is the normal method using the scan index.
         # -----------------------------------------------
 #         scan_index = self.panel.scan_index_dropdown.getSelectedItem()
@@ -537,7 +538,8 @@ class SetLiveOpticsButtonListener(ActionListener):
 #             self.phase_controller.set_fields(quad_ids, model_fields, 'model')
 #             self.phase_controller.set_fields(quad_ids, model_fields, 'live', **field_set_kws)
             
-            
+
+
         self.panel.quad_settings_table.getModel().fireTableDataChanged()
         self.panel.update_plots()
         print 'Done.'
