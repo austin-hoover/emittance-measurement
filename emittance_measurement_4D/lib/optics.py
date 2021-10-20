@@ -437,6 +437,75 @@ class PhaseController:
             print('  Desired betas: {:.3f}, {:.3f}'.format(*self.default_betas_at_target))
             print('  Calc betas   : {:.3f}, {:.3f}'.format(*self.beta_funcs('RTBT:Tgt')))
 
+
+    def set_target_phases(self, mux, muy, beta_max_before_ws24, beta_max_after_ws24,
+                          default_target_betas, target_beta_frac_tol, guess=None):
+        """Set x and y phases at the target.
+
+        Parameters
+        ----------
+        mux, muy : float
+            The desired phase advances at the target [rad].
+        beta_max_before_ws24 : float
+            Maximum beta function to allow before WS24.
+        beta_max_after_ws24 : float
+            Maximum beta function to allow after WS24.
+        default_target_betas : (beta_x, beta_y)
+            The default beta functions at the target.
+        target_beta_frac_tol : float
+            Fractional tolerance for target beta functions.
+        """
+
+        class MyScorer(Scorer):
+            def __init__(self, controller, quad_ids):
+                self.controller = controller
+                self.quad_ids = quad_ids
+                self.target_phases = [mux, muy]
+
+            def score(self, trial, variables):
+                fields = get_trial_vals(trial, variables)
+                self.controller.set_fields(self.quad_ids, fields, 'model')
+                self.controller.track()
+                calc_phases = self.controller.phases('RTBT:Tgt')
+                residuals = subtract(calc_phases, self.target_phases)
+                cost = norm(residuals) ** 2
+                cost += self.penalty_max_beta()
+                cost += self.penalty_target_betas()
+                print('  cost = {}'.format(cost))
+                return cost
+
+            def penalty_max_beta(self):
+                penalty = 0.0
+                for beta in self.controller.max_betas(start='RTBT_Mag:QH18', stop='RTBT_Diag:WS24'):
+                    penalty += clip(beta - beta_max_before_ws24, 0.0, None) ** 2
+                for beta in self.controller.max_betas(start='RTBT_Diag:WS24', stop='RTBT:Tgt'):
+                    penalty += clip(beta - beta_max_after_ws24, 0.0, None) ** 2
+                return penalty
+
+            def penalty_target_betas(self):
+                penalty = 0.0
+                target_betas = self.controller.beta_funcs('RTBT:Tgt')
+                diffs = subtract(target_betas, default_target_betas)
+                diff_x, diff_y = diffs
+                abs_frac_change_x = abs(diff_x / default_target_betas[0])
+                abs_frac_change_y = abs(diff_y / default_target_betas[1])
+                if abs_frac_change_x > target_beta_frac_tol:
+                    penalty += diff_x ** 2
+                if abs_frac_change_y > target_beta_frac_tol:
+                    penalty += diff_y ** 2
+                return penalty
+
+        lo = self.ind_quad_ids.index('RTBT_Mag:QH18')
+        hi = self.ind_quad_ids.index('RTBT_Mag:QH30')
+        quad_ids = var_names = self.ind_quad_ids[lo: hi + 1]
+        scorer = MyScorer(self, quad_ids)
+        lb = self.ps_lb[lo: hi + 1]
+        ub = self.ps_ub[lo: hi + 1]
+        bounds = (lb, ub)
+        if guess is None:
+            guess = self.get_fields(quad_ids, 'model')
+        minimize(scorer, guess, var_names, bounds)
+
     def get_field(self, quad_id, opt='model'):
         """Return quadrupole field strength [T/m].
         
