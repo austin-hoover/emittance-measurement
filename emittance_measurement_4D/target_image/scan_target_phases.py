@@ -19,15 +19,15 @@ from lib.utils import radians, degrees
 from lib.xal_helpers import write_traj_to_file
 
 # Settings
-kinetic_energy = 1.0e9
-n_steps = 4
+kinetic_energy = 0.8e9
+n_steps = 15
 dmux_min = dmuy_min = radians(-50.)
 dmux_max = dmuy_max = radians(124.)
 beta_max_before_ws24 = 35.0
 beta_max_after_ws24 = 95.0
 target_beta_frac_tol = 0.16
-quad_ids = ['RTBT_Mag:QH18', 'RTBT_Mag:QV19',
-            'RTBT_Mag:QH26', 'RTBT_Mag:QV27', 'RTBT_Mag:QH28', 'RTBT_Mag:QV29', 'RTBT_Mag:QH30']
+quad_ids = ['RTBT_Mag:QH18', 'RTBT_Mag:QV19', 'RTBT_Mag:QH26', 'RTBT_Mag:QV27',
+            'RTBT_Mag:QH28', 'RTBT_Mag:QV29', 'RTBT_Mag:QH30']
 
 # Create PhaseController and save default machine state.
 controller = optics.PhaseController(kinetic_energy=kinetic_energy)
