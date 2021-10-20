@@ -80,10 +80,13 @@ def matvec(A, vec):
     return [dot(row, vec) for row in A]
 
 
-def linspace(start, stop, num=10):
+def linspace(start, stop, num=10, endpoint=True):
     if num < 2:
         return [start]
-    step = float(stop - start) / (num - 1)
+    if endpoint:
+        step = float(stop - start) / (num - 1)
+    else:
+        step = float(stop - start) / (num)
     return [start + i*step for i in range(num)]
 
 
