@@ -17,8 +17,8 @@ class Image:
         self.Z = Z
         self.Zf = None
         self.n_rows, self.n_cols = Z.shape
-        self.xx = np.array(list(range(self.n_cols))).astype(float)
-        self.yy = np.array(list(range(self.n_rows))).astype(float)
+        self.xx = np.array(list(range(self.n_rows))).astype(float)
+        self.yy = np.array(list(range(self.n_cols))).astype(float)
         self.xx -= np.mean(self.xx)
         self.yy -= np.mean(self.yy)
         self.pixel_width = pixel_width
@@ -59,25 +59,27 @@ class Image:
         return mean_x, mean_y
         
         
-def read_file(filename, make_square=True):
+def read_file(filename, n_avg='all', make_square=True):
     arrays = np.loadtxt(filename)
     if arrays.ndim == 1:
         arrays = [arrays]
     Z_list = []
     for array in arrays:
-        Z = array.reshape(200, 400)
+        Z = array.reshape(200, 400) 
+        Z = Z.T # rows for x, columns for y
+        Z = np.flip(Z, axis=1) # Z[i, j] is for (x[i], y[j])
         Z_list.append(Z)
-    n_avg = 5
-    if n_avg > len(Z_list):
+    if n_avg == 'all':
         n_avg = len(Z_list)
-    Z = np.mean(np.array(Z_list[:n_avg]), axis=0) # average over the images
+    Z_list = np.array(Z_list[:n_avg])
+    Z = np.mean(Z_list, axis=0) 
     if make_square:
-        Z = np.vstack([np.zeros((100, 400)), Z, np.zeros((100, 400))]) # make image square
-    image = Image(Z, pixel_width=PIXEL_WIDTH)
-    return image
+        pad = np.zeros((400, 100))
+        Z = np.hstack([pad, Z, pad])
+    return Image(Z, pixel_width=PIXEL_WIDTH)
 
         
-def read_files(filenames, make_square=True):
+def read_files(filenames, n_avg='all', make_square=True):
     TFile = collections.namedtuple('TFile', ['filename', 'timestamp'])
     tfiles = []
     for filename in filenames:
@@ -88,7 +90,8 @@ def read_files(filenames, make_square=True):
         times += [int(s) for s in time_str.split('.')]
         tfiles.append(TFile(filename, datetime(*times)))
     tfiles = sorted(tfiles, key=lambda tfile: tfile.timestamp)
-    return [read_file(tfile.filename, make_square) for tfile in tfiles]
+    images = [read_file(tfile.filename, n_avg, make_square) for tfile in tfiles]
+    return images
 
 
 def fit_gauss2d(X, Y, Z):
