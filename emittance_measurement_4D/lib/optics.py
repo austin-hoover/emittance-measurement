@@ -195,7 +195,7 @@ class PhaseController:
     
     Attributes
     ----------
-    
+
     """
     def __init__(self, ref_ws_id='RTBT_Diag:WS24', kinetic_energy=1e9, sync_mode='live', 
                  connect=True):
@@ -601,13 +601,16 @@ class PhaseController:
         phases = [[mux, muy] for mux, muy in zip(phases_x, phases_y)]
         return phases
     
-def lin_phase_range(mu_min, mu_max, n_steps):
+def lin_phase_range(mu_min, mu_max, n_steps, endpoint=True):
     # Difference between min and max phase is always <= 180 degrees.
     abs_diff = abs(mu_max - mu_min)
     if abs_diff > math.pi:
         abs_diff = 2*math.pi - abs_diff
     # Return list of phases from min_phase to max_phase.
-    step = abs_diff / (n_steps - 1)
+    if endpoint:
+        step = abs_diff / (n_steps - 1)
+    else:
+        step = abs_diff / n_steps
     phases = [mu_min]
     for _ in range(n_steps - 1):
         phase = phases[-1] + step
