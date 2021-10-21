@@ -2,7 +2,7 @@
 
 Before running:
     * Make sure the optics file is in the correct location.
-    * Make sure the output directory is correct.
+    * Make sure the output directory is correct.   
 """
 from __future__ import print_function
 import time
@@ -25,6 +25,7 @@ from get_target_image import TargetImageGetter
 trigger_channel = WrappedChannel('ICS_Tim:Gate_BeamOn:SSMode')
 trigger = BeamTrigger()
 ig = TargetImageGetter()
+n_images_per_step = 5
 
 # Read optics file.
 file = open('_output/data/fields.dat', 'r')
@@ -45,33 +46,37 @@ for i, fields in enumerate(fields_list):
     print('    Done.')
 
     # Pause?
-    sleep_time = 0.2
+    sleep_time = 0.1
     print('    Sleeping for {} seconds.'.format(sleep_time))
     time.sleep(sleep_time)
 
-    print('    Triggering beam.')
-    # Could play with triggering multiple times or turning on 'ICS_Tim:Gate_BeamOn:SSMode' channel.
-    trigger.makeShot()
+    for step in range(n_images_per_step):
+        
+        print('    Step {}/{}'.format(step, n_images_per_step))
+        print('    Triggering beam.')
+        trigger.makeShot()
 
-    sleep_time = 1.1
-    print('    Sleeping for {} seconds.'.format(sleep_time))
-    time.sleep(1.1)
+        sleep_time = 1.1
+        print('    Sleeping for {} seconds.'.format(sleep_time))
+        time.sleep(1.1)
 
-    # Collect the target image and timestamp.
-    image, timestamp = ig.get_image()
-    images.append(image)
-    timestamps.append(timestamp)
+        print('    Collecting beam image on target.')
+        image, timestamp = ig.get_image()
+        images.append(image)
+        timestamps.append(timestamp)
 
-
-# Save the data.
-file1 = open('_output/data/images.dat', 'w')
-file2 = open('_output/data/timestamps.dat', 'w')
-for image, timestamp in zip(images, timestamps):
+# Save the images.
+file = open('_output/data/images.dat', 'w')
+for image in images:
     for x in image:
-        file1.write(str(x) + ' ')
-    file1.write('\n')
-    file2.write(timestamp + '\n')
-file1.close()
-file2.close()
+        file.write(str(x) + ' ')
+    file.write('\n')
+file.close()
+
+# Save the timestamps.
+file = open('_output/data/timestamps.dat', 'w')
+for timestamp in timestamps:
+    file.write(timestamp + '\n')
+file.close()
         
 exit()
