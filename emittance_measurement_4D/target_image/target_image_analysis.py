@@ -12,7 +12,7 @@ PIXEL_WIDTH = 1.0 / 1.77
 
 
 class Image:
-    def __init__(self, Z, pixel_width=1, pad_y=True):
+    def __init__(self, Z, pixel_width=PIXEL_WIDTH):
         self.Z = Z
         self.Zf = None
         self.n_rows, self.n_cols = Z.shape
