@@ -19,6 +19,7 @@ from lib import utils
 from lib.beam_trigger_lib import BeamTrigger
 
 from get_target_image import TargetImageGetter
+from get_target_image import save_image_batch
 
 
 # Set up
@@ -50,6 +51,8 @@ for i, fields in enumerate(fields_list):
     print('    Sleeping for {} seconds.'.format(sleep_time))
     time.sleep(sleep_time)
 
+    images = []
+
     for step in range(n_images_per_step):
         
         print('    Step {}/{}'.format(step, n_images_per_step))
@@ -62,21 +65,27 @@ for i, fields in enumerate(fields_list):
 
         print('    Collecting beam image on target.')
         image, timestamp = ig.get_image()
+
         images.append(image)
-        timestamps.append(timestamp)
+    
+    filename = '_output/data/image_{}.dat'.format(i)
+    save_image_batch(images, filename)
 
-# Save the images.
-file = open('_output/data/images.dat', 'w')
-for image in images:
-    for x in image:
-        file.write(str(x) + ' ')
-    file.write('\n')
-file.close()
+#        images.append(image)
+#        timestamps.append(timestamp)
 
-# Save the timestamps.
-file = open('_output/data/timestamps.dat', 'w')
-for timestamp in timestamps:
-    file.write(timestamp + '\n')
-file.close()
+## Save the images.
+#file = open('_output/data/images.dat', 'w')
+#for image in images:
+#    for x in image:
+#        file.write(str(x) + ' ')
+#    file.write('\n')
+#file.close()
+
+## Save the timestamps.
+#file = open('_output/data/timestamps.dat', 'w')
+#for timestamp in timestamps:
+#    file.write(timestamp + '\n')
+#file.close()
         
 exit()
