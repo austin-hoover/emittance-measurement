@@ -68,7 +68,7 @@ def process_image_array(array, make_square=False):
     return Z
         
     
-def read_file(filename, n_avg='all', make_square=True):
+def read_file(filename, n_avg='all', make_square=False):
     arrays = np.loadtxt(filename)
     if arrays.ndim == 1:
         arrays = [arrays]
