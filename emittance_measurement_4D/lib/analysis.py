@@ -535,6 +535,8 @@ class Measurement(dict):
 
 
 def process(filenames):
+    if type(filenames) is not list:
+        filenames = [filenames]
     filenames = [filename for filename in filenames if 'WireAnalysisFmt' in filename]
     ws_filenames = [filename for filename in filenames if not is_harp_file(filename)]
     harp_filenames = [filename for filename in filenames if is_harp_file(filename)]
@@ -577,6 +579,8 @@ class DictOfLists(dict):
 def get_scan_info(measurements, tmat_generator, start_node_id):
     """Make dictionaries of measured moments and transfer matrices at each wire-scanner."""
     print( 'Reading files...')
+    if type(measurements) is not list:
+        measurements = [measurements]
     moments_dict, tmats_dict = DictOfLists(), DictOfLists()
     for measurement in measurements:
         print("  Reading file '{}'  pvloggerid = {}".format(measurement.filename_short, 
