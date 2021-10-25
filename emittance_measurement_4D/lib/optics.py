@@ -205,7 +205,6 @@ class PhaseController:
         self.accelerator = XMLDataManager.loadDefaultAccelerator()
         self.sequence = self.accelerator.getComboSequence('RTBT')
         self.scenario = Scenario.newScenarioFor(self.sequence)
-        self.tmat_gen = TransferMatrixGenerator(self.sequence, 1e9 * kinetic_energy)
         self.sync_mode = safe_sync(self.scenario, sync_mode)
         self.tracker = AlgorithmFactory.createEnvelopeTracker(self.sequence)
         self.tracker.setUseSpacecharge(False)
@@ -250,19 +249,32 @@ class PhaseController:
                 channel = ps_node.findChannel(MagnetMainSupply.FIELD_BOOK_HANDLE)
                 self.book_channels[quad_id] = channel
 
-        # Determine upper and lower bounds on power supplies.
-        self.ps_lb, self.ps_ub = [], []
-        for quad_node, ps_node in zip(self.ind_quad_nodes, self.ind_ps_nodes):
-            lb = quad_node.toFieldFromCA(ps_node.lowerFieldLimit())
-            ub = quad_node.toFieldFromCA(ps_node.upperFieldLimit())
-            if lb > ub:
-                lb, ub = ub, lb
-            self.ps_lb.append(lb)
-            self.ps_ub.append(ub)  
-            
+        # Determine upper and lower bounds on power supplies. 
+        if self.connect:
+            self.ps_lb, self.ps_ub = [], []
+            for quad_node, ps_node in zip(self.ind_quad_nodes, self.ind_ps_nodes):
+                lb = quad_node.toFieldFromCA(ps_node.lowerFieldLimit())
+                ub = quad_node.toFieldFromCA(ps_node.upperFieldLimit())
+                if lb > ub:
+                    lb, ub = ub, lb
+                self.ps_lb.append(lb)
+                self.ps_ub.append(ub)  
+        else:
+            # We should have a hardcoded array of power supply limits for when
+            # we can't connect to the machine.
+            self.ps_lb = [-1e9 for node in self.ind_quad_nodes]
+            self.ps_ub = [+1e9 for node in self.ind_quad_nodes]
+
         # Store the default field settings.
         self.default_fields = self.get_fields(self.ind_quad_ids, 'model')    
         self.default_betas_at_target = self.beta_funcs('RTBT:Tgt')
+        
+    def sync_model_pvloggerid(self, pvloggerid):
+        """Sync model with machine state from PVLoggerID."""
+        pvl_data_source = PVLoggerDataSource(pvloggerid)
+        self.scenario = pvl_data_source.setModelSource(self.sequence, self.scenario)
+        self.scenario.resync()
+        self.track()
         
     def set_kinetic_energy(self, kinetic_energy):
         """Set the probe kinetic energy [eV]."""
@@ -326,17 +338,38 @@ class PhaseController:
             beta_ys.append(beta_y)
         return max(beta_xs), max(beta_ys)
     
-    def transfer_matrix(self, node_id):
+    def transfer_matrix(self, start_node_id=None, stop_node_id=None):
+        # Set start and stop node if None is provided.
+        if start_node_id is None:
+            start_node_id = self.sequence.getNodes()[0].getId()
+        if stop_node_id is None:
+            stop_node_id = self.sequence.getNodes()[-1].getId()
+        # Check if the nodes are in order. If they are not, flip them and
+        # remember to take the inverse at the end.
+        reverse = False
+        node_ids = [node.getId() for node in self.sequence.getNodes()]
+        if node_ids.index(start_node_id) > node_ids.index(stop_node_id):
+            start_node_id, stop_node_id = stop_node_id, start_node_id
+            reverse = True
+        # Set up transfer matrix probe. 
         tracker = AlgorithmFactory.createTransferMapTracker(self.sequence)
         probe = ProbeFactory.getTransferMapProbe(self.sequence, tracker)
         probe.setKineticEnergy(self.kinetic_energy)
         self.scenario.setProbe(probe)
+        # Compute the transfer matrix.
         self.scenario.run()
-        trajectory = probe.getTrajectory()
-        state = trajectory.stateForElement(node_id)
-        M = state.getTransferMap().getFirstOrder()
+        trajectory = probe.getTrajectory()            
+        state1 = trajectory.stateForElement(start_node_id)
+        state2 = trajectory.stateForElement(stop_node_id)
+        M1 = state1.getTransferMap().getFirstOrder()
+        M2 = state2.getTransferMap().getFirstOrder()
+        M = M2.times(M1.inverse())
+        if reverse:
+            M = M.inverse()
+        # Convert JAMA matrix to list of shape (4, 4).
         M = list_from_xal_matrix(M)
         M = [row[:4] for row in M[:4]]
+        # Reset the PhaseController scenario to the EnvelopeProbe.
         self.scenario.setProbe(self.probe)
         return M
 
