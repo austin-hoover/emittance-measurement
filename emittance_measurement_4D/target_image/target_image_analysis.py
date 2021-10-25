@@ -6,6 +6,7 @@ import numpy as np
 from scipy import optimize as opt
 from skimage import filters
 from skimage import transform
+from skimage import measure
 
 
 PIXEL_WIDTH = 1.0 / 1.77 # [mm]
@@ -42,21 +43,26 @@ class TargetImage:
         
     def fit_gauss2d(self, use_filtered=False):
         Z = self.Zf if use_filtered else self.Z 
-        self.Zfit, params = fit_gauss2d(self.X, self.Y, Z)
+        Zfit, params = fit_gauss2d(self.X, self.Y, Z.T)
+        self.Zfit = Zfit.T
         sig_xx, sig_yy, sig_xy, mean_x, mean_y, amp = params
         self.c1, self.c2, self.angle = rms_ellipse_dims(sig_xx, sig_yy, sig_xy)
         self.cov = np.array([[sig_xx, sig_xy], [sig_xy, sig_yy]])
         self.mean_x = mean_x
         self.mean_y = mean_y
         
-    def estimate_mean(self, use_filtered=False):
-        Z = self.Zf if use_filtered else self.Z 
-        fx = np.sum(Z, axis=0)
-        fy = np.sum(Z, axis=1)
-        mean_x = np.sum(fx * self.xx) / np.sum(fx)
-        mean_y = np.sum(fy * self.yy) / np.sum(fy)
-        return mean_x, mean_y
-    
+    def estimate_moments(self, use_filtered=False):
+        Z = np.copy(self.Zf) if use_filtered else np.copy(self.Z)
+        coords = np.c_[self.X.ravel(), self.Y.ravel()]
+        x, y = coords.T
+        f = Z.T.flatten()
+        mean_x = np.sum(f * x) / np.sum(f)
+        mean_y = np.sum(f * y) / np.sum(f)
+        sig_xx = np.sum(f * (x - mean_x)**2) / np.sum(f)
+        sig_yy = np.sum(f * (y - mean_y)**2) / np.sum(f)
+        sig_xy = np.sum(f * (x - mean_x) * (y - mean_y)) / np.sum(f)
+        return mean_x, mean_y, sig_xx, sig_yy, sig_xy
+        
     
 def process_array(array, make_square=False):
     """Process the target image PV data.
