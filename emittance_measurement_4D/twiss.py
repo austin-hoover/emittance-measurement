@@ -5,6 +5,7 @@ import math
 from xal.model.probe import Probe
 from xal.model.probe import TransferMapProbe
 from xal.model.probe.traj import Trajectory
+from xal.service.pvlogger.sim import PVLoggerDataSource
 from xal.sim.scenario import AlgorithmFactory
 from xal.sim.scenario import ProbeFactory
 from xal.sim.scenario import Scenario
@@ -17,7 +18,8 @@ from xal.tools.beam.calc import CalculationsOnRings
 
 kin_energy = 0.8e9 # [eV]
 ypmax = 1.7 # [mrad]
-sync_live = True
+sync_live = False
+pvloggerid = 49548117
 
 accelerator = XMLDataManager.loadDefaultAccelerator()
 sequence = accelerator.getComboSequence('Ring')
@@ -27,11 +29,16 @@ if sync_live:
     scenario.setSynchronizationMode(Scenario.SYNC_MODE_LIVE)
     scenario.resync()
     
+if pvloggerid is not None:
+    pvl_data_source = PVLoggerDataSource(pvloggerid)
+    scenario = pvl_data_source.setModelSource(sequence, scenario)
+    scenario.resync()
+
     
 print('Kinetic energy = {:.3e} [eV]'.format(kin_energy))
 print('ypmax = {} [mrad]'.format(ypmax))
 print('Sync live = {}'.format(sync_live))
-
+print('pvloggerid = {}'.format(pvloggerid))
     
 
 algorithm = AlgorithmFactory.createTransferMapTracker(sequence)
