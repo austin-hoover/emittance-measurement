@@ -19,6 +19,7 @@ from xal.tools.beam.calc import CalculationsOnRings
 kin_energy = 0.8e9 # [eV]
 ypmax = 1.7 # [mrad]
 sync_live = False
+#pvloggerid = None
 pvloggerid = 49548117
 
 accelerator = XMLDataManager.loadDefaultAccelerator()
@@ -51,9 +52,7 @@ trajectory = scenario.getTrajectory()
 calculator = CalculationsOnRings(trajectory)
 state = trajectory.stateForElement('Ring_Inj:Foil')
 twissX, twissY, _ = calculator.computeMatchedTwissAt(state)
-
-
-tunes = calculator.computeFractionalTunes()
+tunes = calculator.computeFullTunes()
 nux, nuy = tunes.getx(), tunes.gety()
 alpha_x = twissX.getAlpha()
 alpha_y = twissY.getAlpha()
