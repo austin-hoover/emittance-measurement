@@ -121,18 +121,61 @@ def V_matrix_uncoupled(alpha_x, alpha_y, beta_x, beta_y):
 
 class BeamStats:
     """Container for beam statistics calculated from the covariance matrix."""
-    def __init__(self, Sigma):
-        if type(Sigma) is list:
-            Sigma = Matrix(Sigma)
+    def __init__(self, Sigma, Sigmas=None):
+        """Constructor
+
+        Sigma : Jama Matrix, shape (4, 4)
+            The covariance matrix.
+        Sigmas : list[Jama Matrix or list, shape (4, 4)]
+            Ensemble of covariance matrices from random trials.
+        """
         self.Sigma = Sigma
         self.eps_x, self.eps_y = apparent_emittances(Sigma)
         if is_valid_covariance_matrix(Sigma):
             self.eps_1, self.eps_2 = intrinsic_emittances(Sigma)
-            self.coupling_coeff = 1.0 - sqrt(self.eps_1 * self.eps_2 / (self.eps_x * self.eps_y))
+            self.coupling_coeff = sqrt(self.eps_x * self.eps_y / (self.eps_1 * self.eps_2))
         else:
             self.eps_1 = self.eps_2 = self.coupling_coeff = None
         self.alpha_x, self.alpha_y, self.beta_x, self.beta_y = twiss2D(Sigma)
-        
+
+        self.Sigmas = None
+        self.ran_eps_x_mean = self.ran_eps_x_std = None
+        self.ran_eps_y_mean = self.ran_eps_y_std = None
+        self.ran_eps_1_mean = self.ran_eps_1_std = None
+        self.ran_eps_2_mean = self.ran_eps_2_std = None
+        self.ran_eps_x_eps_y_mean = self.ran_eps_x_eps_y_std = None
+        self.ran_eps_1_eps_2_mean = self.ran_eps_1_eps_2_std = None
+        self.ran_beta_x_mean = self.ran_beta_x_std = None
+        self.ran_beta_y_mean = self.ran_beta_y_std = None
+        self.ran_alpha_x_mean = self.ran_alpha_x_std = None
+        self.ran_alpha_y_mean = self.ran_alpha_y_std = None
+
+        if Sigmas is not None:
+            self.Sigmas = Sigmas
+
+            (ran_eps_x_list,
+             ran_eps_y_list,
+             ran_eps_1_list,
+             ran_eps_2_list) = utils.transpose([emittances(Sigma) for Sigma in Sigmas])
+            self.ran_eps_x_mean, self.ran_eps_x_std = utils.mean_std(ran_eps_x_list)
+            self.ran_eps_y_mean, self.ran_eps_y_std = utils.mean_std(ran_eps_y_list)
+            self.ran_eps_1_mean, self.ran_eps_1_std = utils.mean_std(ran_eps_1_list)
+            self.ran_eps_2_mean, self.ran_eps_2_std = utils.mean_std(ran_eps_2_list)
+
+            ran_eps_x_eps_y_list = [eps_x * eps_y for eps_x, eps_y in zip(ran_eps_x_list, ran_eps_y_list)]
+            ran_eps_1_eps_2_list = [eps_1 * eps_2 for eps_1, eps_2 in zip(ran_eps_1_list, ran_eps_2_list)]
+            self.ran_eps_x_eps_y_mean, self.ran_eps_x_eps_y_std = utils.mean_std(ran_eps_x_eps_y_list)
+            self.ran_eps_1_eps_2_mean, self.ran_eps_1_eps_2_std = utils.mean_std(ran_eps_1_eps_2_list)
+
+            (ran_alpha_x_list,
+             ran_alpha_y_list,
+             ran_beta_x_list,
+             ran_beta_y_list) = utils.transpose([twiss2D(Sigma) for Sigma in Sigmas])
+            self.ran_beta_x_mean, self.ran_beta_x_std = utils.mean_std(ran_beta_x_list)
+            self.ran_beta_y_mean, self.ran_beta_y_std = utils.mean_std(ran_beta_y_list)
+            self.ran_alpha_x_mean, self.ran_alpha_x_std = utils.mean_std(ran_alpha_x_list)
+            self.ran_alpha_y_mean, self.ran_alpha_y_std = utils.mean_std(ran_alpha_y_list)
+
     def rms_ellipse_dims(dim1, dim2):
         return rms_ellipse_dims(self.Sigma, dim1, dim2)
     
@@ -178,36 +221,36 @@ def get_sig_xy(sig_xx, sig_yy, sig_uu, diag_wire_angle):
 
 def reconstruct(transfer_mats, moments, constr=True, **lsq_kws):
     """Reconstruct covariance matrix from measured moments and transfer matrices.
-    
+
     Parameters
     ----------
-    transfer_mats : list
-        Each element is a list of shape (4, 4) representing a transfer matrix.
-    moments : list
-        Each element is list containing of [cov(x, x), cov(y, y), cov(x, y)], 
-        where cov means covariance.
+    transfer_mats : list[list, shape (4, 4)], shape (n,)
+        Each element is a list of shape (4, 4) representing a transfer matrix
+        from the reconstruction location to the measurement location.
+    moments : list[list, shape(3,)], shape (n,)
+        The measured [<xx>, <yy>, <xy>] moments.
     constr: bool
-        Whether to try nonlinear solver if LLSQ answer is unphysical. Default
-        is True.
+        Whether to try nonlinear solver if LLSQ answer is unphysical.
+        (Default: True)
     **lsq_kws
         Key word arguments passed to `lsq_linear` method.
         
     Returns
     -------
-    list, shape (4, 4)
+    Jama Matrix, shape (4, 4)
         Reconstructed covariance matrix.
     """
-    A, target = [], []
+    A, b = [], []
     for M, (sig_xx, sig_yy, sig_xy) in zip(transfer_mats, moments):
         A.append([M[0][0]**2, M[0][1]**2, 2*M[0][0]*M[0][1], 0, 0, 0, 0, 0, 0, 0])
         A.append([0, 0, 0, M[2][2]**2, M[2][3]**2, 2*M[2][2]*M[2][3], 0, 0, 0, 0])
         A.append([0, 0, 0, 0, 0, 0, M[0][0]*M[2][2],  M[0][1]*M[2][2],  M[0][0]*M[2][3],  M[0][1]*M[2][3]])
-        target.append(sig_xx)
-        target.append(sig_yy)
-        target.append(sig_xy)
+        b.append(sig_xx)
+        b.append(sig_yy)
+        b.append(sig_xy)
 
     lsq_kws.setdefault('solver', 'exact')
-    Sigma = to_mat(lsq_linear(A, target, **lsq_kws))
+    Sigma = to_mat(lsq_linear(A, b, **lsq_kws))
     
     if not constr:
         return Sigma
@@ -218,7 +261,7 @@ def reconstruct(transfer_mats, moments, constr=True, **lsq_kws):
     
     print('Covariance matrix is unphysical. Running solver.')
     A = Matrix(A)
-    target = utils.list_to_col_mat(target)
+    b = utils.list_to_col_mat(b)
     
     # This section uses the parameterization of Edwards/Teng.
     #
@@ -257,7 +300,7 @@ def reconstruct(transfer_mats, moments, constr=True, **lsq_kws):
         def score(self, trial, variables):
             Sigma = get_cov(*get_trial_vals(trial, variables))
             vec = to_vec(Sigma)
-            residuals = A.times(vec).minus(target)
+            residuals = A.times(vec).minus(b)
             return residuals.normF()**2
         
     eps_x, eps_y = apparent_emittances(Sigma)  
@@ -273,7 +316,6 @@ def reconstruct(transfer_mats, moments, constr=True, **lsq_kws):
     params = minimize(scorer, guess, var_names, bounds, maxiters=50000, tol=1e-15, verbose=2)
     Sigma = get_cov(*params)
     return Sigma
-
 
 #     # This section uses inverse Cholesky factorization Sigma = L * L^T, where
 #     # L is a lower triangular matrix.
@@ -293,7 +335,7 @@ def reconstruct(transfer_mats, moments, constr=True, **lsq_kws):
 #         def score(self, trial, variables):
 #             Sigma = get_cov(get_trial_vals(trial, variables))
 #             vec = to_vec(Sigma)
-#             residuals = A.times(vec).minus(target)
+#             residuals = A.times(vec).minus(b)
 #             return residuals.normF()**2
                 
 #     bounds = (-INF, INF)
@@ -304,6 +346,46 @@ def reconstruct(transfer_mats, moments, constr=True, **lsq_kws):
 #     x = minimize(scorer, guess, var_names, bounds, maxiters=50000, tol=1e-15, verbose=2)
 #     Sigma = get_cov(x)
 #     return Sigma
+
+
+def random_trials(transfer_mats, moments, frac_err=0.02, n_trials=1000):
+    """Reconstruct with errors added to the measured moments.
+
+    Here `moments` should be a list of [<xx>, <yy>, <uu>].
+    """
+    Sigmas = []
+    fails = 0
+    hi = 1.0 + frac_err
+    lo = 1.0 - frac_err
+
+    def add_noise(value, frac_err):
+        max_err = frac_err * value
+        return value + random.uniform(-max_err, +max_err)
+
+    def run_trial(moments, transfer_mats):
+        noisy_moments = []
+        for i in range(len(moments)):
+            sig_xx, sig_yy, sig_uu = moments[i]
+            sig_xx = add_noise(sig_xx, frac_err)
+            sig_yy = add_noise(sig_yy, frac_err)
+            sig_uu = add_noise(sig_uu, frac_err)
+            sig_xy = get_sig_xy(sig_xx, sig_yy, sig_uu, DIAG_WIRE_ANGLE)
+            noisy_moments.append([sig_xx, sig_yy, sig_xy])
+        Sigma = reconstruct(transfer_mats, noisy_moments, constr=False)
+        return Sigma
+
+    for _ in range(n_trials):
+        failed = True
+        n_attempts, max_attempts = 0, 1000
+        Sigma = None
+        while failed and n_attempts < max_attempts:
+            Sigma = run_trial(moments, transfer_mats)
+            failed = not is_valid_covariance_matrix(Sigma)
+            fails += int(failed)
+            n_attempts += 1
+        if Sigma is not None:
+            Sigmas.append(Sigma)
+    return Sigmas
 
 
 
@@ -510,7 +592,7 @@ class Measurement(dict):
         self['RTBT_Diag:Harp30'] = Profile([xpos, ypos, upos], [xraw, yraw, uraw])
             
     def get_moments(self):
-        """Store/return dictionary of measured moments at each profile."""
+        """Store/return dict of measured [<xx>, <yy>, <uu>, <xy>] at each profile."""
         self.moments = dict()
         for node_id in self.node_ids:
             profile = self[node_id]
@@ -518,7 +600,7 @@ class Measurement(dict):
             sig_yy = profile.ver.stats['Sigma'].rms**2
             sig_uu = profile.dia.stats['Sigma'].rms**2
             sig_xy = get_sig_xy(sig_xx, sig_yy, sig_uu, profile.diag_wire_angle)
-            self.moments[node_id] = [sig_xx, sig_yy, sig_xy]
+            self.moments[node_id] = [sig_xx, sig_yy, sig_uu, sig_xy]
         return self.moments
 
     def get_transfer_mats(self, start_node_id, tmat_generator):
@@ -578,7 +660,7 @@ class DictOfLists(dict):
 
 def get_scan_info(measurements, tmat_generator, start_node_id):
     """Make dictionaries of measured moments and transfer matrices at each wire-scanner."""
-    print( 'Reading files...')
+    print('Reading files...')
     if type(measurements) is not list:
         measurements = [measurements]
     moments_dict, tmats_dict = DictOfLists(), DictOfLists()

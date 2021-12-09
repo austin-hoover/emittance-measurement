@@ -12,6 +12,7 @@ from java.awt import GridBagLayout
 from java.awt import GridBagConstraints
 from java.awt.event import ActionListener
 from java.awt.event import WindowAdapter
+from java.awt.geom import Ellipse2D
 from javax.swing import BorderFactory
 from javax.swing import BoxLayout
 from javax.swing import GroupLayout
@@ -35,14 +36,21 @@ import utils
 import analysis
 
 
-# 'Colorblind' color cycle
-COLOR_CYCLE = [
+CYCLE_COLORBLIND = [
     Color(0.0, 0.44705882, 0.69803922),
     Color(0.83529412, 0.36862745, 0.0),
     Color(0.0, 0.61960784, 0.45098039),
     Color(0.8, 0.4745098, 0.65490196),
     Color(0.94117647, 0.89411765, 0.25882353),
     Color(0.3372549, 0.70588235, 0.91372549),
+]
+CYCLE_538 = [
+    Color(0.0, 0.5607843137254902, 0.8352941176470589),
+    Color(0.9882352941176471, 0.30980392156862746, 0.18823529411764706),
+    Color(0.8980392156862745, 0.6823529411764706, 0.2196078431372549),
+    Color(0.42745098039215684, 0.5647058823529412, 0.30980392156862746),
+    Color(0.5450980392156862, 0.5450980392156862, 0.5450980392156862),
+    Color(0.5058823529411764, 0.058823529411764705, 0.48627450980392156),
 ]
 GRID_COLOR = Color(245, 245, 245)
 DIM_TO_INT = {'x':0, 'xp':1, 'y':2, 'yp':3}
@@ -100,14 +108,16 @@ class PlotPanel(FunctionGraphsJPanel):
 class LinePlotPanel(PlotPanel):
     """Class for 2D line plots."""
     def __init__(self, xlabel='', ylabel='', title='', n_lines=2, 
-                 lw=3, ms=0, grid=True):
+                 lw=3, ms=0, grid=True, cycle=None):
         PlotPanel.__init__(self, xlabel, ylabel, title, grid)
         etched_border = BorderFactory.createEtchedBorder()
         self.setBorder(etched_border)
         self.setLegendButtonVisible(False)
         self.n_lines = n_lines
         self.data_list = [BasicGraphData() for _ in range(n_lines)]
-        for data, color in zip(self.data_list, COLOR_CYCLE):
+        if cycle is None:
+            cycle = CYCLE_COLORBLIND
+        for data, color in zip(self.data_list, cycle):
             data.setGraphColor(color)
             data.setLineThick(lw)
             data.setGraphPointSize(ms)
@@ -132,17 +142,33 @@ class LinePlotPanel(PlotPanel):
         curve_data.setLineWidth(lw)
         self.addCurveData(curve_data)
         
-    def plot(self, xvals, yvals, color=None, lw=None, ms=None):
-        """Add a line to the plot."""
+    def plot(self, xvals, yvals, yerrs=None, color=None, lw=None, ms=None, ebar_only=False):
+        """Add data to the plot."""
         data = BasicGraphData()
-        for x, y in zip(xvals, yvals):
-            data.addPoint(x, y)
-        if color:
+        if yerrs is None:
+            for x, y in zip(xvals, yvals):
+                if x is not None and y is not None:
+                    data.addPoint(x, y)
+        else:
+            for x, y, yerr in zip(xvals, yvals, yerrs):
+                if yerr is None:
+                    data.addPoint(x, y)
+                else:
+                    data.addPoint(x, y, yerr)
+        if color is not None:
             data.setGraphColor(color)
-        if lw:
+        if lw is not None:
             data.setLineThick(lw)
-        if ms:
+            if lw == 0:
+                data.setDrawLinesOn(False)
+        if ms is not None:
             data.setGraphPointSize(ms)
+            if ms == 0:
+                data.setDrawPointsOn(False)
+        if ebar_only:
+            # Keeps error bars but don't draw markers.
+            shape = Ellipse2D.Double()
+            data.setGraphPointShape(shape)
         self.addGraphData(data) 
             
     def set_xlim(self, xmin, xmax, xstep):

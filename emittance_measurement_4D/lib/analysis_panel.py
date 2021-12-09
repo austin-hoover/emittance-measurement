@@ -19,6 +19,7 @@ from java.awt import GridBagLayout
 from java.awt import GridBagConstraints
 from java.awt.event import ActionListener
 from java.awt.event import WindowAdapter
+from java.awt.geom import Ellipse2D
 from javax.swing import BorderFactory
 from javax.swing import BoxLayout
 from javax.swing import GroupLayout
@@ -69,7 +70,7 @@ class AnalysisPanel(JPanel):
     def __init__(self):
         JPanel.__init__(self)
         self.setLayout(BorderLayout())
-        self.reconstruction_node_id = 'RTBT_Diag:WS02'
+        self.reconstruction_node_id = 'RTBT_Diag:BPM17'
         self.accelerator = XMLDataManager.loadDefaultAccelerator()
         self.sequence = self.accelerator.getComboSequence('RTBT')
         self.kinetic_energy = 1e9 # [eV]
@@ -117,12 +118,15 @@ class AnalysisPanel(JPanel):
         
         self.profile_plots_panel = JPanel()
         self.profile_plots_panel.setLayout(BoxLayout(self.profile_plots_panel, BoxLayout.X_AXIS))
+        cycle = plt.CYCLE_538
         self.profile_plot_panels = [
-            plt.LinePlotPanel(n_lines=5, grid='y', title='Horizontal (x)'),
-            plt.LinePlotPanel(n_lines=5, grid='y', title='Vertical (y)'),
-            plt.LinePlotPanel(n_lines=5, grid='y', title='Diagonal (u)'),
+            plt.LinePlotPanel(n_lines=5, grid='y', xlabel='x [mm]', cycle=cycle),
+            plt.LinePlotPanel(n_lines=5, grid='y', xlabel='y [mm]', cycle=cycle),
+            plt.LinePlotPanel(n_lines=5, grid='y', xlabel='u [mm]', cycle=cycle),
         ]
         for panel in self.profile_plot_panels:
+            panel.setNumberFormatX(DecimalFormat("#.#"))
+            panel.setNumberFormatY(DecimalFormat("#.##"))
             self.profile_plots_panel.add(panel)
 
         self.top_panel = JPanel()
@@ -187,13 +191,15 @@ class AnalysisPanel(JPanel):
         self.bottom_right_panel_B = JPanel()
         self.bottom_right_panel_B.setLayout(BoxLayout(self.bottom_right_panel_B, BoxLayout.Y_AXIS))
         self.emittance_plot_panels = [
-            plt.LinePlotPanel(n_lines=4, grid='y', xlabel='Measurement index', 
-                              ylabel='[mm mrad]', title='Emittance'),
+            plt.LinePlotPanel(n_lines=4, grid='y', ylabel='[mm mrad]', title='Emittance'),
             plt.LinePlotPanel(n_lines=4, grid='y', xlabel='Measurement index', 
                               ylabel='[mm^2 mrad^2]', title='4D emittance'),
         ]
         for panel in self.emittance_plot_panels:
+            panel.setNumberFormatX(DecimalFormat("#."))
+            panel.setNumberFormatY(DecimalFormat("#.##"))
             self.bottom_right_panel_B.add(panel)
+
         
         self.bottom_right_pane = JTabbedPane()
         self.bottom_right_pane.setPreferredSize(Dimension(725, 500))
@@ -249,7 +255,23 @@ class AnalysisPanel(JPanel):
         self.profile_plot_panels[0].set_data(xpos, xraw_list)
         self.profile_plot_panels[1].set_data(ypos, yraw_list)
         self.profile_plot_panels[2].set_data(upos, uraw_list)
-        
+
+        # Set axis limits.
+        n_ticks = 5.0
+        self.profile_plot_panels[0].set_xlim(min(xpos), max(xpos), (max(xpos) - min(xpos)) / n_ticks)
+        self.profile_plot_panels[1].set_xlim(min(ypos), max(ypos), (max(ypos) - min(ypos)) / n_ticks)
+        self.profile_plot_panels[2].set_xlim(min(upos), max(upos), (max(upos) - min(upos)) / n_ticks)
+        pad = 0.05
+        hmax_x = (1.0 + pad) * max([max(raw) for raw in xraw_list])
+        hmax_y = (1.0 + pad) * max([max(raw) for raw in yraw_list])
+        hmax_u = (1.0 + pad) * max([max(raw) for raw in uraw_list])
+        hmin = min([min(raw) for raw_list in [xraw_list, yraw_list, uraw_list] for raw in raw_list])
+        hmin -= pad * abs(max(hmax_x, hmax_y, hmax_u))
+        n_ticks = 5.0
+        self.profile_plot_panels[0].set_ylim(hmin, hmax_x, (hmax_x - hmin) / n_ticks)
+        self.profile_plot_panels[1].set_ylim(hmin, hmax_y, (hmax_y - hmin) / n_ticks)
+        self.profile_plot_panels[2].set_ylim(hmin, hmax_u, (hmax_u - hmin) / n_ticks)
+
         # Stop if we haven't reconstructed the covariance matrix yet.
         if not self.beam_stats:
             return
@@ -297,8 +319,8 @@ class AnalysisPanel(JPanel):
         xxp_panel = self.corner_plot_panel.plots['x-xp']
         yyp_panel = self.corner_plot_panel.plots['y-yp']
         node_ids = sorted(list(tmats_dict))
-        for node_id, color in zip(node_ids, plt.COLOR_CYCLE):
-            for M, (sig_xx, sig_yy, sig_xy) in zip(tmats_dict[node_id], moments_dict[node_id]):
+        for node_id, color in zip(node_ids, plt.CYCLE_538):
+            for M, (sig_xx, sig_yy, sig_uu, sig_xy) in zip(tmats_dict[node_id], moments_dict[node_id]):
                 M = Matrix(M)
                 x_vals, xp_vals, y_vals, yp_vals = possible_points(M, sig_xx, sig_yy)
                 xxp_panel.plot(x_vals, xp_vals, color=color, ms=0, lw=2)
@@ -313,6 +335,18 @@ class AnalysisPanel(JPanel):
         eps_2_list = []
         eps_x_eps_y_list = []
         eps_1_eps_2_list = []
+        ran_eps_x_mean_list = []
+        ran_eps_y_mean_list = []
+        ran_eps_1_mean_list = []
+        ran_eps_2_mean_list = []
+        ran_eps_x_eps_y_mean_list = []
+        ran_eps_1_eps_2_mean_list = []
+        ran_eps_x_std_list = []
+        ran_eps_y_std_list = []
+        ran_eps_1_std_list = []
+        ran_eps_2_std_list = []
+        ran_eps_x_eps_y_std_list = []
+        ran_eps_1_eps_2_std_list = []
         for meas_index, beam_stats in enumerate(self.beam_stats_ind):
             meas_indices.append(meas_index)
             eps_x_list.append(beam_stats.eps_x)
@@ -324,38 +358,63 @@ class AnalysisPanel(JPanel):
                 eps_1_eps_2_list.append(beam_stats.eps_1 * beam_stats.eps_2)
             else:
                 eps_1_eps_2_list.append(None)
-        
-        plt_kws = dict(ms=10, lw=2)
-        self.emittance_plot_panels[0].plot(meas_indices, eps_x_list, color=plt.COLOR_CYCLE[0], **plt_kws)
-        self.emittance_plot_panels[0].plot(meas_indices, eps_y_list, color=plt.COLOR_CYCLE[1], **plt_kws)
-        self.emittance_plot_panels[1].plot(meas_indices, eps_x_eps_y_list, color=Color.RED, **plt_kws)
 
-        _meas_indices = [i for i, eps_1 in zip(meas_indices, eps_1_list) if eps_1]
-        eps_1_list = [eps_1 for eps_1 in eps_1_list if eps_1]
-        if eps_1_list and any(eps_1_list):
-            self.emittance_plot_panels[0].plot(_meas_indices, eps_1_list, color=plt.COLOR_CYCLE[2], **plt_kws)
-        
-        _meas_indices = [i for i, eps_2 in zip(meas_indices, eps_2_list) if eps_2]
-        eps_2_list = [eps_2 for eps_2 in eps_2_list if eps_2]
-        if eps_2_list and any(eps_2_list):
-            self.emittance_plot_panels[0].plot(_meas_indices, eps_2_list, color=plt.COLOR_CYCLE[3], **plt_kws)
-        
-        _meas_indices = [i for i, eps_1_eps_2 in zip(meas_indices, eps_1_eps_2_list) if eps_1_eps_2]
-        eps_1_eps_2_list = [eps_1_eps_2 for eps_1_eps_2 in eps_1_eps_2_list if eps_1_eps_2]
-        self.emittance_plot_panels[1].plot(_meas_indices, eps_1_eps_2_list, color=Color.BLUE, **plt_kws)
-        
-        self.emittance_plot_panels[0].setLegendVisible(True)
-        self.emittance_plot_panels[0].setLegendButtonVisible(True)
-        labels = ['eps_x', 'eps_y', 'eps_1', 'eps_2']
-        for label, gd in zip(labels, self.emittance_plot_panels[0].getAllGraphData()):
+            ran_eps_x_mean_list.append(beam_stats.ran_eps_x_mean)
+            ran_eps_y_mean_list.append(beam_stats.ran_eps_y_mean)
+            ran_eps_1_mean_list.append(beam_stats.ran_eps_1_mean)
+            ran_eps_2_mean_list.append(beam_stats.ran_eps_2_mean)
+            ran_eps_x_eps_y_mean_list.append(beam_stats.ran_eps_x_eps_y_mean)
+            ran_eps_1_eps_2_mean_list.append(beam_stats.ran_eps_1_eps_2_mean)
+            ran_eps_x_std_list.append(beam_stats.ran_eps_x_std)
+            ran_eps_y_std_list.append(beam_stats.ran_eps_y_std)
+            ran_eps_1_std_list.append(beam_stats.ran_eps_1_std)
+            ran_eps_2_std_list.append(beam_stats.ran_eps_2_std)
+            ran_eps_x_eps_y_std_list.append(beam_stats.ran_eps_x_eps_y_std)
+            ran_eps_1_eps_2_std_list.append(beam_stats.ran_eps_1_eps_2_std)
+
+        plt_kws = dict(lw=None, ms=None)
+        n_ticks = 5.0
+
+        data_lists = [eps_x_list, eps_y_list, eps_1_list, eps_2_list]
+        mean_lists = [ran_eps_x_mean_list, ran_eps_y_mean_list, ran_eps_1_mean_list, ran_eps_2_mean_list]
+        std_lists = [ran_eps_x_std_list, ran_eps_y_std_list, ran_eps_1_std_list, ran_eps_2_std_list]
+        for i, (data_list, mean_list, std_list) in enumerate(zip(data_lists, mean_lists, std_lists)):
+            self.emittance_plot_panels[0].plot(meas_indices, data_list, color=plt.CYCLE_COLORBLIND[i], **plt_kws)
+            self.emittance_plot_panels[0].plot(meas_indices, mean_list, yerrs=std_list,
+                                               color=plt.CYCLE_COLORBLIND[i], lw=0, ebar_only=True)
+        # Set y axis limits.
+        hmax = 1.1 * max([max(data_list) for data_list in data_lists])
+        self.emittance_plot_panels[0].set_ylim(0.0, hmax, hmax / n_ticks)
+
+
+        data_lists = [eps_x_eps_y_list, eps_1_eps_2_list]
+        mean_lists = [ran_eps_x_eps_y_mean_list, ran_eps_1_eps_2_mean_list]
+        std_lists = [ran_eps_x_eps_y_std_list, ran_eps_1_eps_2_std_list]
+        colors = [Color.RED, Color.BLUE]
+        for i, (data_list, mean_list, std_list) in enumerate(zip(data_lists, mean_lists, std_lists)):
+            self.emittance_plot_panels[1].plot(meas_indices, data_list, color=colors[i], **plt_kws)
+            self.emittance_plot_panels[1].plot(meas_indices, mean_list, yerrs=std_list,
+                                               color=colors[i], lw=0, ebar_only=True)
+        # Set y axis limits.
+        hmax = 1.1 * max([max(data_list) for data_list in data_lists])
+        self.emittance_plot_panels[1].set_ylim(0.0, hmax, hmax / n_ticks)
+
+        # Pad the x axis limits.
+        for plot_panel in self.emittance_plot_panels:
+            plot_panel.set_xlim(-1, meas_indices[-1] + 1, 1.0)
+
+
+        graph_data_list = self.emittance_plot_panels[0].getAllGraphData()
+        for i, label in enumerate(['eps_x', 'eps_y', 'eps_1', 'eps_2']):
+            gd = graph_data_list[2 * i]
             gd.setGraphProperty('Legend', label)
-        
-        self.emittance_plot_panels[1].setLegendVisible(True)
-        self.emittance_plot_panels[1].setLegendButtonVisible(True)
-        labels = ['eps_x*eps_y', 'eps_1*eps_2']
-        for label, gd in zip(labels, self.emittance_plot_panels[1].getAllGraphData()):
+        graph_data_list = self.emittance_plot_panels[1].getAllGraphData()
+        for i, label in enumerate(['eps_x*eps_y', 'eps_1*eps_2']):
+            gd = graph_data_list[2 * i]
             gd.setGraphProperty('Legend', label)
-    
+        for plot_panel in self.emittance_plot_panels:
+            plot_panel.setLegendVisible(True)
+            plot_panel.setLegendButtonVisible(True)
                 
     def compute_model_twiss(self):
         """Compute the model Twiss parameters at the reconstruction point.
@@ -601,7 +660,7 @@ class ExportDataButtonListener(ActionListener):
         file = open(os.path.join(self.folder, 'moments.dat'), 'w')
         for ws_id in ws_ids:
             for moments in moments_dict[ws_id]:
-                fstr = 4 * '{} ' + '\n'
+                fstr = 5 * '{} ' + '\n'
                 file.write(fstr.format(ws_id, *moments))
         file.close()
         
@@ -706,6 +765,8 @@ class ReconstructionPointDropdownListener(ActionListener):
         self.panel.moments_dict = moments_dict
         self.panel.tmats_dict = tmats_dict
         self.panel.corner_plot_panel.clear()
+        for emittance_plot_panel in self.panel.emittance_plot_panels:
+            emittance_plot_panel.removeAllGraphData()
         self.panel.compute_model_twiss()
         self.panel.results_table.getModel().fireTableDataChanged()
               
@@ -719,36 +780,67 @@ class ReconstructCovarianceButtonListener(ActionListener):
         measurements = self.panel.measurements
         moments_dict = self.panel.moments_dict
         tmats_dict = self.panel.tmats_dict
+        constr = self.panel.keep_physical_checkbox.isSelected()
 
         if not measurements:
-            raise ValueError('No wire-scanner files have been loaded.')        
+            raise ValueError('No wire-scanner files have been loaded.')
 
-        # Form list of transfer matrices and measured moments.        
-        moments_list, tmats_list = [], []
-        node_ids = list(moments_dict.keys())
-        for node_id in node_ids:
-            moments_list.extend(moments_dict[node_id])
-            tmats_list.extend(tmats_dict[node_id])
-            
         # Reconstruct the covariance matrix.
-        constr = self.panel.keep_physical_checkbox.isSelected()
+        tmats_list, moments_list = [], []
+        node_ids = list(moments_dict)
+        for node_id in node_ids:
+            moments = []
+            for (sig_xx, sig_yy, sig_uu, sig_xy) in moments_dict[node_id]:
+                moments.append([sig_xx, sig_yy, sig_xy])
+            moments_list.extend(moments)
+            tmats_list.extend(tmats_dict[node_id])
         Sigma = analysis.reconstruct(tmats_list, moments_list, constr=constr, verbose=2)
-        beam_stats = analysis.BeamStats(Sigma)
+
+        # Reconstruct the covariance matrix with noise added to the measured moments.
+        moments_list = []
+        for node_id in node_ids:
+            moments = []
+            for (sig_xx, sig_yy, sig_uu, sig_xy) in moments_dict[node_id]:
+                moments.append([sig_xx, sig_yy, sig_uu])
+            moments_list.extend(moments)
+        Sigmas = analysis.random_trials(tmats_list, moments_list, frac_err=0.02, n_trials=2000)
+
+        # Compute/store beam statistics.
+        beam_stats = analysis.BeamStats(Sigma, Sigmas)
         beam_stats.print_all()
         self.panel.beam_stats = beam_stats
-        
+
         # Reconstruct at each individual measurement.
         self.panel.beam_stats_ind = []
         for i, measurement in enumerate(measurements):
             print('Measurement index = {}'.format(i))
-            moments_list = [moments_dict[node_id][i] for node_id in node_ids]
-            tmats_list = [tmats_dict[node_id][i] for node_id in node_ids]
+
+            # Using measured moments:
+            tmats_list, moments_list = [], []
+            for node_id in node_ids:
+                sig_xx, sig_yy, sig_uu, sig_xy = moments_dict[node_id][i]
+                moments_list.append([sig_xx, sig_yy, sig_xy])
+                tmats_list.append(tmats_dict[node_id][i])
             Sigma = analysis.reconstruct(tmats_list, moments_list, constr=constr)
-            stats = analysis.BeamStats(Sigma)
-            stats.print_all()
-            print()
+
+            # With noise added to measured moments:
+            moments_list = []
+            for node_id in node_ids:
+                sig_xx, sig_yy, sig_uu, sig_xy = moments_dict[node_id][i]
+                moments_list.append([sig_xx, sig_yy, sig_uu])
+            Sigmas = analysis.random_trials(tmats_list, moments_list, frac_err=0.02, n_trials=1000)
+
+            # Save statistics.
+            stats = analysis.BeamStats(Sigma, Sigmas)
             self.panel.beam_stats_ind.append(stats)
-        
+
+            # Display results.
+            stats.print_all()
+            print('Random trials:')
+            print('    means =', stats.ran_eps_x_mean, stats.ran_eps_y_mean, stats.ran_eps_1_mean, stats.ran_eps_2_mean)
+            print('    stds =', stats.ran_eps_x_std, stats.ran_eps_y_std, stats.ran_eps_1_std, stats.ran_eps_2_std)
+            print()
+
         # Update the panel.
         self.panel.update_tables()
         self.panel.update_plots()

@@ -113,6 +113,10 @@ def std(xx):
     return math.sqrt(variance(xx))
 
 
+def mean_std(xx):
+    return mean(xx), std(xx)
+
+
 # JAMA matrices
 #-------------------------------------------------------------------------------
 def diagonal_matrix(diagonal_elements):
