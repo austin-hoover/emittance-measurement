@@ -1,2 +1,2 @@
-reconstruction_point = RTBT:Tgt
+reconstruction_point = RTBT_Diag:BPM17
 beam_energy_GeV = 1.0
