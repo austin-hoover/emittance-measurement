@@ -21,8 +21,8 @@ from lib.xal_helpers import write_traj_to_file
 # Settings
 kinetic_energy = 0.8e9
 n_steps = 15
-dmux_min = dmuy_min = radians(-50.)
-dmux_max = dmuy_max = radians(124.)
+dmux_min = dmuy_min = radians(-50.0)
+dmux_max = dmuy_max = radians(124.0)
 beta_max_before_ws24 = 35.0
 beta_max_after_ws24 = 95.0
 target_beta_frac_tol = 0.16
@@ -47,12 +47,9 @@ muyy = optics.lin_phase_range(muy0 + dmuy_min, muy0 + dmuy_max, n_steps, endpoin
 # Initialize files.
 file_phase_adv = open('_output/data/phase_adv.dat', 'w')
 file_fields = open('_output/data/fields.dat', 'w')
-file_default_fields = open('_output/data/default_fields.dat', 'w')
 for quad_id in quad_ids:
     file_fields.write(quad_id + ' ')
-    file_default_fields.write(quad_id + ' ')
 file_fields.write('\n')
-file_default_fields.write('\n')
 
 # Perform the scan.
 start_time = time.time()
@@ -60,8 +57,8 @@ counter = 0
 for i, mux in enumerate(muxx):
     for j, muy in enumerate(muyy):
         print('i, j, time = {}, {}, {}'.format(i, j, time.time() - start_time))
-
-        controller.set_target_phases(mux, muy, beta_max_before_ws24, beta_max_after_ws24,
+        controller.set_target_phases(mux, muy, 
+                                     beta_max_before_ws24, beta_max_after_ws24,
                                      default_target_betas, target_beta_frac_tol,
                                      guess=default_fields)
 
@@ -80,22 +77,19 @@ for i, mux in enumerate(muxx):
             frac_change = abs(field - default_field) / default_field
             print('  {}: {} {} {}'.format(quad_id, field, default_field, frac_change))
 
-        # Save model phase advances, quadrupole fields, and tracked Twiss parameters to a file.
+        # Save the model phase advances, quadrupole fields, and tracked Twiss parameters.
         file_phase_adv.write('{} {}\n'.format(mux_calc, muy_calc))
-        for field, default_field in zip(fields, default_fields):
+        for field in fields:
             file_fields.write('{} '.format(field))
-            file_default_fields.write('{} '.format(default_field))
         file_fields.write('\n')
-        file_default_fields.write('\n')
         write_traj_to_file(controller.tracked_twiss(), controller.positions, 
                            '_output/data/twiss_{}.dat'.format(counter))
-
+        
         counter += 1
 
 
 print('Runtime = {}'.format(time.time() - start_time))
 file_phase_adv.close()
 file_fields.close()
-file_default_fields.close()
 
 exit()
