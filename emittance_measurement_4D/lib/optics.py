@@ -222,7 +222,7 @@ class PhaseController:
         self.quad_ids = node_ids(self.quad_nodes)
         self.ps_ids = node_ids(self.ps_nodes)
     
-        # Get node and id of each independent RTBT quad and quad power supply.
+        # Get node and id of each independent RTBT quad and quad power supply.  
         self.ind_quad_nodes, self.ind_ps_nodes = [], []
         for quad_node, ps_node in zip(self.quad_nodes, self.ps_nodes):
             if ps_node not in self.ind_ps_nodes:
@@ -230,7 +230,7 @@ class PhaseController:
                 self.ind_quad_nodes.append(quad_node)
         self.ind_quad_ids = node_ids(self.ind_quad_nodes)
         self.ind_ps_ids = node_ids(self.ind_ps_nodes)
-            
+                    
         # Create dictionary of shared power supplies. Each key is an 
         # independent quad id, and each value is a list of quad ids which share
         # power with the independent quad. We need this because the quads in the
@@ -262,9 +262,16 @@ class PhaseController:
         else:
             # We should have a hardcoded array of power supply limits for when
             # we can't connect to the machine.
-            self.ps_lb = [-1e9 for node in self.ind_quad_nodes]
-            self.ps_ub = [+1e9 for node in self.ind_quad_nodes]
-
+            B = 10.0
+            self.ps_lb = [0.0, -B, 0.0, -B, 0.0,
+                          0.0, -B, 0.0, -B, 0.0, -B, 0.0, -B,
+                          0.0, -B, 0.0, -B, 0.0,
+                         ]
+            self.ps_ub = [B, 0.0, B, 0.0, B,
+                          B, 0.0, B, 0.0, B, 0.0, B, 0.0,
+                          B, 0.0, B, 0.0, B,
+                         ]
+        
         # Store the default field settings.
         self.default_fields = self.get_fields(self.ind_quad_ids, 'model')    
         self.default_betas_at_target = self.beta_funcs('RTBT:Tgt')
@@ -421,7 +428,7 @@ class PhaseController:
         lb = self.ps_lb[lo : hi + 1]
         ub = self.ps_ub[lo : hi + 1]
         bounds = (lb, ub)
-        init_fields = self.default_fields[lo : hi + 1]    
+        init_fields = self.default_fields[lo : hi + 1]  
         self.restore_default_optics()
         fields = minimize(scorer, init_fields, var_names, bounds)
         if verbose > 0:
