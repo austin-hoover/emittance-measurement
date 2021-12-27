@@ -5,11 +5,15 @@ import collections
 import numpy as np
 from scipy import optimize as opt
 from skimage import filters
-from skimage import transform
 from skimage import measure
 
 
 PIXEL_WIDTH = 1.0 / 1.77 # [mm]
+
+
+def get_edges(centers):
+    width = np.diff(centers)[0]
+    return np.hstack([centers - 0.5 * width, [centers[-1] + 0.5 * width]])
 
 
 class TargetImage:
@@ -24,7 +28,12 @@ class TargetImage:
         self.yy -= np.mean(self.yy)
         self.width = abs(self.xx[-1] - self.xx[0])
         self.height = abs(self.yy[-1] - self.yy[0])
+        self.pixel_width = PIXEL_WIDTH
         self.set_pixel_width(PIXEL_WIDTH)
+        
+        self.xedges = get_edges(self.xx)
+        self.yedges = get_edges(self.yy)
+                
         self.X, self.Y = np.meshgrid(self.xx, self.yy)
         self.Zfit = None
         self.cov = None
@@ -32,15 +41,18 @@ class TargetImage:
         self.cx, self.cy, self.angle = None, None, None
         
     def set_pixel_width(self, pixel_width):
+        """Needs to be modified."""
         if type(pixel_width) in [int, float]:
             pixel_width = [pixel_width, pixel_width]
         self.xx *= pixel_width[0]
         self.yy *= pixel_width[1]
+        self.xedges = get_edges(self.xx)
+        self.yedges = get_edges(self.yy)
         
     def filter(self, sigma, **kws):
         self.Zf = filters.gaussian(self.Z, sigma=sigma, **kws)
         return self.Zf
-        
+            
     def fit_gauss2d(self, use_filtered=False):
         Z = self.Zf if use_filtered else self.Z 
         Zfit, params = fit_gauss2d(self.X, self.Y, Z.T)
@@ -56,13 +68,35 @@ class TargetImage:
         coords = np.c_[self.X.ravel(), self.Y.ravel()]
         x, y = coords.T
         f = Z.T.flatten()
-        mean_x = np.sum(f * x) / np.sum(f)
-        mean_y = np.sum(f * y) / np.sum(f)
-        sig_xx = np.sum(f * (x - mean_x)**2) / np.sum(f)
-        sig_yy = np.sum(f * (y - mean_y)**2) / np.sum(f)
-        sig_xy = np.sum(f * (x - mean_x) * (y - mean_y)) / np.sum(f)
-        return mean_x, mean_y, sig_xx, sig_yy, sig_xy
-        
+        return estimate_moments_2d(f, x, y)
+    
+    
+def estimate_moments(Z, xcenters=None, ycenters=None):
+    if xcenters is None:
+        xcenters = np.arange(Z.shape[0])
+    if ycenters is None:
+        ycenters = np.arange(Z.shape[1])
+    X, Y = np.meshgrid(xcenters, ycenters)
+    coords = np.c_[X.ravel(), Y.ravel()]
+    x, y = coords.T
+    f = Z.T.flatten()
+    return estimate_moments_2d(f, x, y)
+
+    
+def estimate_moments_1d(f, x):
+    mean = np.sum(f * x) / np.sum(f)
+    sig2 = np.sum(f * (x - mean)**2) / np.sum(f)
+    return mean, sig2
+
+
+def estimate_moments_2d(f, x, y):
+    mean_x = np.sum(f * x) / np.sum(f)
+    mean_y = np.sum(f * y) / np.sum(f)
+    sig_xx = np.sum(f * (x - mean_x)**2) / np.sum(f)
+    sig_yy = np.sum(f * (y - mean_y)**2) / np.sum(f)
+    sig_xy = np.sum(f * (x - mean_x) * (y - mean_y)) / np.sum(f)
+    return mean_x, mean_y, sig_xx, sig_yy, sig_xy
+
     
 def process_array(array, make_square=False):
     """Process the target image PV data.
