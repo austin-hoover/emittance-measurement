@@ -5,35 +5,28 @@ To do:
     * Both model and live optics should be plotted.
     * Should be able to control model optics separate from live
       optics. There should be a button to sync model with live.
+    * Some of the GUI components have hard-coded dimensions, so they
+      don't scale with the window.
 """
 from java.awt import BorderLayout
 from java.awt import Color
-from java.awt import Component
-from java.awt import Dimension
 from java.awt import FlowLayout
 from java.awt import Font
-from java.awt import GridLayout
 from java.awt.event import ActionListener
-from java.awt.event import WindowAdapter
-from javax.swing import BorderFactory
 from javax.swing import BoxLayout
 from javax.swing import GroupLayout
 from javax.swing import JButton
 from javax.swing import JComboBox
-from javax.swing import JFrame
 from javax.swing import JLabel
 from javax.swing import JPanel
 from javax.swing import JProgressBar
 from javax.swing import JTable
-from javax.swing import JTabbedPane
 from javax.swing import JTextField
 from javax.swing import JFormattedTextField
 from javax.swing.event import CellEditorListener
 from javax.swing.table import AbstractTableModel
 from java.text import NumberFormat
-from java.text import DecimalFormat
 
-# Local
 import optics
 import plotting as plt
 import utils
@@ -55,7 +48,6 @@ class PhaseControllerPanel(JPanel):
             ws_node = self.sequence.getNodeWithId(ws_id)
             ws_position = self.sequence.getDistanceBetween(self.start_node, ws_node)
             self.ws_positions.append(ws_position)
-
         self.build_panels()
 
     def build_panels(self):
@@ -107,7 +99,6 @@ class PhaseControllerPanel(JPanel):
         self.model_calc_panel.setLayout(BoxLayout(self.model_calc_panel, BoxLayout.Y_AXIS))
         self.model_calc_panel.add(self.model_calc_panel1)
         self.model_calc_panel.add(self.model_calc_panel2)
-
 
         # Machine update panel
         #------------------------------------------------------------------------
