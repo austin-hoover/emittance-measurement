@@ -21,6 +21,8 @@ from lib.optics import TransferMatrixGenerator
 # matrix at every node in the RTBT.
 kinetic_energy = 0.8e9
 filename = '_saved/2021-10-21/setting2/injturns400/turn400/WireAnalysisFmt-2021.10.21_19.22.35.pta.txt'
+# filename = '_saved/2021-09-26/setting1/ramp_turns/profiles/WireAnalysisFmt-2021.09.27_00.10.34.pta.txt'
+# filename = '_saved/2021-09-07/TBT_production_0.5ms/profiles/WireAnalysisFmt-2021.09.07_17.31.54.pta.txt'
 
 measurement = analysis.Measurement(filename)
 accelerator = XMLDataManager.loadDefaultAccelerator()
@@ -39,7 +41,8 @@ for rec_node in sequence.getNodes():
         tmats_list.extend(tmats_dict[node_id])
     Sigma = analysis.reconstruct(tmats_list, moments_list, verbose=0)
     file.write('{} {:.2f} {} {} {} {} {} {} {} {} {} {}\n'.format(
-        rec_node.getId(), sequence.getDistanceBetween(nodes[0], rec_node),
+        rec_node.getId(), 
+        sequence.getDistanceBetween(nodes[0], rec_node),
         Sigma.get(0, 0), Sigma.get(0, 1), Sigma.get(0, 2), Sigma.get(0, 3), 
         Sigma.get(1, 1), Sigma.get(1, 2), Sigma.get(1, 3), 
         Sigma.get(2, 2), Sigma.get(2, 3), 
@@ -96,8 +99,12 @@ for node in nodes:
     twiss_x, twiss_y, _ = calculator.computeTwissParameters(state)
     print('Computing model Twiss parameters at {}'.format(node.getId()))
     file.write('{} {:.2f} {} {} {} {}\n'.format(
-        node.getId(), sequence.getDistanceBetween(nodes[0], node),
-        twiss_x.getAlpha(), twiss_y.getAlpha(), twiss_x.getBeta(), twiss_y.getBeta())
+        node.getId(), 
+        sequence.getDistanceBetween(nodes[0], node),
+        twiss_x.getAlpha(), 
+        twiss_y.getAlpha(), 
+        twiss_x.getBeta(), 
+        twiss_y.getBeta())
     )
 file.close()
 
