@@ -1,39 +1,20 @@
 import math
-from Jama import Matrix
 
-from java.awt import BorderLayout
 from java.awt import Color
-from java.awt import Component
 from java.awt import Dimension
-from java.awt import FlowLayout
-from java.awt import Font
-from java.awt import GridLayout
 from java.awt import GridBagLayout
 from java.awt import GridBagConstraints
-from java.awt.event import ActionListener
-from java.awt.event import WindowAdapter
 from java.awt.geom import Ellipse2D
 from javax.swing import BorderFactory
-from javax.swing import BoxLayout
-from javax.swing import GroupLayout
-from javax.swing import JButton
-from javax.swing import JComboBox
-from javax.swing import JFrame
-from javax.swing import JLabel
 from javax.swing import JPanel
-from javax.swing import JProgressBar
-from javax.swing import JTable
-from javax.swing import JTabbedPane
-from javax.swing import JTextField
-from javax.swing import JFormattedTextField
 
 from xal.extension.widgets.plot import BasicGraphData
 from xal.extension.widgets.plot import CurveData
 from xal.extension.widgets.plot import FunctionGraphsJPanel
 
 # Local
-import utils
 import analysis
+import utils
 
 
 CYCLE_COLORBLIND = [
@@ -53,19 +34,19 @@ CYCLE_538 = [
     Color(0.5058823529411764, 0.058823529411764705, 0.48627450980392156),
 ]
 GRID_COLOR = Color(245, 245, 245)
-DIM_TO_INT = {'x':0, 'xp':1, 'y':2, 'yp':3}
+DIM_TO_INT = {'x': 0, 'xp': 1, 'y': 2, 'yp': 3}
 
 
 def rotate(x, y, phi):
     """Rotate point (x, y) clockwise by phi radians."""
     sn, cs = math.sin(phi), math.cos(phi)
-    x_rot =  cs * x + sn * y
+    x_rot = +cs * x + sn * y
     y_rot = -sn * x + cs * y
     return x_rot, y_rot
 
 
 def ellipse_points(cx, cy, tilt=0., points=50):
-    """Return array of x and y points on ellipse boundary.
+    """Return array of x and y points on ellipse.
     
     Parameters
     ----------
@@ -92,7 +73,7 @@ def ellipse_points(cx, cy, tilt=0., points=50):
 
 
 class PlotPanel(FunctionGraphsJPanel):
-    
+    """Variant of `FunctionGraphsJPanel."""
     def __init__(self, xlabel='', ylabel='', title='', grid=True):
         FunctionGraphsJPanel.__init__(self)
         self.setName(title)
@@ -136,6 +117,7 @@ class LinePlotPanel(PlotPanel):
             self.addGraphData(data) 
         
     def ellipse(self, cx, cy, tilt=0.0, points=50, lw=4):
+        """Plot an ellipse."""
         xvals, yvals = ellipse_points(cx, cy, tilt, points)
         curve_data = CurveData()
         curve_data.setPoints(xvals, yvals)
@@ -172,14 +154,22 @@ class LinePlotPanel(PlotPanel):
         self.addGraphData(data) 
             
     def set_xlim(self, xmin, xmax, xstep):
+        """Set the horizontal axes limits."""
         self.setLimitsAndTicksX(xmin, xmax, xstep)
         
     def set_ylim(self, ymin, ymax, ystep):
+        """Set the vertical axes limits."""
         self.setLimitsAndTicksY(ymin, ymax, ystep)
         
     
 class CornerPlotPanel(JPanel):
-    
+    """Class for 'corner plot'.
+
+    The 'corner plot' is a matrix of pairwise plots. For four-dimensional
+    phase space data, this is a 4x4 matrix. Here, we display the
+    two-dimensional projections of the covariance matrix (the six lower-diagonal
+    entries in the matrix.
+    """
     def __init__(self, grid=False, figsize=None, ticklabels=False):
         JPanel.__init__(self)
         self.setLayout(GridBagLayout())
@@ -213,7 +203,8 @@ class CornerPlotPanel(JPanel):
                     key = ''.join([xdim, '-', ydim])
                     self.plots[key] = plot
                     
-    def rms_ellipses(self, Sigma, lw=4, points=100):    
+    def rms_ellipses(self, Sigma, lw=4, points=100):
+        """Plot projections of the ellipsoid defined by x^T Sigma x = 1/4."""
         max_coords = [math.sqrt(Sigma.get(i, i)) for i in range(4)]
         for key, panel in self.plots.items():
             dim1, dim2 = key.split('-')
@@ -226,6 +217,7 @@ class CornerPlotPanel(JPanel):
             panel.set_ylim(-vmax, vmax, vmax)
             
     def clear(self):
+        """Clear all subplots."""
         for panel in self.plots.values():
             panel.removeAllGraphData()
             panel.removeAllCurveData()    

@@ -40,7 +40,6 @@ from utils import subtract
 from xal_helpers import get_trial_vals
 from xal_helpers import list_from_xal_matrix
 from xal_helpers import minimize
-from utils import linspace
 from utils import radians
 
 
@@ -63,7 +62,7 @@ def node_ids(nodes):
 
 
 def compute_twiss(state, calculator):
-    """Compute Twiss parameters from envelope trajectory state."""
+    """Compute Twiss parameters from an envelope trajectory state."""
     twiss_x, twiss_y, _ = calculator.computeTwissParameters(state)
     alpha_x, beta_x = twiss_x.getAlpha(), twiss_x.getBeta()
     alpha_y, beta_y = twiss_y.getAlpha(), twiss_y.getBeta()
@@ -73,10 +72,10 @@ def compute_twiss(state, calculator):
 
 
 def compute_model_twiss(node_id, kinetic_energy, pvloggerid=None, sync_mode='design'):
-    """Get the model Twiss parameters in the RTBT."""
+    """Compute the model Twiss parameters in the RTBT."""
     accelerator = XMLDataManager.loadDefaultAccelerator()
     pvl_data_source = None
-    if pvloggerid:
+    if pvloggerid is not None:
         pvl_data_source = PVLoggerDataSource(pvloggerid)
     
     def get_seq_scenario(seq_name):
@@ -126,6 +125,14 @@ def compute_model_twiss(node_id, kinetic_energy, pvloggerid=None, sync_mode='des
     
     
 def safe_sync(scenario, sync_mode):
+    """Synchronize the model scenario.
+
+    scenario : xal.sim.scenario.Scenario
+        The scenario to synchronize.
+    sync_mode : {'live', 'design'}
+        If 'live', sync with the live machine state. If 'design', synchronize with
+        the design values.
+    """
     if sync_mode not in ['live', 'design']:
         raise ValueError("`sync_mode` must be in {'live', 'design'}")
     if sync_mode == 'live':
@@ -142,7 +149,7 @@ def safe_sync(scenario, sync_mode):
 
 
 class TransferMatrixGenerator:
-    """Class to compute transfer matrix between two nodes."""
+    """Class to compute the transfer matrix between two nodes."""
     def __init__(self, sequence, kinetic_energy):
         self.sequence = sequence
         self.scenario = Scenario.newScenarioFor(sequence)
@@ -152,19 +159,26 @@ class TransferMatrixGenerator:
         self.set_kinetic_energy(kinetic_energy)
         
     def set_kinetic_energy(self, kinetic_energy):
+        """Set the probe kinetic energy [eV]."""
         self.probe.setKineticEnergy(kinetic_energy)
         
     def sync(self, pvloggerid):
-        """Sync model with machine state from PVLoggerID."""
+        """Sync the model with the machine state from a PVLoggerID."""
         pvl_data_source = PVLoggerDataSource(pvloggerid)
         self.scenario = pvl_data_source.setModelSource(self.sequence, self.scenario)
         self.scenario.resync()
     
     def generate(self, start_node_id=None, stop_node_id=None):
-        """Return transfer matrix elements from start to node entrance.
+        """Return the transfer matrix from start to node entrance.
         
-        The node ids can be out of order.
-        """ 
+        The node ids can be out of order. The default is to start at the first
+        node and end at the last node in the sequence.
+        """
+        # Default arguments
+        if start_node_id is None:
+            start_node_id = self.sequence.getNodes()[0].getId()
+        if stop_node_id is None:
+            stop_node_id = self.sequence.getNodes()[-1].getId()
         # Check if the nodes are in order. If they are not, flip them and
         # remember to take the inverse at the end.
         reverse = False
@@ -191,12 +205,7 @@ class TransferMatrixGenerator:
 
 
 class PhaseController:
-    """Class to control the phase advances in the RTBT.
-    
-    Attributes
-    ----------
-
-    """
+    """Class to control the phase advances in the RTBT."""
     def __init__(self, ref_ws_id='RTBT_Diag:WS24', kinetic_energy=1e9, sync_mode='live', 
                  connect=True):
         self.machine_has_changed = False
@@ -265,19 +274,17 @@ class PhaseController:
             B = 10.0
             self.ps_lb = [0.0, -B, 0.0, -B, 0.0,
                           0.0, -B, 0.0, -B, 0.0, -B, 0.0, -B,
-                          0.0, -B, 0.0, -B, 0.0,
-                         ]
+                          0.0, -B, 0.0, -B, 0.0]
             self.ps_ub = [B, 0.0, B, 0.0, B,
                           B, 0.0, B, 0.0, B, 0.0, B, 0.0,
-                          B, 0.0, B, 0.0, B,
-                         ]
+                          B, 0.0, B, 0.0, B]
         
         # Store the default field settings.
         self.default_fields = self.get_fields(self.ind_quad_ids, 'model')    
         self.default_betas_at_target = self.beta_funcs('RTBT:Tgt')
         
     def sync_model_pvloggerid(self, pvloggerid):
-        """Sync model with machine state from PVLoggerID."""
+        """Sync the model with the machine state from a PVLoggerID."""
         pvl_data_source = PVLoggerDataSource(pvloggerid)
         self.scenario = pvl_data_source.setModelSource(self.sequence, self.scenario)
         self.scenario.resync()
@@ -304,7 +311,7 @@ class PhaseController:
         self.probe.initFromTwiss([twiss_x, twiss_y, twiss_z])
         
     def track(self):
-        """Return envelope trajectory through the lattice."""
+        """Return the envelope trajectory through the lattice."""
         self.initialize_envelope()
         self.scenario.run()
         self.trajectory = self.probe.getTrajectory()
@@ -314,24 +321,24 @@ class PhaseController:
         return self.trajectory
     
     def tracked_twiss(self):
-        """Return Twiss parameters at each state in trajectory."""
+        """Return the Twiss parameters at each state in trajectory."""
         return [compute_twiss(state, self.calculator) for state in self.states]
     
     def twiss(self, node_id):
-        """Return Twiss parameters at node entrance."""
+        """Return the Twiss parameters at the node entrance."""
         state = self.trajectory.statesForElement(node_id)[0]
         return compute_twiss(state, self.calculator)
     
     def phases(self, node_id):
-        """Return phase advances (mod 2pi) from start to node entrance."""
+        """Return the phase advances (mod 2pi) at the node entrance."""
         return self.twiss(node_id)[:2]
     
     def beta_funcs(self, node_id):
-        """Return beta functions at node entrance."""
+        """Return the beta functions at the node entrance."""
         return self.twiss(node_id)[4:6]
         
     def max_betas(self, start='RTBT_Mag:QH02', stop='RTBT_Diag:WS24'):
-        """Return maximum x and y beta functions from start to stop node.
+        """Return the maximum x and y beta functions from start to stop.
         
         Setting start=None starts tracks from the beginning of the lattice.
         Setting stop=None tracks through the end of the lattice.
@@ -346,6 +353,7 @@ class PhaseController:
         return max(beta_xs), max(beta_ys)
     
     def transfer_matrix(self, start_node_id=None, stop_node_id=None):
+        """Compute the transfer matrix between two nodes."""
         # Set start and stop node if None is provided.
         if start_node_id is None:
             start_node_id = self.sequence.getNodes()[0].getId()
@@ -381,7 +389,7 @@ class PhaseController:
         return M
 
     def set_ref_ws_phases(self, mu_x, mu_y, beta_lims=(40, 40), verbose=0):
-        """Set x and y phases from start to the reference wire-scanner.
+        """Set the phase advances at the reference wire-scanner.
 
         Parameters
         ----------
@@ -439,7 +447,7 @@ class PhaseController:
         return fields
     
     def constrain_size_on_target(self, max_beta_before_target=100., verbose=0):
-        """Vary quads after WS24 to constrain beam size on target.
+        """Vary the quads after WS24 to constrain beam size on target.
         
         Parameters
         ----------
@@ -480,7 +488,7 @@ class PhaseController:
 
     def set_target_phases(self, mux, muy, beta_max_before_ws24, beta_max_after_ws24,
                           default_target_betas, target_beta_frac_tol, guess=None):
-        """Set x and y phases at the target.
+        """Set the phase advances at the target.
 
         Parameters
         ----------
@@ -594,7 +602,7 @@ class PhaseController:
         
     def set_fields(self, quad_ids, fields, opt='model', max_frac_change=0.01, 
                    max_iters=100, sleep_time=0.5):
-        """Set the fields of each quadrupole in the list.
+        """Set the field of each quadrupole in the list.
         
         Note that the book values are always kept equal to the live values. 
         
@@ -653,12 +661,12 @@ class PhaseController:
         self.set_fields(self.ind_quad_ids, self.default_fields, opt, **kws)
         
     def sync_live_with_model(self, **kws):
-        """Set the live quad fields to model values."""
+        """Set live quad fields to model values."""
         model_fields = self.get_fields(self.ind_quad_ids, 'model')
         self.set_fields(self.ind_quad_ids, model_fields, 'live', **kws)
         
     def calc_init_twiss(self):
-        """Calculate Twiss parameters at RTBT entrance using the ring."""
+        """Calculate the Twiss parameters at the RTBT entrance."""
         node_id = 'Begin_Of_RTBT1'
         params = compute_model_twiss(node_id, self.kinetic_energy, 
                                      sync_mode=self.sync_mode)
@@ -670,23 +678,30 @@ class PhaseController:
             'beta_y': beta_y
         }
         
-    def get_phases_for_scan(self, phase_coverage=90., n_steps=3, method=1):
-        """Create array of phases for scan. 
-
-        In the first{second} half of the scan, the horizontal{vertical} phase is 
-        varied while the {vertical}{horizontal} phase is held fixed.
-
-        Example: mux = [1, 2, 3, 2, 2, 2], 
-                 muy = [5, 5, 5, 4, 5, 6]
+    def get_phases_for_scan(self, phase_coverage=90., n_steps=6, method=1):
+        """Create an array of phase advances at the reference wire-scanner for
+        the multi-optics emittance measurement.
 
         Parameters
         ----------
-        phase_coverages : float
+        phase_coverage : float
             Range of phase advances to cover IN DEGREES. The phases are
             centered on the default phase. It is a pain because OpenXAL 
             computes the phases mod 2pi. 
         n_steps : int
             The number of steps in the scan. It should be an even number >= 6.
+        method : {1, 2}
+            Method 1:
+                The horizontal and vertical phase advances are scanned at the
+                same time, in opposite directions.
+                Example: mux = [1, 2, 3, 4, 5, 6],
+                         muy = [6, 5, 4, 3, 2, 1].
+            Method 2:
+                In the first{second} half of the scan, the horizontal{vertical}
+                phase advance is varied while the vertical{horizontal} phase
+                advance is held fixed.
+                Example: mux = [1, 2, 3, 2, 2, 2],
+                         muy = [5, 5, 5, 4, 5, 6].
         """              
         # Get default phase advances without changing current state.
         model_fields = self.get_fields(self.ind_quad_ids, 'model')
@@ -711,6 +726,8 @@ class PhaseController:
         return phases
     
 def lin_phase_range(mu_min, mu_max, n_steps, endpoint=True):
+    """Step the phase advance between mu_min and mu_max, shifting to keep
+    all values within [0, 2pi]."""
     # Difference between min and max phase is always <= 180 degrees.
     mu_min = float(mu_min)
     mu_max = float(mu_max)

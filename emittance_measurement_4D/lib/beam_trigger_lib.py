@@ -1,20 +1,23 @@
-#----------------------------------------------------------
-# This is a beam trigger class
-#----------------------------------------------------------
+"""Beam trigger library.
 
+This was copied and pasted from another application.
+"""
 import time
-
 from java.lang import *
-
 from xal.extension.scan import WrappedChannel
+
 
 false = Boolean("false").booleanValue()
 true  = Boolean("true").booleanValue()
 null  = None
 
+
 class BeamTrigger:
-	"""
-	It will trigger the beam once.
+	"""Class to trigger the beam.
+
+	Note: if the there is an error in the machine, the this class will not trigger
+	the beam. It seems that manually triggering from StartMap will solve the
+	problem.
 	"""
 	def __init__(self,top_level_cotroller = null):
 		self.top_level_cotroller   = top_level_cotroller

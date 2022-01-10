@@ -348,7 +348,7 @@ def reconstruct(transfer_mats, moments, constr=True, **lsq_kws):
 #     return Sigma
 
 
-def random_trials(transfer_mats, moments, frac_err=0.02, n_trials=1000):
+def reconstruct_random_trials(transfer_mats, moments, frac_err=0.02, n_trials=1000):
     """Reconstruct with errors added to the measured moments.
 
     Here `moments` should be a list of [<xx>, <yy>, <uu>].

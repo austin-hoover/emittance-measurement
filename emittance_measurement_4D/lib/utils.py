@@ -5,6 +5,7 @@ from Jama import Matrix
 
 
 def list_files(path, join=True):
+    """List all the files (not folders) in the directory."""
     files = []
     for file in os.listdir(path):
         file_path = os.path.join(path, file)
