@@ -6,13 +6,16 @@ import types
 import time
 import random
 
-from java.lang import *
+from java.lang import Boolean
+from java.lang import Runnable
+from java.lang import Thread
 from javax.swing import *
 from java.text import SimpleDateFormat
 from java.util import Date
+from java.util import Timer
 
-false= Boolean("false").booleanValue()
-true= Boolean("true").booleanValue()
+false = Boolean("false").booleanValue()
+true = Boolean("true").booleanValue()
 null = None
 
 class DateAndTimeText:
