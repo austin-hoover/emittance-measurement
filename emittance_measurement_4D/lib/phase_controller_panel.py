@@ -170,17 +170,6 @@ class PhaseControllerPanel(JPanel):
         panel.add(temp_panel)
         self.left_panel.add(panel)
 
-
-        # label = JLabel('Manually set')
-        # font = label.getFont()
-        # label.setFont(Font(font.name, font.BOLD, int(1.1 * font.size)))
-        # temp_panel = JPanel()
-        # temp_panel.setLayout(FlowLayout(FlowLayout.LEFT))
-        # temp_panel.add(label)
-        # self.left_panel.add(temp_panel)
-
-
-
         label = JLabel('Set live optics')
         label.setFont(Font(font.name, font.BOLD, int(1.1 * font.size)))
         row = JPanel()
