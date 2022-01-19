@@ -208,7 +208,6 @@ class PhaseController:
     """Class to control the phase advances in the RTBT."""
     def __init__(self, ref_ws_id='RTBT_Diag:WS24', kinetic_energy=1e9, sync_mode='live', 
                  connect=True):
-        self.machine_has_changed = False
         self.connect = connect
         self.ref_ws_id = ref_ws_id
         self.accelerator = XMLDataManager.loadDefaultAccelerator()
@@ -219,9 +218,12 @@ class PhaseController:
         self.tracker.setUseSpacecharge(False)
         self.probe = ProbeFactory.getEnvelopeProbe(self.sequence, self.tracker)
         self.probe.setBeamCurrent(0.0)
-        self.set_kinetic_energy(kinetic_energy)
         self.scenario.setProbe(self.probe)
-        self.track()
+        self.trajectory = None
+        self.default_betas_at_target = None
+        self.default_field_strengths = None
+        self.set_kinetic_energy(kinetic_energy)
+        self.trajectory = self.track()
         
         # Get node for each RTBT quad and quad power supply.
         self.quad_nodes = [node for node in self.sequence.getNodesOfType('quad') 
@@ -278,24 +280,39 @@ class PhaseController:
             self.ps_ub = [B, 0.0, B, 0.0, B,
                           B, 0.0, B, 0.0, B, 0.0, B, 0.0,
                           B, 0.0, B, 0.0, B]
-        
-        # Store the default field settings.
-        self.default_fields = self.get_fields(self.ind_quad_ids, 'model')    
-        self.default_betas_at_target = self.beta_funcs('RTBT:Tgt')
-        
+
+        self.set_current_optics_as_default()
+
     def sync_model_pvloggerid(self, pvloggerid):
         """Sync the model with the machine state from a PVLoggerID."""
         pvl_data_source = PVLoggerDataSource(pvloggerid)
         self.scenario = pvl_data_source.setModelSource(self.sequence, self.scenario)
         self.scenario.resync()
         self.track()
-        
+
     def set_kinetic_energy(self, kinetic_energy):
         """Set the probe kinetic energy [eV]."""
         self.kinetic_energy = kinetic_energy
         self.probe.setKineticEnergy(kinetic_energy)
-        self.calc_init_twiss()
-        
+        self.set_init_twiss(*self.matched_init_twiss())
+        if self.trajectory is not None:
+            self.track()
+            self.default_betas_at_target = self.beta_funcs('RTBT:Tgt')
+
+    def matched_init_twiss(self):
+        """Return (alpha_x, alpha_y, beta_x, beta_y) at the RTBT entrance."""
+        return compute_model_twiss('Begin_Of_RTBT1', self.kinetic_energy,
+                                   sync_mode=self.sync_mode)
+
+    def set_init_twiss(self, alpha_x, alpha_y, beta_x, beta_y):
+        """Set the initial probe Twiss parameters."""
+        self.init_twiss = {
+            'alpha_x': alpha_x,
+            'alpha_y': alpha_y,
+            'beta_x': beta_x,
+            'beta_y': beta_y,
+        }
+
     def initialize_envelope(self):
         """Reset the envelope probe to the start of the lattice."""
         self.scenario.resetProbe()
@@ -391,6 +408,9 @@ class PhaseController:
     def set_ref_ws_phases(self, mu_x, mu_y, beta_lims=(40, 40), verbose=0):
         """Set the phase advances at the reference wire-scanner.
 
+        The initial guess given to the solver is `self.default_field_strengths`. The
+        beta functions at the
+
         Parameters
         ----------
         mu_x, mu_y : float
@@ -442,7 +462,8 @@ class PhaseController:
         if verbose > 0:
             print('  Desired phases : {:.3f}, {:.3f}'.format(mu_x, mu_y))
             print('  Calc phases    : {:.3f}, {:.3f}'.format(*self.phases(self.ref_ws_id)))
-            print('  Max betas (Q03 - WS24): {:.3f}, {:.3f}'.format(*self.max_betas()))
+            print('  Max betas (QH18 - WS24): {:.3f}, {:.3f}'.format(
+                  *self.max_betas(start='RTBT_Mag:QH18', stop='RTBT_Diag:WS24')))
             print('  Betas at target: {:.3f}, {:.3f}'.format(*self.beta_funcs('RTBT:Tgt')))
         return fields
     
@@ -593,10 +614,8 @@ class PhaseController:
                     self.set_field(dep_quad_id, field, 'model')
         elif opt == 'live': 
             node.setField(field)
-            self.machine_has_changed = True
         elif opt == 'book':
             self.book_channels[quad_id].putVal(node.toCAFromField(field))
-            self.machine_has_changed = True
         else:
             raise ValueError("opt must be in {'model', 'live', 'book'}")
         
@@ -655,7 +674,16 @@ class PhaseController:
             for quad_id, field in zip(quad_ids, fields): 
                 self.set_field(quad_id, field, 'book')
                 self.set_field(quad_id, field, 'live')
-                
+
+    def set_current_optics_as_default(self):
+        """Store the current machine state as the default state.
+
+        Any changes are made with this state as the starting point.
+        """
+        self.default_fields = self.get_fields(self.ind_quad_ids, 'model')
+        self.track()
+        self.default_betas_at_target = self.beta_funcs('RTBT:Tgt')
+
     def restore_default_optics(self, opt='model', **kws):
         """Reset quadrupole fields to default values."""
         self.set_fields(self.ind_quad_ids, self.default_fields, opt, **kws)
@@ -664,19 +692,6 @@ class PhaseController:
         """Set live quad fields to model values."""
         model_fields = self.get_fields(self.ind_quad_ids, 'model')
         self.set_fields(self.ind_quad_ids, model_fields, 'live', **kws)
-        
-    def calc_init_twiss(self):
-        """Calculate the Twiss parameters at the RTBT entrance."""
-        node_id = 'Begin_Of_RTBT1'
-        params = compute_model_twiss(node_id, self.kinetic_energy, 
-                                     sync_mode=self.sync_mode)
-        alpha_x, alpha_y, beta_x, beta_y = params
-        self.init_twiss = {
-            'alpha_x': alpha_x,
-            'alpha_y': alpha_y,
-            'beta_x': beta_x,
-            'beta_y': beta_y
-        }
         
     def get_phases_for_scan(self, phase_coverage=90., n_steps=6, method=1):
         """Create an array of phase advances at the reference wire-scanner for
