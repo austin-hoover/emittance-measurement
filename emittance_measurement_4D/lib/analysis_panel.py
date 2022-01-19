@@ -90,7 +90,6 @@ class AnalysisPanel(JPanel):
         self.model_twiss = dict()
         
     def build_panel(self):
-        
         # Top panel
         #-------------------------------------------------------------------------------
         self.load_files_button = JButton('Load files')
@@ -203,8 +202,8 @@ class AnalysisPanel(JPanel):
         
         self.bottom_right_pane = JTabbedPane()
         self.bottom_right_pane.setPreferredSize(Dimension(725, 500))
-        self.bottom_right_pane.addTab('Graphics', self.bottom_right_panel_A)        
-        self.bottom_right_pane.addTab('Data', self.bottom_right_panel_B)  
+        self.bottom_right_pane.addTab('Phase space projections', self.bottom_right_panel_A)
+        self.bottom_right_pane.addTab('Emittances', self.bottom_right_panel_B)
         
         self.bottom_panel = JPanel()
         self.bottom_panel.setBorder(BorderFactory.createLineBorder(Color.black))
@@ -803,7 +802,7 @@ class ReconstructCovarianceButtonListener(ActionListener):
             for (sig_xx, sig_yy, sig_uu, sig_xy) in moments_dict[node_id]:
                 moments.append([sig_xx, sig_yy, sig_uu])
             moments_list.extend(moments)
-        Sigmas = analysis.random_trials(tmats_list, moments_list, frac_err=0.02, n_trials=2000)
+        Sigmas = analysis.reconstruct_random_trials(tmats_list, moments_list, frac_err=0.02, n_trials=2000)
 
         # Compute/store beam statistics.
         beam_stats = analysis.BeamStats(Sigma, Sigmas)
@@ -828,7 +827,7 @@ class ReconstructCovarianceButtonListener(ActionListener):
             for node_id in node_ids:
                 sig_xx, sig_yy, sig_uu, sig_xy = moments_dict[node_id][i]
                 moments_list.append([sig_xx, sig_yy, sig_uu])
-            Sigmas = analysis.random_trials(tmats_list, moments_list, frac_err=0.02, n_trials=1000)
+            Sigmas = analysis.reconstruct_random_trials(tmats_list, moments_list, frac_err=0.02, n_trials=1000)
 
             # Save statistics.
             stats = analysis.BeamStats(Sigma, Sigmas)
