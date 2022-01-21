@@ -65,7 +65,7 @@ class PhaseControllerPanel(JPanel):
         formatter.setGroupingUsed(False)
         self.n_steps_text_field = JFormattedTextField(formatter)
         self.n_steps_text_field.setValue(10)
-        self.max_beta_text_field = JTextField('35.0', text_field_width)
+        self.max_beta_text_field = JTextField('30.0', text_field_width)
         self.calculate_model_optics_button = JButton('Calculate model optics')
 
         # Action listeners
