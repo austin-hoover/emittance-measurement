@@ -17,6 +17,7 @@ from xal.extension.solver.ProblemFactory import getInverseSquareMinimizerProblem
 from xal.extension.solver.SolveStopperFactory import maxEvaluationsStopper
 from xal.model.probe import Probe
 from xal.model.probe.traj import Trajectory
+from xal.service.pvlogger import RemoteLoggingCenter
 from xal.service.pvlogger.sim import PVLoggerDataSource
 from xal.sim.scenario import AlgorithmFactory
 from xal.sim.scenario import ProbeFactory
@@ -208,6 +209,7 @@ class PhaseController:
     """Class to control the phase advances in the RTBT."""
     def __init__(self, ref_ws_id='RTBT_Diag:WS24', kinetic_energy=1e9, sync_mode='live', 
                  connect=True):
+#         self.pvlgr_remote = RemoteLoggingCenter()
         self.connect = connect
         self.ref_ws_id = ref_ws_id
         self.accelerator = XMLDataManager.loadDefaultAccelerator()
@@ -232,7 +234,7 @@ class PhaseController:
         self.ps_nodes = [node.getMainSupply() for node in self.quad_nodes]
         self.quad_ids = node_ids(self.quad_nodes)
         self.ps_ids = node_ids(self.ps_nodes)
-    
+
         # Get node and id of each independent RTBT quad and quad power supply.  
         self.ind_quad_nodes, self.ind_ps_nodes = [], []
         for quad_node, ps_node in zip(self.quad_nodes, self.ps_nodes):
@@ -280,8 +282,13 @@ class PhaseController:
             self.ps_ub = [B, 0.0, B, 0.0, B,
                           B, 0.0, B, 0.0, B, 0.0, B, 0.0,
                           B, 0.0, B, 0.0, B]
-
-        self.set_current_optics_as_default()
+         
+        self.set_current_optics_as_default()        
+        
+    def snapshot(self, comment='no comment'):
+        """Take a snapshot of the machine and return the PV Logger ID."""
+        pvloggerid = self.pvlgr_remote.takeAndPublishSnapshot('default', comment)
+        return pvloggerid
 
     def sync_model_pvloggerid(self, pvloggerid):
         """Sync the model with the machine state from a PVLoggerID."""
