@@ -103,11 +103,13 @@ for i, mux in enumerate(muxx):
                                      default_target_betas, target_beta_frac_tol,
                                      guess=default_fields)
         
+        # Try again if it didn't work.
         mux_calc, muy_calc = controller.phases('RTBT:Tgt')
         cost = math.sqrt((mux - mux_calc)**2 + (muy - muy_calc)**2)
-        if cost > 1e-5:
-            print('Trying again...')
-            df = 0.05
+        attempt = 1
+        while cost > utils.radians(0.1) and attempt < 7:
+            print('Trying again... attempt {}'.format(attempt))
+            df = 0.01
             los = utils.multiply(default_fields, 1.0 - df)
             his = utils.multiply(default_fields, 1.0 + df)
             guess = [random.uniform(lo, hi) for lo, hi in zip(los, his)]
@@ -115,6 +117,9 @@ for i, mux in enumerate(muxx):
                                          beta_max_before_ws24, beta_max_after_ws24,
                                          default_target_betas, target_beta_frac_tol,
                                          guess=guess)
+            mux_calc, muy_calc = controller.phases('RTBT:Tgt')
+            cost = math.sqrt((mux - mux_calc)**2 + (muy - muy_calc)**2)
+            attempt += 1
             
         # Print a progress report.
         print('Phase advances (expected) = {:.2f}, {:.2f}'.format(mux, muy))
