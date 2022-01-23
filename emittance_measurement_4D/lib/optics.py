@@ -693,7 +693,7 @@ class PhaseController:
         model_fields = self.get_fields(self.ind_quad_ids, 'model')
         self.set_fields(self.ind_quad_ids, model_fields, 'live', **kws)
         
-    def get_phases_for_scan(self, phase_coverage=90., n_steps=6, method=1):
+    def get_phases_for_scan(self, phase_coverage=90., n_steps=6, scan_type=1):
         """Create an array of phase advances at the reference wire-scanner for
         the multi-optics emittance measurement.
 
@@ -705,16 +705,14 @@ class PhaseController:
             computes the phases mod 2pi. 
         n_steps : int
             The number of steps in the scan. It should be an even number >= 6.
-        method : {1, 2}
-            Method 1:
-                The horizontal and vertical phase advances are scanned at the
-                same time, in opposite directions.
+        scan_type : {1, 2}
+            (1) The horizontal and vertical phase advances are scanned at the
+            same time, in opposite directions.
                 Example: mux = [1, 2, 3, 4, 5, 6],
                          muy = [6, 5, 4, 3, 2, 1].
-            Method 2:
-                In the first{second} half of the scan, the horizontal{vertical}
-                phase advance is varied while the vertical{horizontal} phase
-                advance is held fixed.
+            (2) In the first{second} half of the scan, the horizontal{vertical}
+            phase advance is varied while the vertical{horizontal} phase advance is
+            held fixed.
                 Example: mux = [1, 2, 3, 2, 2, 2],
                          muy = [5, 5, 5, 4, 5, 6].
         """              
@@ -730,11 +728,11 @@ class PhaseController:
         mux_max = put_angle_in_range(mux0 + 0.5 * phase_coverage)
         muy_min = put_angle_in_range(muy0 - 0.5 * phase_coverage)
         muy_max = put_angle_in_range(muy0 + 0.5 * phase_coverage)
-        if method == 1:
+        if scan_type == 1:
             phases_x = lin_phase_range(mux_min, mux_max, n_steps)
             phases_y = lin_phase_range(muy_min, muy_max, n_steps)
             phases_y = list(reversed(phases_y))
-        elif method == 2:
+        elif scan_type == 2:
             phases_x = lin_phase_range(mux_min, mux_max, n) + n * [mux0]
             phases_y = n * [muy0] + lin_phase_range(muy_min, muy_max, n)
         phases = [[mux, muy] for mux, muy in zip(phases_x, phases_y)]
