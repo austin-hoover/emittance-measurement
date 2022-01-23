@@ -11,7 +11,7 @@ from lib import utils
 from lib.least_squares import lsq_linear 
 
 
-def get_moments(Sigma0, tmats, rms_frac_size_error=None):
+def get_moments(Sigma0, tmats, frac_error=None):
     """Return moments after application of each transfer matrix.
     
     Parameters
@@ -20,9 +20,9 @@ def get_moments(Sigma0, tmats, rms_frac_size_error=None):
         Covariance matrix at reconstruction point.
     tmats : list
         Transfer matrices from reconstruction point to measurement points.
-    rms_frac_size_error : float
-        The rms beam size along each dimension is multiplied by 1 + f, where f 
-        is normally distributed with standard deviation `rms_frac_size_err`.
+    frac_error : float
+        The squared moment along each dimension is multiplied by 1 + f, where
+        -frac_err <= f <= +frac_err.
         
     Returns
     -------
@@ -37,12 +37,12 @@ def get_moments(Sigma0, tmats, rms_frac_size_error=None):
         sig_xx = Sigma.get(0, 0)
         sig_yy = Sigma.get(2, 2)
         sig_xy = Sigma.get(0, 2)
-        sig_uu = 0.5 * (2 * sig_xy + sig_xx + sig_yy)
-        if rms_frac_size_error:
-            sig_xx *= (1 + random.gauss(0, rms_frac_size_error))**2
-            sig_yy *= (1 + random.gauss(0, rms_frac_size_error))**2
-            sig_uu *= (1 + random.gauss(0, rms_frac_size_error))**2
-        sig_xy = 0.5 * (2 * sig_uu - sig_xx - sig_yy)
+        sig_uu = 0.5 * (2.0 * sig_xy + sig_xx + sig_yy)
+        if frac_error:
+            sig_xx *= (1.0 + random.uniform(-frac_error, frac_error))
+            sig_yy *= (1.0 + random.uniform(-frac_error, frac_error))
+            sig_uu *= (1.0 + random.uniform(-frac_error, frac_error))
+        sig_xy = 0.5 * (2.0 * sig_uu - sig_xx - sig_yy)
         moments.append([sig_xx, sig_yy, sig_xy])
     return moments
 
@@ -67,7 +67,7 @@ def solve(tmats, moments):
     return Sigma
 
 
-def run_trials(Sigma0, tmats, n_trials, rms_frac_size_err=None, disp=False):
+def run_trials(Sigma0, tmats, n_trials, frac_error=None, disp=False):
     """Repeat measurement `n_trials` times.
     
     Returns
@@ -79,9 +79,9 @@ def run_trials(Sigma0, tmats, n_trials, rms_frac_size_err=None, disp=False):
     """
     emittances, n_fail = [], 0
     for i in range(n_trials):
-        moments = get_moments(Sigma0, tmats, rms_frac_size_err)
+        moments = get_moments(Sigma0, tmats, frac_error)
         Sigma = solve(tmats, moments)
-        if not analysis.is_valid_cov(Sigma):
+        if not analysis.is_valid_covariance_matrix(Sigma):
             n_fail += 1
             if disp:
                 print(i, 'Failed.')
