@@ -107,7 +107,6 @@ for i, mux in enumerate(muxx):
         cost = math.sqrt((mux - mux_calc)**2 + (muy - muy_calc)**2)
         if cost > 1e-5:
             print('Trying again...')
-            extra_time = time.time()
             df = 0.05
             los = utils.multiply(default_fields, 1.0 - df)
             his = utils.multiply(default_fields, 1.0 + df)
@@ -116,7 +115,6 @@ for i, mux in enumerate(muxx):
                                          beta_max_before_ws24, beta_max_after_ws24,
                                          default_target_betas, target_beta_frac_tol,
                                          guess=guess)
-            extra_time = time.time() - extra_time
             
         # Print a progress report.
         print('Phase advances (expected) = {:.2f}, {:.2f}'.format(mux, muy))
@@ -152,7 +150,7 @@ for i, mux in enumerate(muxx):
 #         print('PV Logger ID = {}'.format(pvloggerid))
 
         step += 1
-        ellapsed_time = time.time() - start_time - extra_time
+        ellapsed_time = time.time() - start_time
         time_per_step = ellapsed_time / step
         steps_remaining = steps_per_dim**2 - step
         est_time_remaining = steps_remaining * time_per_step 
