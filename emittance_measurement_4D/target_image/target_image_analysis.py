@@ -158,7 +158,7 @@ def read_file(filename, n_avg='all', thresh=0, make_square=False):
     return TargetImage(np.mean(Z_list[:n_avg], axis=0))
 
         
-def read_files(filenames, **kws):
+def read_files(filenames, **read_file_kws):
     """Load images and sort by timestamp."""
     TFile = collections.namedtuple('TFile', ['filename', 'timestamp'])
     tfiles = []
@@ -170,7 +170,7 @@ def read_files(filenames, **kws):
         times += [int(s) for s in time_str.split('.')]
         tfiles.append(TFile(filename, datetime(*times)))
     tfiles = sorted(tfiles, key=lambda tfile: tfile.timestamp)
-    return [read_file(tfile.filename, **kws) for tfile in tfiles]
+    return [read_file(tfile.filename, **read_file_kws) for tfile in tfiles]
 
 
 def fit_gauss2d(X, Y, Z):
