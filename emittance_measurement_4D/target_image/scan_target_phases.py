@@ -8,12 +8,15 @@ quadrupole fields are read by the script 'set_target_phases.py'.
 IMPORTANT: set the correct kinetic energy!
 """
 from __future__ import print_function
+import math
+import random
 import sys
 import os
 import time
 from xal.service.pvlogger import RemoteLoggingCenter
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from lib import optics
+from lib import utils
 from lib.utils import degrees
 from lib.utils import radians
 from lib.xal_helpers import write_traj_to_file
@@ -66,6 +69,20 @@ print_progress_report(controller)
 muxx = optics.lin_phase_range(mux0 + dmux_min, mux0 + dmux_max, steps_per_dim, endpoint=False)
 muyy = optics.lin_phase_range(muy0 + dmuy_min, muy0 + dmuy_max, steps_per_dim, endpoint=False)
 
+# Save the expected phase advances.
+file = open('_output/data/phase_adv_exp.dat', 'w')
+for mux in muxx:
+    for muy in muyy:
+        file.write('{} {}\n'.format(mux, muy))
+file.close()
+file1 = open('_output/data/muxx.dat', 'w')
+file2 = open('_output/data/muyy.dat', 'w')
+for mux, muy in zip(muxx, muyy):
+    file1.write('{} '.format(mux))
+    file2.write('{} '.format(muy))
+file1.close()
+file2.close()
+
 # Open files.
 file_phase_adv = open('_output/data/phase_adv.dat', 'w')
 file_fields = open('_output/data/fields.dat', 'w')
@@ -79,11 +96,28 @@ step = 0
 for i, mux in enumerate(muxx):
     for j, muy in enumerate(muyy):
         print('i, j = {}, {}'.format(i, j))
+        
         # Set the model phase advances at the target.
         controller.set_target_phases(mux, muy, 
                                      beta_max_before_ws24, beta_max_after_ws24,
                                      default_target_betas, target_beta_frac_tol,
                                      guess=default_fields)
+        
+        mux_calc, muy_calc = controller.phases('RTBT:Tgt')
+        cost = math.sqrt((mux - mux_calc)**2 + (muy - muy_calc)**2)
+        if cost > 1e-5:
+            print('Trying again...')
+            extra_time = time.time()
+            df = 0.05
+            los = utils.multiply(default_fields, 1.0 - df)
+            his = utils.multiply(default_fields, 1.0 + df)
+            guess = [random.uniform(lo, hi) for lo, hi in zip(los, his)]
+            controller.set_target_phases(mux, muy, 
+                                         beta_max_before_ws24, beta_max_after_ws24,
+                                         default_target_betas, target_beta_frac_tol,
+                                         guess=guess)
+            extra_time = time.time() - extra_time
+            
         # Print a progress report.
         print('Phase advances (expected) = {:.2f}, {:.2f}'.format(mux, muy))
         print_progress_report(controller)                
@@ -108,7 +142,7 @@ for i, mux in enumerate(muxx):
         file.write('node_id M11 M12 M13 M14 M21 M22 M23 M34 M31 M32 M33 M34 M41 M42 M43 M44\n')
         for node in controller.sequence.getNodes():
             M = controller.transfer_matrix(node.getId(), 'RTBT:Tgt')
-            tmat_elems = [M[i][j] for i in range(4) for j in range(4)]
+            tmat_elems = [M[k][l] for k in range(4) for l in range(4)]
             file.write('{} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}\n'
                        .format(node.getId(), *tmat_elems))
         file.close()
@@ -118,7 +152,7 @@ for i, mux in enumerate(muxx):
 #         print('PV Logger ID = {}'.format(pvloggerid))
 
         step += 1
-        ellapsed_time = time.time() - start_time
+        ellapsed_time = time.time() - start_time - extra_time
         time_per_step = ellapsed_time / step
         steps_remaining = steps_per_dim**2 - step
         est_time_remaining = steps_remaining * time_per_step 
