@@ -1,13 +1,4 @@
-"""This panel is to control the RTBT optics.
-
-To do:
-    * Progress bar doesn't update until process is complete.
-    * Both model and live optics should be plotted.
-    * Should be able to control model optics separate from live
-      optics. There should be a button to sync model with live.
-    * Some of the GUI components have hard-coded dimensions, so they
-      don't scale with the window.
-"""
+"""This panel is to control the RTBT optics."""
 from __future__ import print_function
 from java.awt import BorderLayout
 from java.awt import Color
@@ -21,6 +12,7 @@ from javax.swing import JComboBox
 from javax.swing import JLabel
 from javax.swing import JPanel
 from javax.swing import JProgressBar
+from javax.swing import JScrollPane
 from javax.swing import JTable
 from javax.swing import JTextField
 from javax.swing import JFormattedTextField
@@ -65,6 +57,7 @@ class PhaseControllerPanel(JPanel):
         formatter.setGroupingUsed(False)
         self.n_steps_text_field = JFormattedTextField(formatter)
         self.n_steps_text_field.setValue(10)
+        self.scan_type_dropdown = JComboBox([1, 2])
         self.max_beta_text_field = JTextField('30.0', text_field_width)
         self.calculate_model_optics_button = JButton('Calculate model optics')
 
@@ -83,6 +76,8 @@ class PhaseControllerPanel(JPanel):
         self.model_calc_panel2.add_row(JLabel('Phase coverage [deg]'), self.phase_coverage_text_field)
         self.model_calc_panel2.add_row(JLabel("<html>Max. &beta; [m/rad]<html>"), self.max_beta_text_field)
         self.model_calc_panel2.add_row(JLabel('Steps in scan'), self.n_steps_text_field)
+        self.model_calc_panel2.add_row(JLabel('Scan type'), self.scan_type_dropdown)
+
         self.model_calc_panel = JPanel()
         init_twiss_label = JLabel('Initial Twiss')
         init_twiss_label.setAlignmentX(0)
@@ -142,8 +137,7 @@ class PhaseControllerPanel(JPanel):
         self.machine_update_panel.add(row)
 
         self.machine_update_panel.add(self.quad_settings_table.getTableHeader())
-        self.machine_update_panel.add(self.quad_settings_table)
-
+        self.machine_update_panel.add(JScrollPane(self.quad_settings_table))
 
         # Build left panel
         #------------------------------------------------------------------------
@@ -184,13 +178,13 @@ class PhaseControllerPanel(JPanel):
         #------------------------------------------------------------------------
         self.beta_plot_panel = plt.LinePlotPanel(
             xlabel='Position [m]', ylabel='[m/rad]',
-            title='Model beta function vs. position',
+            title='Beta function vs. position',
             n_lines=2, grid='y',
         )
         self.beta_plot_panel.setLimitsAndTicksY(0., 100., 10.)
         self.phase_plot_panel = plt.LinePlotPanel(
             xlabel='Position [m]', ylabel='Phase adv. mod 2pi [rad]',
-            title='Model phase advance vs. position',
+            title='Phase advance vs. position',
             n_lines=2, grid='y',
         )
         self.bpm_plot_panel = plt.LinePlotPanel(
@@ -408,7 +402,8 @@ class CalculateModelOpticsButtonListener(ActionListener):
         n_steps = int(self.panel.n_steps_text_field.getText())
         max_beta = float(self.panel.max_beta_text_field.getText())
         beta_lims = (max_beta, max_beta)
-        phases = self.phase_controller.get_phases_for_scan(phase_coverage, n_steps)
+        scan_type = self.panel.scan_type_dropdown.getSelectedItem()
+        phases = self.phase_controller.get_phases_for_scan(phase_coverage, n_steps, scan_type)
         print('index | mu_x  | mu_y [rad]')
         print('---------------------')
         for scan_index, (mu_x, mu_y) in enumerate(phases):
