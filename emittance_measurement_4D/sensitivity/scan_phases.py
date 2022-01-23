@@ -1,10 +1,9 @@
-"""
-Scan the horizontal and vertical phase advances at WS24. 
+"""Scan the horizontal and vertical phase advances at WS24. 
 
 At each (mux, muy) in the scan:
-    1. Calculate the sum of the condition numbers of the coefficient matrices Axx, Ayy, Axy.
-    2. Run Monte Carlo simulation and recored fail rate, mean emittances, and standard deviation
-       of emittances.
+    1. Calculate the condition numbers of the coefficient matrices Axx, Ayy, Axy.
+    2. Run a Monte Carlo simulation and record the fail rate, mean emittances, 
+       and standard deviation of the emittances.
 """
 from __future__ import print_function
 import sys
