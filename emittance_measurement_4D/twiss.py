@@ -17,10 +17,9 @@ from xal.tools.beam.calc import CalculationsOnRings
 
 
 kin_energy = 0.8e9 # [eV]
-ypmax = 1.7 # [mrad]
-sync_live = False
-#pvloggerid = None
-pvloggerid = 49548117
+ypmax = 1.1 # [mrad]
+sync_live = True
+pvloggerid = None
 
 accelerator = XMLDataManager.loadDefaultAccelerator()
 sequence = accelerator.getComboSequence('Ring')
