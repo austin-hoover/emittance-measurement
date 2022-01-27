@@ -753,7 +753,7 @@ def lin_phase_range(mu_min, mu_max, n_steps, endpoint=True):
     mu_max = float(mu_max)
     abs_diff = abs(mu_max - mu_min)
     if abs_diff > math.pi:
-        abs_diff = 2*math.pi - abs_diff
+        abs_diff = 2.0 * math.pi - abs_diff
     # Return list of phases from min_phase to max_phase.
     if endpoint:
         step = abs_diff / (n_steps - 1)
