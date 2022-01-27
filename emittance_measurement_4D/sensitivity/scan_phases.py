@@ -34,6 +34,7 @@ from helpers import get_moments
 from helpers import run_trials
 from helpers import solve
 from helpers import uncoupled_matched_cov
+from helpers import get_cov
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from lib import analysis
@@ -46,53 +47,47 @@ utils.delete_files_not_folders('_output/')
 
 
 # Setup
+kinetic_energy = 1.0e9 # [eV]
 ws_ids = ['RTBT_Diag:WS20', 'RTBT_Diag:WS21', 'RTBT_Diag:WS23', 'RTBT_Diag:WS24']
 ref_ws_id = 'RTBT_Diag:WS24'
-n_steps_x = 15
-n_steps_y = 15
+n_steps_x = n_steps_y = 10
 dmux_lo = utils.radians(-45.0)
-dmux_hi = utils.radians(+60.0)
+dmux_hi = utils.radians(+45.0)
 dmuy_lo = utils.radians(-45.0)
-dmuy_hi = utils.radians(+60.0)
-controller = optics.PhaseController(ref_ws_id=ref_ws_id, kinetic_energy=1.0e9)
-
+dmuy_hi = utils.radians(+45.0)
+n_trials = 1000
+frac_error = 0.02
+controller = optics.PhaseController(ref_ws_id=ref_ws_id, 
+                                    kinetic_energy=kinetic_energy)
 
 # Sync with PVLoggerID
+# pvloggerid = 48842340
 pvloggerid = None
 if pvloggerid is not None:
     controller.sync_model_pvloggerid(pvloggerid)
     
-print(controller.beta_funcs('RTBT:Tgt'))
-print(controller.phases(ref_ws_id))
+print('Betas at target:', controller.beta_funcs('RTBT:Tgt'))
+print('Phase advances at target:', controller.phases(ref_ws_id))
 
 mux0, muy0 = controller.phases(ref_ws_id)
 quad_ids = controller.ind_quad_ids
 default_fields = controller.get_fields(quad_ids)
 
 # Create initial matched covariance matrix (uncoupled).
-eps_x = 32.0e-6 # [m rad]
-eps_y = 20.0e-6 # [m rad]
+eps_1 = 20.1e-6 # [m rad]
+eps_2 = 20.0e-6 # [m rad]
 alpha_x = controller.init_twiss['alpha_x']
 alpha_y = controller.init_twiss['alpha_y']
 beta_x = controller.init_twiss['beta_x']
 beta_y = controller.init_twiss['beta_y']
-Sigma0 = uncoupled_matched_cov(alpha_x, alpha_y, beta_x, beta_y, eps_x, eps_y)
+Sigma0 = uncoupled_matched_cov(alpha_x, alpha_y, beta_x, beta_y, eps_1, eps_2)
 
-R = Matrix(4, 4)
-phi = utils.radians(10.0)
-R.set(0, 0, +math.cos(phi))
-R.set(0, 2, +math.sin(phi))
-R.set(2, 0, -math.sin(phi))
-R.set(2, 2, +math.cos(phi))
-
-R.set(1, 1, +math.cos(phi))
-R.set(1, 3, +math.sin(phi))
-R.set(3, 1, -math.sin(phi))
-R.set(3, 3, +math.cos(phi))
-Sigma0 = R.times(Sigma0.times(R.transpose()))
-
-n_trials = 1000
-frac_error = 0.02
+stats = analysis.BeamStats(Sigma0)
+print(stats.alpha_x, stats.alpha_y, 
+      stats.beta_x, stats.beta_y, 
+      stats.eps_x, stats.eps_y,
+      stats.eps_1, stats.eps_2,
+     )
 
 
 # Compute condition number for Axy over grid of x and y phase advances.
@@ -107,6 +102,7 @@ def cond(A):
 
 dmuxx = utils.linspace(dmux_lo, dmux_hi, n_steps_x)
 dmuyy = utils.linspace(dmuy_lo, dmuy_hi, n_steps_y)
+condition_numbers = Matrix(n_steps_x, n_steps_y)
 condition_numbers_xx = Matrix(n_steps_x, n_steps_y)
 condition_numbers_yy = Matrix(n_steps_x, n_steps_y)
 condition_numbers_xy = Matrix(n_steps_x, n_steps_y)
@@ -121,13 +117,15 @@ eps_1_stds = Matrix(n_steps_x, n_steps_y)
 eps_2_stds = Matrix(n_steps_x, n_steps_y)
         
 print()
-print('i/N  | j/N  | mux_err   | muy_err   | Cxx | Cyy | Cxy |fail rate | eps_x_mean | eps_y_mean | eps_1_mean | eps_2_mean')
+print('i/N  | j/N  | Cxx | Cyy | Cxy |fail rate | eps_x_mean | eps_y_mean | eps_1_mean | eps_2_mean')
 print('-------------------------------------------------------------------------------------------------------')
 for i, dmux in enumerate(dmuxx):    
     mux = utils.put_angle_in_range(mux0 + dmux)
+    print('mux = {}'.format(mux))
     for j, dmuy in enumerate(dmuyy):
         muy = utils.put_angle_in_range(muy0 + dmuy)
-        controller.set_ref_ws_phases(mux, muy, verbose=0)
+        controller.set_fields(quad_ids, default_fields)
+        controller.set_ref_ws_phases(mux, muy, verbose=1)
         _mux, _muy = controller.phases(ref_ws_id)
         tmats = [controller.transfer_matrix(ws_id) for ws_id in ws_ids]
         Axx, Ayy, Axy = [], [], []
@@ -135,9 +133,19 @@ for i, dmux in enumerate(dmuxx):
             Axx.append([M[0][0]**2, M[0][1]**2, 2*M[0][0]*M[0][1]])
             Ayy.append([M[2][2]**2, M[2][3]**2, 2*M[2][2]*M[2][3]])
             Axy.append([M[0][0]*M[2][2], M[0][1]*M[2][2], M[0][0]*M[2][3], M[0][1]*M[2][3]])
+                        
         Axx = Matrix(Axx)
         Ayy = Matrix(Ayy)
         Axy = Matrix(Axy)
+        A = Matrix(10, 10)
+        for k in range(3):
+            for l in range(3):
+                A.set(k, l, Axx.get(k, l))
+                A.set(k + 3, l + 3, Ayy.get(k, l))
+        for k in range(4):
+            for l in range(4):
+                A.set(k + 6, l + 6, Axy.get(k, l))
+        condition_number = cond(A)
         condition_number_xx = cond(Axx)
         condition_number_yy = cond(Ayy)
         condition_number_xy = cond(Axy)
@@ -155,21 +163,25 @@ for i, dmux in enumerate(dmuxx):
         eps_1_stds.set(i, j, stds[2])
         eps_2_stds.set(i, j, stds[3])       
         fail_rates.set(i, j, fail_rate)
+        condition_numbers.set(i, j, condition_number)
         condition_numbers_xx.set(i, j, condition_number_xx)
         condition_numbers_yy.set(i, j, condition_number_yy)
         condition_numbers_xy.set(i, j, condition_number_xy)
-        print('{}/{} | {}/{} | {:.3f} | {:.3f} | {:.2f} | {:.2f} | {:.2f} | {} {:.2f} {:.2f} {:.2f} {:.2f}'
+        print('{}/{} | {}/{} | {:.2f} | {:.2f} | {:.2f} | {} {:.2e} {:.2e} {:.2e} {:.2e}'
               .format(i, n_steps_x - 1, 
                       j, n_steps_y - 1, 
-                      _mux - mux, _muy - muy, 
                       condition_number_xx,
                       condition_number_yy,
                       condition_number_xy,
                       fail_rate,
-                      means[0], means[1], means[2], means[3]))
+                      means[0], 
+                      means[1], 
+                      means[2], 
+                      means[3]))
 
         controller.set_fields(quad_ids, default_fields, 'model')
-        
+
+utils.save_array(condition_numbers.getArray(), '_output/data/condition_numbers.dat')
 utils.save_array(condition_numbers_xx.getArray(), '_output/data/condition_numbers_xx.dat')
 utils.save_array(condition_numbers_yy.getArray(), '_output/data/condition_numbers_yy.dat')
 utils.save_array(condition_numbers_xy.getArray(), '_output/data/condition_numbers_xy.dat')
