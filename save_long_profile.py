@@ -13,9 +13,7 @@ from xal.smf.data import XMLDataManager
 steps = 14
 
 data = []
-
 for i in range(steps):
-    
     print('i = {}'.format(i))
     istr = str(i)
     if i < 10:
@@ -24,7 +22,6 @@ for i in range(steps):
     channel_factory = ChannelFactory.defaultFactory()
     channel = channel_factory.getChannel(pv)
     channel.connectAndWait()
-        
     data.append(list(channel.getArrDbl()))
     
 file = open('_output/data/bcm.dat', 'w')
