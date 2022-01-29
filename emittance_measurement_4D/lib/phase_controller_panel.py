@@ -1,4 +1,12 @@
-"""This panel is to control the RTBT optics."""
+"""This panel is to control the RTBT optics.
+
+To do: add a panel that scans the model phase advances at WS24, then 
+produces a heat map of the condition numbers and error/uncertainty
+in emittances from Monte Carlo simulation, as in `sensitivity`
+directory. Or could just have a button that runs the Monte Carlo
+simulation once and prints the results to the terminal? Or just
+display the condition number at all times in a text box?
+"""
 from __future__ import print_function
 from java.awt import BorderLayout
 from java.awt import Color
