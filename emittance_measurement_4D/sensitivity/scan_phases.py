@@ -33,8 +33,7 @@ from xal.tools.beam.calc import CalculationsOnRings
 from helpers import get_moments
 from helpers import run_trials
 from helpers import solve
-from helpers import uncoupled_matched_cov
-from helpers import get_cov
+from helpers import matched_cov
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from lib import analysis
@@ -50,19 +49,18 @@ utils.delete_files_not_folders('_output/')
 kinetic_energy = 1.0e9 # [eV]
 ws_ids = ['RTBT_Diag:WS20', 'RTBT_Diag:WS21', 'RTBT_Diag:WS23', 'RTBT_Diag:WS24']
 ref_ws_id = 'RTBT_Diag:WS24'
-n_steps_x = n_steps_y = 10
+rec_node_id = 'RTBT_Diag:BPM17'
+n_steps_x = n_steps_y = 30
 dmux_lo = utils.radians(-45.0)
 dmux_hi = utils.radians(+45.0)
 dmuy_lo = utils.radians(-45.0)
 dmuy_hi = utils.radians(+45.0)
 n_trials = 1000
-frac_error = 0.02
+frac_error = 0.03
 controller = optics.PhaseController(ref_ws_id=ref_ws_id, 
                                     kinetic_energy=kinetic_energy)
 
-# Sync with PVLoggerID
-# pvloggerid = 48842340
-pvloggerid = None
+pvloggerid = 48842900 # 2021/08/01
 if pvloggerid is not None:
     controller.sync_model_pvloggerid(pvloggerid)
     
@@ -74,20 +72,25 @@ quad_ids = controller.ind_quad_ids
 default_fields = controller.get_fields(quad_ids)
 
 # Create initial matched covariance matrix (uncoupled).
-eps_1 = 20.1e-6 # [m rad]
-eps_2 = 20.0e-6 # [m rad]
-alpha_x = controller.init_twiss['alpha_x']
-alpha_y = controller.init_twiss['alpha_y']
-beta_x = controller.init_twiss['beta_x']
-beta_y = controller.init_twiss['beta_y']
-Sigma0 = uncoupled_matched_cov(alpha_x, alpha_y, beta_x, beta_y, eps_1, eps_2)
+eps_x = 20.0e-6 # [m rad]
+eps_y = 20.0e-6 # [m rad]
+rec_node_id = 'RTBT_Diag:BPM17'
+_, _, alpha_x, alpha_y, beta_x, beta_y, _, _ = controller.twiss(rec_node_id)
+print('Model Twiss parameters:')
+print(alpha_x, alpha_y, beta_x, beta_y, eps_x, eps_y)
 
+Sigma0 = matched_cov(alpha_x, alpha_y, beta_x, beta_y, eps_x, eps_y, c=0.5)
+
+print('Beam Twiss parameters:')
 stats = analysis.BeamStats(Sigma0)
 print(stats.alpha_x, stats.alpha_y, 
       stats.beta_x, stats.beta_y, 
       stats.eps_x, stats.eps_y,
-      stats.eps_1, stats.eps_2,
-     )
+      stats.eps_1, stats.eps_2)
+file = open('_output/data/true_emittances.dat', 'w')
+for eps in [stats.eps_x, stats.eps_y, stats.eps_1, stats.eps_2]:
+    file.write('{} '.format(eps))
+file.close()
 
 
 # Compute condition number for Axy over grid of x and y phase advances.
@@ -121,19 +124,16 @@ print('i/N  | j/N  | Cxx | Cyy | Cxy |fail rate | eps_x_mean | eps_y_mean | eps_
 print('-------------------------------------------------------------------------------------------------------')
 for i, dmux in enumerate(dmuxx):    
     mux = utils.put_angle_in_range(mux0 + dmux)
-    print('mux = {}'.format(mux))
     for j, dmuy in enumerate(dmuyy):
         muy = utils.put_angle_in_range(muy0 + dmuy)
-        controller.set_fields(quad_ids, default_fields)
         controller.set_ref_ws_phases(mux, muy, verbose=1)
         _mux, _muy = controller.phases(ref_ws_id)
-        tmats = [controller.transfer_matrix(ws_id) for ws_id in ws_ids]
+        tmats = [controller.transfer_matrix(rec_node_id, ws_id) for ws_id in ws_ids]
         Axx, Ayy, Axy = [], [], []
         for M in tmats:
             Axx.append([M[0][0]**2, M[0][1]**2, 2*M[0][0]*M[0][1]])
             Ayy.append([M[2][2]**2, M[2][3]**2, 2*M[2][2]*M[2][3]])
             Axy.append([M[0][0]*M[2][2], M[0][1]*M[2][2], M[0][0]*M[2][3], M[0][1]*M[2][3]])
-                        
         Axx = Matrix(Axx)
         Ayy = Matrix(Ayy)
         Axy = Matrix(Axy)
@@ -150,7 +150,6 @@ for i, dmux in enumerate(dmuxx):
         condition_number_yy = cond(Ayy)
         condition_number_xy = cond(Axy)
 
-        tmats = [controller.transfer_matrix(ws_id) for ws_id in ws_ids]
         fail_rate, emittances = run_trials(Sigma0, tmats, n_trials, frac_error)
         means = utils.mean_cols(emittances)
         stds = utils.std_cols(emittances)

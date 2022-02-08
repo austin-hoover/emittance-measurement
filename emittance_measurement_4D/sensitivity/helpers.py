@@ -2,6 +2,7 @@ from __future__ import print_function
 import sys
 import os
 import math
+from math import sqrt
 import random
 from Jama import Matrix
 
@@ -38,7 +39,7 @@ def get_moments(Sigma0, tmats, frac_error=None):
         sig_yy = Sigma.get(2, 2)
         sig_xy = Sigma.get(0, 2)
         sig_uu = 0.5 * (2.0 * sig_xy + sig_xx + sig_yy)
-        if frac_error:
+        if frac_error is not None:
             sig_xx *= (1.0 + random.uniform(-frac_error, frac_error))
             sig_yy *= (1.0 + random.uniform(-frac_error, frac_error))
             sig_uu *= (1.0 + random.uniform(-frac_error, frac_error))
@@ -110,4 +111,34 @@ def uncoupled_matched_cov(alpha_x, alpha_y, beta_x, beta_y, eps_x, eps_y):
     for i in range(4):
         for j in range(i):
             Sigma.set(i, j, Sigma.get(j, i))
+    return Sigma
+
+
+def matched_cov(alpha_x, alpha_y, beta_x, beta_y, eps_x, eps_y, c=0.0):
+    """Return uncoupled covariance matrix from 2D Twiss parameters.
+
+    `c` is a number in the range [0.0, 1.0] that represents "how much
+    cross-plane correlation is in the beam". If c == 0.0, there is no
+    cross-plane correlation. If c == 1.0, we have a Danilov distribution.
+    """    
+    # Start in normalize phase space (normalized in x-x' and y-y').
+    Sigma = Matrix(4, 4, 0.0)
+    for i in range(4):
+        Sigma.set(i, i, 1.0)
+    # Add cross-plane correlation.
+    Sigma.set(0, 3, +c)
+    Sigma.set(3, 0, +c)
+    Sigma.set(1, 2, -c)
+    Sigma.set(2, 1, -c)
+    # Unnormalize x-x' and y-y'.
+    V = Matrix([[math.sqrt(beta_x), 0.0, 0.0, 0.0], 
+                [-alpha_x / math.sqrt(beta_x), 1.0 / math.sqrt(beta_x), 0.0, 0.0],
+                [0.0, 0.0, math.sqrt(beta_y), 0.0],
+                [0.0, 0.0, -alpha_y / math.sqrt(beta_y), 1.0 / math.sqrt(beta_y)]])
+    A = Matrix([[math.sqrt(eps_x), 0.0, 0.0, 0.0],
+                [0.0, math.sqrt(eps_x), 0.0, 0.0],
+                [0.0, 0.0, math.sqrt(eps_y), 0.0],
+                [0.0, 0.0, 0.0, math.sqrt(eps_y)]])
+    VA = V.times(A)
+    Sigma = VA.times(Sigma.times(VA.transpose()))
     return Sigma
