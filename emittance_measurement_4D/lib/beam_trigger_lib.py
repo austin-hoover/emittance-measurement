@@ -4,7 +4,7 @@ This was ported from a different application.
 """
 from __future__ import print_function
 import time
-from java.lang import * # Wildcard imports are not allowed in Java 17+
+from java.lang import *  # Wildcard imports are not allowed in Java 17+
 from xal.extension.scan import WrappedChannel
 
 
@@ -15,6 +15,7 @@ class BeamTrigger:
     the beam. It seems that manually triggering the beam from StartMap will solve
     the problem.
     """
+
     def __init__(self):
         self.beam_trigger_wpv = None
         self.test_pv = None
@@ -53,7 +54,7 @@ class BeamTrigger:
         self.init_channels()
 
         if not self.fake_scan:
-            self.test_pv.setValueChanged(False) 
+            self.test_pv.setValueChanged(False)
             time.sleep(0.01)
             if self.use_trigger:
                 print("triggering...")
@@ -70,8 +71,12 @@ class BeamTrigger:
             while not self.test_pv.valueChanged():
                 count += 1
                 time.sleep(time_sleep)
-                if count % 25 == 0: 
+                if count % 25 == 0:
                     time_sleep += 0.1
                 if count > 25:
-                    print("Something is wrong! Please fire the beam manually! Bad count = {}".format(count))
+                    print(
+                        "Something is wrong! Please fire the beam manually! Bad count = {}".format(
+                            count
+                        )
+                    )
         return True

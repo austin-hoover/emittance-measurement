@@ -24,7 +24,7 @@ from xal.sim.scenario import ProbeFactory
 from xal.sim.scenario import Scenario
 from xal.sim.sync import SynchronizationException
 from xal.smf import Accelerator
-from xal.smf import AcceleratorSeq 
+from xal.smf import AcceleratorSeq
 from xal.smf.data import XMLDataManager
 from xal.smf.impl import MagnetMainSupply
 from xal.tools.beam import CovarianceMatrix
@@ -45,16 +45,35 @@ from utils import radians
 
 
 # Available RTBT wire-scanners
-RTBT_WS_IDS = ['RTBT_Diag:WS02', 'RTBT_Diag:WS20', 'RTBT_Diag:WS21', 
-               'RTBT_Diag:WS23', 'RTBT_Diag:WS24']
+RTBT_WS_IDS = [
+    "RTBT_Diag:WS02",
+    "RTBT_Diag:WS20",
+    "RTBT_Diag:WS21",
+    "RTBT_Diag:WS23",
+    "RTBT_Diag:WS24",
+]
 
 # Quadrupoles with independent power supplies
-RTBT_IND_QUAD_IDS = ['RTBT_Mag:QH02', 'RTBT_Mag:QV03', 'RTBT_Mag:QH04', 
-                     'RTBT_Mag:QV05', 'RTBT_Mag:QH06', 'RTBT_Mag:QH12', 
-                     'RTBT_Mag:QV13', 'RTBT_Mag:QH14', 'RTBT_Mag:QV15', 
-                     'RTBT_Mag:QH16', 'RTBT_Mag:QV17', 'RTBT_Mag:QH18', 
-                     'RTBT_Mag:QV19', 'RTBT_Mag:QH26', 'RTBT_Mag:QV27', 
-                     'RTBT_Mag:QH28', 'RTBT_Mag:QV29', 'RTBT_Mag:QH30']
+RTBT_IND_QUAD_IDS = [
+    "RTBT_Mag:QH02",
+    "RTBT_Mag:QV03",
+    "RTBT_Mag:QH04",
+    "RTBT_Mag:QV05",
+    "RTBT_Mag:QH06",
+    "RTBT_Mag:QH12",
+    "RTBT_Mag:QV13",
+    "RTBT_Mag:QH14",
+    "RTBT_Mag:QV15",
+    "RTBT_Mag:QH16",
+    "RTBT_Mag:QV17",
+    "RTBT_Mag:QH18",
+    "RTBT_Mag:QV19",
+    "RTBT_Mag:QH26",
+    "RTBT_Mag:QV27",
+    "RTBT_Mag:QH28",
+    "RTBT_Mag:QV29",
+    "RTBT_Mag:QH30",
+]
 
 
 def node_ids(nodes):
@@ -72,25 +91,25 @@ def compute_twiss(state, calculator):
     return [mu_x, mu_y, alpha_x, alpha_y, beta_x, beta_y, eps_x, eps_y]
 
 
-def compute_model_twiss(node_id, kinetic_energy, pvloggerid=None, sync_mode='design'):
+def compute_model_twiss(node_id, kinetic_energy, pvloggerid=None, sync_mode="design"):
     """Compute the model Twiss parameters in the RTBT."""
     accelerator = XMLDataManager.loadDefaultAccelerator()
     pvl_data_source = None
     if pvloggerid is not None:
         pvl_data_source = PVLoggerDataSource(pvloggerid)
-    
+
     def get_seq_scenario(seq_name):
         sequence = accelerator.getComboSequence(seq_name)
         scenario = Scenario.newScenarioFor(sequence)
-        if pvloggerid:
+        if pvloggerid is not None:
             scenario = pvl_data_source.setModelSource(sequence, scenario)
             scenario.resync()
         else:
             safe_sync(scenario, sync_mode)
         return sequence, scenario
 
-    # Get the model optics at the RTBT entrance.
-    sequence, scenario = get_seq_scenario('Ring')
+    # Get the model optics at the ring extraction point (RTBT entrance).
+    sequence, scenario = get_seq_scenario("Ring")
     tracker = AlgorithmFactory.createTransferMapTracker(sequence)
     probe = ProbeFactory.getTransferMapProbe(sequence, tracker)
     probe.setKineticEnergy(kinetic_energy)
@@ -98,20 +117,20 @@ def compute_model_twiss(node_id, kinetic_energy, pvloggerid=None, sync_mode='des
     scenario.run()
     trajectory = probe.getTrajectory()
     calculator = CalculationsOnRings(trajectory)
-    state = trajectory.statesForElement('Begin_Of_Ring3')[0]
+    state = trajectory.statesForElement("Begin_Of_Ring3")[0]
     twiss_x, twiss_y, twiss_z = calculator.computeMatchedTwissAt(state)
 
     # Track through the RTBT if necessary.
-    sequence, scenario = get_seq_scenario('RTBT')
+    sequence, scenario = get_seq_scenario("RTBT")
     node_ids = [node.getId() for node in sequence.getNodes()]
-    node_index = node_ids.index(node_id)                
+    node_index = node_ids.index(node_id)
     if node_index > 0:
         tracker = AlgorithmFactory.createEnvelopeTracker(sequence)
         tracker.setUseSpacecharge(False)
         probe = ProbeFactory.getEnvelopeProbe(sequence, tracker)
         probe.setBeamCurrent(0.0)
-        probe.setKineticEnergy(kinetic_energy)            
-        eps_x = eps_y = 20e-5 # [mm mrad] (arbitrary)
+        probe.setKineticEnergy(kinetic_energy)
+        eps_x = eps_y = 20e-6  # [mm mrad] (arbitrary)
         twiss_x = Twiss(twiss_x.getAlpha(), twiss_x.getBeta(), eps_x)
         twiss_y = Twiss(twiss_y.getAlpha(), twiss_y.getBeta(), eps_y)
         twiss_z = Twiss(0, 1, 0)
@@ -122,9 +141,14 @@ def compute_model_twiss(node_id, kinetic_energy, pvloggerid=None, sync_mode='des
         calculator = CalculationsOnBeams(trajectory)
         state = trajectory.stateForElement(node_id)
         twiss_x, twiss_y, _ = calculator.computeTwissParameters(state)
-    return [twiss_x.getAlpha(), twiss_y.getAlpha(), twiss_x.getBeta(), twiss_y.getBeta()] 
-    
-    
+    return [
+        twiss_x.getAlpha(),
+        twiss_y.getAlpha(),
+        twiss_x.getBeta(),
+        twiss_y.getBeta(),
+    ]
+
+
 def safe_sync(scenario, sync_mode):
     """Synchronize the model scenario.
 
@@ -134,16 +158,16 @@ def safe_sync(scenario, sync_mode):
         If 'live', sync with the live machine state. If 'design', synchronize with
         the design values.
     """
-    if sync_mode not in ['live', 'design']:
+    if sync_mode not in ["live", "design"]:
         raise ValueError("`sync_mode` must be in {'live', 'design'}")
-    if sync_mode == 'live':
+    if sync_mode == "live":
         try:
             scenario.setSynchronizationMode(Scenario.SYNC_MODE_LIVE)
             scenario.resync()
         except SynchronizationException:
-            sync_mode = 'design'
+            sync_mode = "design"
             print("Can't sync with live machine. Using design fields.")
-    if sync_mode == 'design':
+    if sync_mode == "design":
         scenario.setSynchronizationMode(Scenario.SYNC_MODE_DESIGN)
         scenario.resync()
     return sync_mode
@@ -151,6 +175,7 @@ def safe_sync(scenario, sync_mode):
 
 class TransferMatrixGenerator:
     """Class to compute the transfer matrix between two nodes."""
+
     def __init__(self, sequence, kinetic_energy):
         self.sequence = sequence
         self.scenario = Scenario.newScenarioFor(sequence)
@@ -158,17 +183,17 @@ class TransferMatrixGenerator:
         self.probe = ProbeFactory.getTransferMapProbe(self.sequence, self.tracker)
         self.scenario.setProbe(self.probe)
         self.set_kinetic_energy(kinetic_energy)
-        
+
     def set_kinetic_energy(self, kinetic_energy):
         """Set the probe kinetic energy [eV]."""
         self.probe.setKineticEnergy(kinetic_energy)
-        
+
     def sync(self, pvloggerid):
         """Sync the model with the machine state from a PVLoggerID."""
         pvl_data_source = PVLoggerDataSource(pvloggerid)
         self.scenario = pvl_data_source.setModelSource(self.sequence, self.scenario)
         self.scenario.resync()
-    
+
     def generate(self, start_node_id=None, stop_node_id=None):
         """Return the transfer matrix from start to node entrance.
         
@@ -207,13 +232,19 @@ class TransferMatrixGenerator:
 
 class PhaseController:
     """Class to control the phase advances in the RTBT."""
-    def __init__(self, ref_ws_id='RTBT_Diag:WS24', kinetic_energy=1e9, sync_mode='live', 
-                 connect=True):
-#         self.pvlgr_remote = RemoteLoggingCenter()
+
+    def __init__(
+        self,
+        ref_ws_id="RTBT_Diag:WS24",
+        kinetic_energy=1e9,
+        sync_mode="live",
+        connect=True,
+    ):
+        self.pvlgr_remote = RemoteLoggingCenter()
         self.connect = connect
         self.ref_ws_id = ref_ws_id
         self.accelerator = XMLDataManager.loadDefaultAccelerator()
-        self.sequence = self.accelerator.getComboSequence('RTBT')
+        self.sequence = self.accelerator.getComboSequence("RTBT")
         self.scenario = Scenario.newScenarioFor(self.sequence)
         self.sync_mode = safe_sync(self.scenario, sync_mode)
         self.tracker = AlgorithmFactory.createEnvelopeTracker(self.sequence)
@@ -226,16 +257,18 @@ class PhaseController:
         self.default_field_strengths = None
         self.set_kinetic_energy(kinetic_energy)
         self.trajectory = self.track()
-        
+
         # Get node for each RTBT quad and quad power supply.
-        self.quad_nodes = [node for node in self.sequence.getNodesOfType('quad') 
-                           if node.getId().startswith('RTBT') 
-                           and not node.getId().endswith('QV01')]
+        self.quad_nodes = [
+            node
+            for node in self.sequence.getNodesOfType("quad")
+            if node.getId().startswith("RTBT") and not node.getId().endswith("QV01")
+        ]
         self.ps_nodes = [node.getMainSupply() for node in self.quad_nodes]
         self.quad_ids = node_ids(self.quad_nodes)
         self.ps_ids = node_ids(self.ps_nodes)
 
-        # Get node and id of each independent RTBT quad and quad power supply.  
+        # Get node and id of each independent RTBT quad and quad power supply.
         self.ind_quad_nodes, self.ind_ps_nodes = [], []
         for quad_node, ps_node in zip(self.quad_nodes, self.ps_nodes):
             if ps_node not in self.ind_ps_nodes:
@@ -243,8 +276,8 @@ class PhaseController:
                 self.ind_quad_nodes.append(quad_node)
         self.ind_quad_ids = node_ids(self.ind_quad_nodes)
         self.ind_ps_ids = node_ids(self.ind_ps_nodes)
-                    
-        # Create dictionary of shared power supplies. Each key is an 
+
+        # Create dictionary of shared power supplies. Each key is an
         # independent quad id, and each value is a list of quad ids which share
         # power with the independent quad. We need this because the quads in the
         # online model can be changed independently.
@@ -262,7 +295,7 @@ class PhaseController:
                 channel = ps_node.findChannel(MagnetMainSupply.FIELD_BOOK_HANDLE)
                 self.book_channels[quad_id] = channel
 
-        # Determine upper and lower bounds on power supplies. 
+        # Determine upper and lower bounds on power supplies.
         if self.connect:
             self.ps_lb, self.ps_ub = [], []
             for quad_node, ps_node in zip(self.ind_quad_nodes, self.ind_ps_nodes):
@@ -271,23 +304,60 @@ class PhaseController:
                 if lb > ub:
                     lb, ub = ub, lb
                 self.ps_lb.append(lb)
-                self.ps_ub.append(ub)  
+                self.ps_ub.append(ub)
         else:
             # We should have a hardcoded array of power supply limits for when
             # we can't connect to the machine.
             B = 10.0
-            self.ps_lb = [0.0, -B, 0.0, -B, 0.0,
-                          0.0, -B, 0.0, -B, 0.0, -B, 0.0, -B,
-                          0.0, -B, 0.0, -B, 0.0]
-            self.ps_ub = [B, 0.0, B, 0.0, B,
-                          B, 0.0, B, 0.0, B, 0.0, B, 0.0,
-                          B, 0.0, B, 0.0, B]
-         
-        self.set_current_optics_as_default()        
+            self.ps_lb = [
+                0.0,
+                -B,
+                0.0,
+                -B,
+                0.0,
+                0.0,
+                -B,
+                0.0,
+                -B,
+                0.0,
+                -B,
+                0.0,
+                -B,
+                0.0,
+                -B,
+                0.0,
+                -B,
+                0.0,
+            ]
+            self.ps_ub = [
+                B,
+                0.0,
+                B,
+                0.0,
+                B,
+                B,
+                0.0,
+                B,
+                0.0,
+                B,
+                0.0,
+                B,
+                0.0,
+                B,
+                0.0,
+                B,
+                0.0,
+                B,
+            ]
+
+        self.set_current_optics_as_default()
+
+    def snapshot(self, comment="no comment"):
+        """Take a snapshot of the machine and return the PV Logger ID.
         
-    def snapshot(self, comment='no comment'):
-        """Take a snapshot of the machine and return the PV Logger ID."""
-        pvloggerid = self.pvlgr_remote.takeAndPublishSnapshot('default', comment)
+        Last time I tried this, it just returned -1.
+        """
+        pvloggerid = self.pvlgr_remote.takeAndPublishSnapshot("default", comment)
         return pvloggerid
 
     def sync_model_pvloggerid(self, pvloggerid):
@@ -304,36 +374,37 @@ class PhaseController:
         self.set_init_twiss(*self.matched_init_twiss())
         if self.trajectory is not None:
             self.track()
-            self.default_betas_at_target = self.beta_funcs('RTBT:Tgt')
+            self.default_betas_at_target = self.beta_funcs("RTBT:Tgt")
 
     def matched_init_twiss(self):
         """Return (alpha_x, alpha_y, beta_x, beta_y) at the RTBT entrance."""
-        return compute_model_twiss('Begin_Of_RTBT1', self.kinetic_energy,
-                                   sync_mode=self.sync_mode)
+        return compute_model_twiss(
+            "Begin_Of_RTBT1", self.kinetic_energy, sync_mode=self.sync_mode
+        )
 
     def set_init_twiss(self, alpha_x, alpha_y, beta_x, beta_y):
         """Set the initial probe Twiss parameters."""
         self.init_twiss = {
-            'alpha_x': alpha_x,
-            'alpha_y': alpha_y,
-            'beta_x': beta_x,
-            'beta_y': beta_y,
+            "alpha_x": alpha_x,
+            "alpha_y": alpha_y,
+            "beta_x": beta_x,
+            "beta_y": beta_y,
         }
 
     def initialize_envelope(self):
         """Reset the envelope probe to the start of the lattice."""
         self.scenario.resetProbe()
         self.probe.setKineticEnergy(self.kinetic_energy)
-        alpha_x = self.init_twiss['alpha_x']
-        alpha_y = self.init_twiss['alpha_y']
-        beta_x = self.init_twiss['beta_x']
-        beta_y = self.init_twiss['beta_y']
-        eps_x = eps_y = 20e-5 # [mm mrad] (arbitrary)
+        alpha_x = self.init_twiss["alpha_x"]
+        alpha_y = self.init_twiss["alpha_y"]
+        beta_x = self.init_twiss["beta_x"]
+        beta_y = self.init_twiss["beta_y"]
+        eps_x = eps_y = 20e-5  # [mm mrad] (arbitrary)
         twiss_x = Twiss(alpha_x, beta_x, eps_x)
         twiss_y = Twiss(alpha_y, beta_y, eps_y)
         twiss_z = Twiss(0, 1, 0)
         self.probe.initFromTwiss([twiss_x, twiss_y, twiss_z])
-        
+
     def track(self):
         """Return the envelope trajectory through the lattice."""
         self.initialize_envelope()
@@ -343,25 +414,25 @@ class PhaseController:
         self.states = self.trajectory.getStatesViaIndexer()
         self.positions = [state.getPosition() for state in self.states]
         return self.trajectory
-    
+
     def tracked_twiss(self):
         """Return the Twiss parameters at each state in trajectory."""
         return [compute_twiss(state, self.calculator) for state in self.states]
-    
+
     def twiss(self, node_id):
         """Return the Twiss parameters at the node entrance."""
         state = self.trajectory.statesForElement(node_id)[0]
         return compute_twiss(state, self.calculator)
-    
+
     def phases(self, node_id):
         """Return the phase advances (mod 2pi) at the node entrance."""
         return self.twiss(node_id)[:2]
-    
+
     def beta_funcs(self, node_id):
         """Return the beta functions at the node entrance."""
         return self.twiss(node_id)[4:6]
-        
-    def max_betas(self, start='RTBT_Mag:QH02', stop='RTBT_Diag:WS24'):
+
+    def max_betas(self, start="RTBT_Mag:QH02", stop="RTBT_Diag:WS24"):
         """Return the maximum x and y beta functions from start to stop.
         
         Setting start=None starts tracks from the beginning of the lattice.
@@ -375,7 +446,7 @@ class PhaseController:
             beta_xs.append(beta_x)
             beta_ys.append(beta_y)
         return max(beta_xs), max(beta_ys)
-    
+
     def transfer_matrix(self, start_node_id=None, stop_node_id=None):
         """Compute the transfer matrix between two nodes."""
         # Set start and stop node if None is provided.
@@ -390,14 +461,14 @@ class PhaseController:
         if node_ids.index(start_node_id) > node_ids.index(stop_node_id):
             start_node_id, stop_node_id = stop_node_id, start_node_id
             reverse = True
-        # Set up transfer matrix probe. 
+        # Set up transfer matrix probe.
         tracker = AlgorithmFactory.createTransferMapTracker(self.sequence)
         probe = ProbeFactory.getTransferMapProbe(self.sequence, tracker)
         probe.setKineticEnergy(self.kinetic_energy)
         self.scenario.setProbe(probe)
         # Compute the transfer matrix.
         self.scenario.run()
-        trajectory = probe.getTrajectory()            
+        trajectory = probe.getTrajectory()
         state1 = trajectory.stateForElement(start_node_id)
         state2 = trajectory.stateForElement(stop_node_id)
         M1 = state1.getTransferMap().getFirstOrder()
@@ -412,7 +483,7 @@ class PhaseController:
         self.scenario.setProbe(self.probe)
         return M
 
-    def set_ref_ws_phases(self, mu_x, mu_y, beta_lims=(40, 40), verbose=0):
+    def set_ref_ws_phases(self, mu_x, mu_y, beta_lims=(40, 40), verbose=0, guess=None):
         """Set the phase advances at the reference wire-scanner.
 
         The initial guess given to the solver is `self.default_field_strengths`. The
@@ -429,10 +500,11 @@ class PhaseController:
             
         Returns
         -------
-        fields : list[float]
+        fields : list[float],
             The correct field strengths for the independent quadrupoles that 
             were varied. 
-        """        
+        """
+
         class MyScorer(Scorer):
             def __init__(self, controller, quad_ids):
                 self.controller = controller
@@ -440,41 +512,50 @@ class PhaseController:
                 self.beta_lims = beta_lims
                 self.target_phases = [mu_x, mu_y]
                 self.ref_ws_id = controller.ref_ws_id
-                
+
             def score(self, trial, variables):
-                fields = get_trial_vals(trial, variables)   
-                self.controller.set_fields(self.quad_ids, fields, 'model')
+                fields = get_trial_vals(trial, variables)
+                self.controller.set_fields(self.quad_ids, fields, "model")
                 self.controller.track()
                 calc_phases = self.controller.phases(self.ref_ws_id)
                 residuals = subtract(calc_phases, self.target_phases)
                 return norm(residuals) + self.penalty_function()
-            
+
             def penalty_function(self):
-                penalty = 0.
-                for max_beta, beta_lim in zip(self.controller.max_betas(), self.beta_lims):
+                penalty = 0.0
+                for max_beta, beta_lim in zip(
+                    self.controller.max_betas(), self.beta_lims
+                ):
                     penalty += clip(max_beta - beta_lim, 0)
-                return penalty**2
-            
-        lo = self.ind_quad_ids.index('RTBT_Mag:QH18')
-        hi = self.ind_quad_ids.index('RTBT_Mag:QV19')
-        quad_ids = self.ind_quad_ids[lo : hi + 1]
+                return penalty ** 2
+
+        lo = self.ind_quad_ids.index("RTBT_Mag:QH18")
+        hi = self.ind_quad_ids.index("RTBT_Mag:QV19")
         scorer = MyScorer(self, self.ind_quad_ids[lo : hi + 1])
         var_names = self.ind_quad_ids[lo : hi + 1]
         lb = self.ps_lb[lo : hi + 1]
         ub = self.ps_ub[lo : hi + 1]
         bounds = (lb, ub)
-        init_fields = self.default_fields[lo : hi + 1]  
+        if guess is None:
+            guess = self.default_fields[lo : hi + 1]
         self.restore_default_optics()
-        fields = minimize(scorer, init_fields, var_names, bounds)
+        fields = minimize(scorer, guess, var_names, bounds)
         if verbose > 0:
-            print('  Desired phases : {:.3f}, {:.3f}'.format(mu_x, mu_y))
-            print('  Calc phases    : {:.3f}, {:.3f}'.format(*self.phases(self.ref_ws_id)))
-            print('  Max betas (QH18 - WS24): {:.3f}, {:.3f}'.format(
-                  *self.max_betas(start='RTBT_Mag:QH18', stop='RTBT_Diag:WS24')))
-            print('  Betas at target: {:.3f}, {:.3f}'.format(*self.beta_funcs('RTBT:Tgt')))
+            print("  Desired phases : {:.3f}, {:.3f}".format(mu_x, mu_y))
+            print(
+                "  Calc phases    : {:.3f}, {:.3f}".format(*self.phases(self.ref_ws_id))
+            )
+            print(
+                "  Max betas (QH18 - WS24): {:.3f}, {:.3f}".format(
+                    *self.max_betas(start="RTBT_Mag:QH18", stop="RTBT_Diag:WS24")
+                )
+            )
+            print(
+                "  Betas at target: {:.3f}, {:.3f}".format(*self.beta_funcs("RTBT:Tgt"))
+            )
         return fields
-    
-    def constrain_size_on_target(self, max_beta_before_target=100., verbose=0):
+
+    def constrain_size_on_target(self, max_beta_before_target=100.0, verbose=0):
         """Vary the quads after WS24 to constrain beam size on target.
         
         Parameters
@@ -484,38 +565,52 @@ class PhaseController:
         verbose : int
             If greater than zero, print a before/after summary.
         """
+
         class MyScorer(Scorer):
             def __init__(self, controller):
                 self.controller = controller
                 self.quad_ids = controller.ind_quad_ids[-5:]
-                
+
             def score(self, trial, variables):
-                fields = get_trial_vals(trial, variables)  
-                self.controller.set_fields(self.quad_ids, fields, 'model')
+                fields = get_trial_vals(trial, variables)
+                self.controller.set_fields(self.quad_ids, fields, "model")
                 self.controller.track()
-                residuals = subtract(self.controller.default_betas_at_target, 
-                                     self.controller.beta_funcs('RTBT:Tgt'))
+                residuals = subtract(
+                    self.controller.default_betas_at_target,
+                    self.controller.beta_funcs("RTBT:Tgt"),
+                )
                 return norm(residuals) + self.penalty_function()
-                
+
             def penalty_function(self):
-                penalty = 0.
-                for max_beta in self.controller.max_betas('RTBT_Diag:WS24', None):
-                    penalty += clip(max_beta - max_beta_before_target, 0)          
-                return penalty**2
-            
+                penalty = 0.0
+                for max_beta in self.controller.max_betas("RTBT_Diag:WS24", None):
+                    penalty += clip(max_beta - max_beta_before_target, 0)
+                return penalty ** 2
+
         scorer = MyScorer(self)
-        var_names = ['B26', 'B27', 'B28', 'B29', 'B30']
-        init_fields = self.get_fields(self.ind_quad_ids[-5:], 'model')
+        var_names = ["B26", "B27", "B28", "B29", "B30"]
+        init_fields = self.get_fields(self.ind_quad_ids[-5:], "model")
         bounds = (self.ps_lb[-5:], self.ps_ub[-5:])
         fields = minimize(scorer, init_fields, var_names, bounds)
-        self.set_fields(self.ind_quad_ids[-5:], fields, 'model')
+        self.set_fields(self.ind_quad_ids[-5:], fields, "model")
         if verbose > 0:
-            print('  Desired betas: {:.3f}, {:.3f}'.format(*self.default_betas_at_target))
-            print('  Calc betas   : {:.3f}, {:.3f}'.format(*self.beta_funcs('RTBT:Tgt')))
+            print(
+                "  Desired betas: {:.3f}, {:.3f}".format(*self.default_betas_at_target)
+            )
+            print(
+                "  Calc betas   : {:.3f}, {:.3f}".format(*self.beta_funcs("RTBT:Tgt"))
+            )
 
-
-    def set_target_phases(self, mux, muy, beta_max_before_ws24, beta_max_after_ws24,
-                          default_target_betas, target_beta_frac_tol, guess=None):
+    def set_target_phases(
+        self,
+        mux,
+        muy,
+        beta_max_before_ws24,
+        beta_max_after_ws24,
+        default_target_betas,
+        target_beta_frac_tol,
+        guess=None,
+    ):
         """Set the phase advances at the target.
 
         Parameters
@@ -540,27 +635,31 @@ class PhaseController:
 
             def score(self, trial, variables):
                 fields = get_trial_vals(trial, variables)
-                self.controller.set_fields(self.quad_ids, fields, 'model')
+                self.controller.set_fields(self.quad_ids, fields, "model")
                 self.controller.track()
-                calc_phases = self.controller.phases('RTBT:Tgt')
+                calc_phases = self.controller.phases("RTBT:Tgt")
                 residuals = subtract(calc_phases, self.target_phases)
                 cost = norm(residuals) ** 2
                 cost += self.penalty_max_beta()
                 cost += self.penalty_target_betas()
-                print('  cost = {}'.format(cost))
+                print("  cost = {}".format(cost))
                 return cost
 
             def penalty_max_beta(self):
                 penalty = 0.0
-                for beta in self.controller.max_betas(start='RTBT_Mag:QH18', stop='RTBT_Diag:WS24'):
+                for beta in self.controller.max_betas(
+                    start="RTBT_Mag:QH18", stop="RTBT_Diag:WS24"
+                ):
                     penalty += clip(beta - beta_max_before_ws24, 0.0, None) ** 2
-                for beta in self.controller.max_betas(start='RTBT_Diag:WS24', stop='RTBT:Tgt'):
+                for beta in self.controller.max_betas(
+                    start="RTBT_Diag:WS24", stop="RTBT:Tgt"
+                ):
                     penalty += clip(beta - beta_max_after_ws24, 0.0, None) ** 2
                 return penalty
 
             def penalty_target_betas(self):
                 penalty = 0.0
-                target_betas = self.controller.beta_funcs('RTBT:Tgt')
+                target_betas = self.controller.beta_funcs("RTBT:Tgt")
                 diffs = subtract(target_betas, default_target_betas)
                 diff_x, diff_y = diffs
                 abs_frac_change_x = abs(diff_x / default_target_betas[0])
@@ -571,18 +670,18 @@ class PhaseController:
                     penalty += diff_y ** 2
                 return penalty
 
-        lo = self.ind_quad_ids.index('RTBT_Mag:QH18')
-        hi = self.ind_quad_ids.index('RTBT_Mag:QH30')
-        quad_ids = var_names = self.ind_quad_ids[lo: hi + 1]
+        lo = self.ind_quad_ids.index("RTBT_Mag:QH18")
+        hi = self.ind_quad_ids.index("RTBT_Mag:QH30")
+        quad_ids = var_names = self.ind_quad_ids[lo : hi + 1]
         scorer = MyScorer(self, quad_ids)
-        lb = self.ps_lb[lo: hi + 1]
-        ub = self.ps_ub[lo: hi + 1]
+        lb = self.ps_lb[lo : hi + 1]
+        ub = self.ps_ub[lo : hi + 1]
         bounds = (lb, ub)
         if guess is None:
-            guess = self.get_fields(quad_ids, 'model')
+            guess = self.get_fields(quad_ids, "model")
         minimize(scorer, guess, var_names, bounds)
 
-    def get_field(self, quad_id, opt='model'):
+    def get_field(self, quad_id, opt="model"):
         """Return quadrupole field strength [T/m].
         
         quad_id : str
@@ -593,41 +692,48 @@ class PhaseController:
             'book' : book setting
         """
         node = self.sequence.getNodeWithId(quad_id)
-        if opt == 'model':
+        if opt == "model":
             return self.scenario.elementsMappedTo(node)[0].getMagField()
-        elif opt == 'live':
+        elif opt == "live":
             return node.getField()
-        elif opt == 'book':
+        elif opt == "book":
             return node.toFieldFromCA(self.book_channels[quad_id].getValFlt())
         else:
             raise ValueError("opt must be in {'model', 'live', 'book'}")
-        
-    def get_fields(self, quad_ids, opt='model'):
+
+    def get_fields(self, quad_ids, opt="model"):
         """Return list of quadrupole field strengths [T/m]."""
         return [self.get_field(quad_id, opt) for quad_id in quad_ids]
-    
-    def set_field(self, quad_id, field, opt='model'):
+
+    def set_field(self, quad_id, field, opt="model"):
         """Set quadrupole field strength [T/m].
         
         Note: this can lead to errors if the desired field is too far from the 
         book value (if changing the live values).
         """
         node = self.sequence.getNodeWithId(quad_id)
-        if opt == 'model':
-            for elem in self.scenario.elementsMappedTo(node): 
+        if opt == "model":
+            for elem in self.scenario.elementsMappedTo(node):
                 elem.setMagField(field)
             if quad_id in self.shared_power:
                 for dep_quad_id in self.shared_power[quad_id]:
-                    self.set_field(dep_quad_id, field, 'model')
-        elif opt == 'live': 
+                    self.set_field(dep_quad_id, field, "model")
+        elif opt == "live":
             node.setField(field)
-        elif opt == 'book':
+        elif opt == "book":
             self.book_channels[quad_id].putVal(node.toCAFromField(field))
         else:
             raise ValueError("opt must be in {'model', 'live', 'book'}")
-        
-    def set_fields(self, quad_ids, fields, opt='model', max_frac_change=0.01, 
-                   max_iters=100, sleep_time=0.5):
+
+    def set_fields(
+        self,
+        quad_ids,
+        fields,
+        opt="model",
+        max_frac_change=0.01,
+        max_iters=100,
+        sleep_time=0.5,
+    ):
         """Set the field of each quadrupole in the list.
         
         Note that the book values are always kept equal to the live values. 
@@ -651,56 +757,56 @@ class PhaseController:
             Time to pause between field updates [seconds]. We found 0.5 seconds
             to be a safe value.
         """
-        if opt == 'model':
+        if opt == "model":
             for quad_id, field in zip(quad_ids, fields):
-                self.set_field(quad_id, field, 'model')
-        elif opt == 'live':
+                self.set_field(quad_id, field, "model")
+        elif opt == "live":
             if sleep_time < 0.5:
-                warnings.warn('sleep_time < 0.5 seconds... may trip MPS.')
+                warnings.warn("sleep_time < 0.5 seconds... may trip MPS.")
             if max_frac_change > 0.01:
-                warnings.warn('max_frac_change > 0.01... may trip MPS.')
-            # Move all quad fields close enough to the desired values to 
+                warnings.warn("max_frac_change > 0.01... may trip MPS.")
+            # Move all quad fields close enough to the desired values to
             # avoid tripping MPS...
             stop, iters = False, 0
             while not stop and iters < max_iters:
-                stop, iters = True, iters + 1                
+                stop, iters = True, iters + 1
                 for quad_id, field in zip(quad_ids, fields):
-                    book = self.get_field(quad_id, 'book')                    
+                    book = self.get_field(quad_id, "book")
                     change_needed = field - book
-                    max_abs_change = max_frac_change * abs(book) 
+                    max_abs_change = max_frac_change * abs(book)
                     if abs(change_needed) > max_abs_change:
                         stop = False
                         if change_needed >= 0.0:
                             new_field = book + max_abs_change
                         else:
-                            new_field = book - max_abs_change                            
-                        self.set_field(quad_id, new_field, 'book')
-                        self.set_field(quad_id, new_field, 'live')
+                            new_field = book - max_abs_change
+                        self.set_field(quad_id, new_field, "book")
+                        self.set_field(quad_id, new_field, "live")
                 time.sleep(sleep_time)
-            #... and then set them to the desired values.
-            for quad_id, field in zip(quad_ids, fields): 
-                self.set_field(quad_id, field, 'book')
-                self.set_field(quad_id, field, 'live')
+            # ... and then set them to the desired values.
+            for quad_id, field in zip(quad_ids, fields):
+                self.set_field(quad_id, field, "book")
+                self.set_field(quad_id, field, "live")
 
     def set_current_optics_as_default(self):
         """Store the current machine state as the default state.
 
         Any changes are made with this state as the starting point.
         """
-        self.default_fields = self.get_fields(self.ind_quad_ids, 'model')
+        self.default_fields = self.get_fields(self.ind_quad_ids, "model")
         self.track()
-        self.default_betas_at_target = self.beta_funcs('RTBT:Tgt')
+        self.default_betas_at_target = self.beta_funcs("RTBT:Tgt")
 
-    def restore_default_optics(self, opt='model', **kws):
+    def restore_default_optics(self, opt="model", **kws):
         """Reset quadrupole fields to default values."""
         self.set_fields(self.ind_quad_ids, self.default_fields, opt, **kws)
-        
+
     def sync_live_with_model(self, **kws):
         """Set live quad fields to model values."""
-        model_fields = self.get_fields(self.ind_quad_ids, 'model')
-        self.set_fields(self.ind_quad_ids, model_fields, 'live', **kws)
-        
-    def get_phases_for_scan(self, phase_coverage=90., n_steps=6, scan_type=1):
+        model_fields = self.get_fields(self.ind_quad_ids, "model")
+        self.set_fields(self.ind_quad_ids, model_fields, "live", **kws)
+
+    def get_phases_for_scan(self, phase_coverage=90.0, n_steps=6, scan_type=1):
         """Create an array of phase advances at the reference wire-scanner for
         the multi-optics emittance measurement.
 
@@ -722,12 +828,12 @@ class PhaseController:
             held fixed.
                 Example: mux = [1, 2, 3, 2, 2, 2],
                          muy = [5, 5, 5, 4, 5, 6].
-        """              
+        """
         # Get default phase advances without changing current state.
-        model_fields = self.get_fields(self.ind_quad_ids, 'model')
-        self.restore_default_optics('model')
+        model_fields = self.get_fields(self.ind_quad_ids, "model")
+        self.restore_default_optics("model")
         mux0, muy0 = self.phases(self.ref_ws_id)
-        self.set_fields(self.ind_quad_ids, model_fields, 'model')
+        self.set_fields(self.ind_quad_ids, model_fields, "model")
 
         n = int(n_steps) // 2
         phase_coverage = radians(phase_coverage)
@@ -744,7 +850,8 @@ class PhaseController:
             phases_y = n * [muy0] + lin_phase_range(muy_min, muy_max, n)
         phases = [[mux, muy] for mux, muy in zip(phases_x, phases_y)]
         return phases
-    
+
+
 def lin_phase_range(mu_min, mu_max, n_steps, endpoint=True):
     """Step the phase advance between mu_min and mu_max, shifting to keep
     all values within [0, 2pi]."""

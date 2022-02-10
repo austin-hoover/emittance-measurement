@@ -23,13 +23,13 @@ def load_sequence(sequence_name):
 def write_traj_to_file(data, positions, filename):
     """Save trajectory data to file. 
     `data[i]` is list of data at position `positions[i]`."""
-    file = open(filename, 'w')
-    fstr = len(data[0]) * '{} ' + '{}\n'
+    file = open(filename, "w")
+    fstr = len(data[0]) * "{} " + "{}\n"
     for s, dat in zip(positions, data):
         file.write(fstr.format(s, *dat))
     file.close()
-    
-    
+
+
 def list_from_xal_matrix(matrix):
     """Return list of lists from XAL matrix object."""
     matrix_list = []
@@ -40,10 +40,9 @@ def list_from_xal_matrix(matrix):
         matrix_list.append(row)
     return matrix_list
 
-    
 
 # Solver
-#-------------------------------------------------------------------------------
+# -------------------------------------------------------------------------------
 def get_trial_vals(trial, variables):
     """Get list of variable values from Trial."""
     trial_point = trial.getTrialPoint()
@@ -67,23 +66,25 @@ def minimize(scorer, x, var_names, bounds, maxiters=1000, tol=1e-8, verbose=0):
         Lower and upper bounds on independent variables. Each array must match
         the size of x or be a scalar; in the latter case the bound will be the 
         same for all variables.
-    """ 
+    """
     n_vars = len(x)
     if n_vars != len(var_names):
-        raise ValueError('Parameter list and variable name list have different length.')
-    
+        raise ValueError("Parameter list and variable name list have different length.")
+
     lb, ub = bounds
     if type(lb) in [float, int]:
         lb = n_vars * [lb]
     if type(ub) in [float, int]:
         ub = n_vars * [ub]
     for i in range(n_vars):
-        if float('inf') in [abs(lb[i]), abs(ub[i])]:
+        if float("inf") in [abs(lb[i]), abs(ub[i])]:
             raise ValueError("OpenXAL Solver cannot use float('inf') as a bound.")
         if x[i] < lb[i] or x[i] > ub[i]:
-            raise ValueError('Initial guess is outside bounds.')
-                        
-    variables = [Variable(name, val, l, u) for name, val, l, u in zip(var_names, x, lb, ub)]
+            raise ValueError("Initial guess is outside bounds.")
+
+    variables = [
+        Variable(name, val, l, u) for name, val, l, u in zip(var_names, x, lb, ub)
+    ]
     stopper = maxEvaluationsStopper(maxiters)
     solver = Solver(SimplexSearchAlgorithm(), stopper)
     problem = getInverseSquareMinimizerProblem(variables, scorer, tol)

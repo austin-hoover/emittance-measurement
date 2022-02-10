@@ -18,8 +18,8 @@ false = Boolean("false").booleanValue()
 true = Boolean("true").booleanValue()
 null = None
 
-class DateAndTimeText:
 
+class DateAndTimeText:
     def __init__(self):
         self.dFormat = SimpleDateFormat("'Time': MM.dd.yy HH:mm ")
         self.dateTimeField = JFormattedTextField(self.dFormat)
@@ -41,11 +41,10 @@ class DateAndTimeText:
 
 
 class Timer(Runnable):
-
-    def __init__(self,dateTimeField):
+    def __init__(self, dateTimeField):
         self.dateTimeField = dateTimeField
 
     def run(self):
-        while(true):
+        while true:
             self.dateTimeField.setValue(Date())
-            time.sleep(10.)
+            time.sleep(10.0)
