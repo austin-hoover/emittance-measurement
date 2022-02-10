@@ -1,10 +1,5 @@
-"""Beam trigger library.
-
-This was ported from a different application.
-"""
 from __future__ import print_function
 import time
-from java.lang import *  # Wildcard imports are not allowed in Java 17+
 from xal.extension.scan import WrappedChannel
 
 
@@ -15,7 +10,6 @@ class BeamTrigger:
     the beam. It seems that manually triggering the beam from StartMap will solve
     the problem.
     """
-
     def __init__(self):
         self.beam_trigger_wpv = None
         self.test_pv = None
