@@ -1,4 +1,4 @@
-"""Save the longitudinal profile plot.."""
+"""Save waterfall plot of longitudinal profile."""
 from __future__ import print_function
 import sys
 import os
@@ -15,20 +15,17 @@ steps = 14
 data = []
 for i in range(steps):
     print('i = {}'.format(i))
-    istr = str(i)
-    if i < 10:
-        istr = '0' + istr
-    pv = 'Ring_Diag:BCM_D09:WF_Plot' + istr
+    pv = 'Ring_Diag:BCM_D09:WF_Plot{:02d}'.format(i)
     channel_factory = ChannelFactory.defaultFactory()
     channel = channel_factory.getChannel(pv)
     channel.connectAndWait()
     data.append(list(channel.getArrDbl()))
     
-file = open('_output/data/bcm.dat', 'w')
+file = open('./bcm.dat', 'w')
 for row in data:
     for x in row:
         file.write('{} '.format(x))
     file.write('\n')
 file.close()
-        
+
 exit()
