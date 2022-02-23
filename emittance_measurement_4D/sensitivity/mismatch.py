@@ -41,9 +41,11 @@ from lib import utils
 kinetic_energy = 1.0e9  # [eV]
 ws_ids = ["RTBT_Diag:WS20", "RTBT_Diag:WS21", "RTBT_Diag:WS23", "RTBT_Diag:WS24"]
 ref_ws_id = "RTBT_Diag:WS24"
-n_trials = 500
+n_trials = 250
 frac_error = 0.03
-controller = optics.PhaseController(ref_ws_id=ref_ws_id, kinetic_energy=kinetic_energy)
+controller = optics.PhaseController(
+    ref_ws_id=ref_ws_id, kinetic_energy=kinetic_energy, sync_mode="design",
+)
 
 pvloggerid = 48842900  # 2021/08/01
 # pvloggerid = 49332837 # 2021/09/27
@@ -52,6 +54,7 @@ pvloggerid = 48842900  # 2021/08/01
 
 if pvloggerid is not None:
     controller.sync_model_pvloggerid(pvloggerid)
+
 
 print("Betas at target:", controller.beta_funcs("RTBT:Tgt"))
 print("Phase advances at target:", controller.phases(ref_ws_id))
@@ -109,33 +112,14 @@ beta_ys = utils.linspace(beta_y_min, beta_y_max, n)
 
 
 def init_array(n):
-    array = [
-        [[[[0.0, 0.0, 0.0, 0.0] for i in range(n)] for j in range(n)] for k in range(n)]
+    array = [[[[
+        [0.0, 0.0, 0.0, 0.0] 
+        for i in range(n)] 
+        for j in range(n)] 
+        for k in range(n)]
         for l in range(n)
     ]
     return array
-
-
-emittance_means_list = init_array(n)
-emittance_stds_list = init_array(n)
-fail_rates = [
-    [[[0.0 for i in range(n)] for j in range(n)] for k in range(n)] for l in range(n)
-]
-for i, alpha_x, in enumerate(alpha_xs):
-    for j, alpha_y in enumerate(alpha_ys):
-        for k, beta_x in enumerate(beta_xs):
-            for l, beta_y in enumerate(beta_ys):
-                print(i, j, k, l)
-                Sigma = matched_cov(
-                    alpha_x, alpha_y, beta_x, beta_y, eps_x, eps_y, c=0.001
-                )
-                fail_rate, emittances = run_trials(Sigma, tmats, n_trials, frac_error)
-                means = utils.mean_cols(emittances)
-                stds = utils.std_cols(emittances)
-                for m in range(4):
-                    emittance_means_list[i][j][k][l][m] = means[m]
-                    emittance_stds_list[i][j][k][l][m] = stds[m]
-                fail_rates[i][j][k][l] = fail_rate
 
 
 def save(array, filename, pkl=False):
@@ -148,18 +132,52 @@ def save(array, filename, pkl=False):
     file.close()
 
 
-save(fail_rates, "_output/data/fail_rates.pkl", pkl=True)
-save(emittance_means_list, "_output/data/emittance_means.pkl", pkl=True)
-save(emittance_stds_list, "_output/data/emittance_stds.pkl", pkl=True)
+cvals = utils.linspace(0., 0.5, 4)
+cvals[0] += 0.0001
+file = open('_output/data/cvals.dat', 'w')
+for c in cvals:
+    file.write('{} '.format(c))
+file.close()
+
 save(alpha_xs, "_output/data/alpha_xs.dat")
 save(alpha_ys, "_output/data/alpha_ys.dat")
 save(beta_xs, "_output/data/beta_xs.dat")
 save(beta_ys, "_output/data/beta_ys.dat")
 save([alpha_x0, alpha_y0, beta_x0, beta_y0], "_output/data/true_twiss.dat")
-stats = analysis.BeamStats(Sigma)
-save(
-    [stats.eps_x, stats.eps_y, stats.eps_1, stats.eps_2],
-    "_output/data/true_emittances.dat",
-)
+    
+    
+for run, c in enumerate(cvals):
+    
+    print('Running for c = {}'.format(c))
+    
+    emittance_means_list = init_array(n)
+    emittance_stds_list = init_array(n)
+    fail_rates = [[[[
+        0.0 
+        for i in range(n)] 
+        for j in range(n)] 
+        for k in range(n)] 
+        for l in range(n)
+    ]
+    for i, alpha_x, in enumerate(alpha_xs):
+        for j, alpha_y in enumerate(alpha_ys):
+            for k, beta_x in enumerate(beta_xs):
+                for l, beta_y in enumerate(beta_ys):
+                    print(i, j, k, l)
+                    Sigma = matched_cov(alpha_x, alpha_y, beta_x, beta_y, eps_x, eps_y, c=c)
+                    fail_rate, emittances = run_trials(Sigma, tmats, n_trials, frac_error)
+                    means = utils.mean_cols(emittances)
+                    stds = utils.std_cols(emittances)
+                    for m in range(4):
+                        emittance_means_list[i][j][k][l][m] = means[m]
+                        emittance_stds_list[i][j][k][l][m] = stds[m]
+                    fail_rates[i][j][k][l] = fail_rate
+
+    save(fail_rates, "_output/data/fail_rates_{}.pkl".format(run), pkl=True)
+    save(emittance_means_list, "_output/data/emittance_means_{}.pkl".format(run), pkl=True)
+    save(emittance_stds_list, "_output/data/emittance_stds_{}.pkl".format(run), pkl=True)
+    stats = analysis.BeamStats(Sigma) # We just want the emittances, which never changed.
+    save([stats.eps_x, stats.eps_y, stats.eps_1, stats.eps_2],
+         "_output/data/true_emittances_{}.dat".format(run))
 
 exit()
