@@ -25,7 +25,7 @@ class EmittanceMeasurement4D:
 
         # Add tabbed pane to frame.
         self.frame = JFrame("4D Emittance Measurement")
-        self.frame.setSize(Dimension(1100, 900))
+        self.frame.setSize(Dimension(1475, 1150))
         self.frame.add(self.pane)
 
         # Add time stamp at the bottom of the frame.
@@ -38,7 +38,6 @@ class EmittanceMeasurement4D:
         class WindowCloser(WindowAdapter):
             def __init__(self):
                 return
-
             def windowClosing(self, event):
                 sys.exit(1)
 

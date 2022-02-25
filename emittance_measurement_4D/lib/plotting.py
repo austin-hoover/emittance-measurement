@@ -74,7 +74,6 @@ def ellipse_points(cx, cy, tilt=0.0, points=50):
 
 class PlotPanel(FunctionGraphsJPanel):
     """Variant of `FunctionGraphsJPanel."""
-
     def __init__(self, xlabel="", ylabel="", title="", grid=True):
         FunctionGraphsJPanel.__init__(self)
         self.setName(title)
@@ -89,7 +88,6 @@ class PlotPanel(FunctionGraphsJPanel):
 
 class LinePlotPanel(PlotPanel):
     """Class for 2D line plots."""
-
     def __init__(
         self,
         xlabel="",
@@ -126,6 +124,12 @@ class LinePlotPanel(PlotPanel):
         for data, x, y in zip(self.data_list, x_list, y_list):
             data.addPoint(x, y)
             self.addGraphData(data)
+
+    def legend(self, labels):
+        """Display a legend."""
+        self.setLegendButtonVisible(True)
+        for label, data in zip(labels, self.data_list):
+            data.setGraphProperty("Legend", label)
 
     def ellipse(self, cx, cy, tilt=0.0, points=50, lw=4):
         """Plot an ellipse."""
@@ -183,7 +187,6 @@ class CornerPlotPanel(JPanel):
     two-dimensional projections of the covariance matrix (the six lower-diagonal
     entries in the matrix.
     """
-
     def __init__(self, grid=False, figsize=None, ticklabels=False):
         JPanel.__init__(self)
         self.setLayout(GridBagLayout())

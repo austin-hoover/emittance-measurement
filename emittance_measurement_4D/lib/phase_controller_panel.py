@@ -3,9 +3,15 @@ from __future__ import print_function
 
 from java.awt import BorderLayout
 from java.awt import Color
+from java.awt import Dimension
 from java.awt import FlowLayout
+from java.awt import GridLayout
+from java.awt import GridBagLayout
+from java.awt import GridBagConstraints
+from java.awt import Insets
 from java.awt import Font
 from java.awt.event import ActionListener
+from javax.swing import BorderFactory
 from javax.swing import BoxLayout
 from javax.swing import GroupLayout
 from javax.swing import JButton
@@ -15,6 +21,7 @@ from javax.swing import JPanel
 from javax.swing import JProgressBar
 from javax.swing import JScrollPane
 from javax.swing import JTable
+from javax.swing import JTabbedPane
 from javax.swing import JTextField
 from javax.swing import JFormattedTextField
 from javax.swing.event import CellEditorListener
@@ -26,13 +33,19 @@ import plotting as plt
 import utils
 
 
+SLEEP_TIME = 0.5 # Pause between changing quad strengths [seconds]
+MAX_FRAC_CHANGE = 0.01 # Maximum fractional change of quad strengths in a single step.
+FIELD_SET_KWS = {
+    "sleep_time": SLEEP_TIME,
+    "max_frac_change": MAX_FRAC_CHANGE,
+}
+
 class PhaseControllerPanel(JPanel):
     def __init__(self):
         JPanel.__init__(self)
-        self.setLayout(BorderLayout())
+        self.setLayout(GridBagLayout())
         self.phase_controller = optics.PhaseController(kinetic_energy=1e9)
         self.model_fields_list = []
-        # Get the wire-scanner positions.
         self.ws_ids = optics.RTBT_WS_IDS
         self.sequence = self.phase_controller.sequence
         self.start_node = self.sequence.getNodeWithId("Begin_Of_RTBT1")
@@ -44,75 +57,105 @@ class PhaseControllerPanel(JPanel):
         self.build_panels()
 
     def build_panels(self):
-        # Model calculation panel
+        # Scan optics panel
         # ------------------------------------------------------------------------
         # Components
-        text_field_width = 1
-        self.ref_ws_id_dropdown = JComboBox(self.ws_ids)
+        self.ref_ws_id_dropdown = JComboBox(["RTBT_Diag:WS20", "RTBT_Diag:WS21",
+                                             "RTBT_Diag:WS23", "RTBT_Diag:WS24"])        
         self.init_twiss_table = JTable(InitTwissTableModel(self))
         self.init_twiss_table.setShowGrid(True)
-        self.energy_text_field = JTextField("1.0", text_field_width)
-        self.phase_coverage_text_field = JTextField("30.0", text_field_width)
+        self.energy_text_field = JTextField("1.000")
+        self.phase_coverage_text_field = JTextField("30.0  ")
         formatter = NumberFormat.getIntegerInstance()
         formatter.setGroupingUsed(False)
         self.n_steps_text_field = JFormattedTextField(formatter)
         self.n_steps_text_field.setValue(10)
         self.scan_type_dropdown = JComboBox([1, 2])
-        self.max_beta_text_field = JTextField("30.0", text_field_width)
-        self.calculate_model_optics_button = JButton("Calculate model optics")
+        self.max_beta_text_field = JTextField("30.0")
+        self.calculate_scan_optics_button = JButton("Calculate optics")
 
         # Action listeners
         self.energy_text_field.addActionListener(EnergyTextFieldListener(self))
         self.ref_ws_id_dropdown.addActionListener(RefWsIdDropdownListener(self))
-        self.ref_ws_id_dropdown.setSelectedIndex(4)
-        self.calculate_model_optics_button.addActionListener(
-            CalculateModelOpticsButtonListener(self)
+        self.ref_ws_id_dropdown.setSelectedIndex(3)
+        for component in [
+            self.phase_coverage_text_field,
+            self.n_steps_text_field,
+            self.scan_type_dropdown
+        ]:
+            component.addActionListener(ScanSettingsListener(self))
+        self.calculate_scan_optics_button.addActionListener(
+            CalculateScanOpticsButtonListener(self)
         )
         self.init_twiss_table.getCellEditor(0, 0).addCellEditorListener(
             TwissTableListener(self)
         )
 
         # Build panel
-        self.model_calc_panel1 = AlignedLabeledComponentsPanel()
-        self.model_calc_panel1.add_row(
-            JLabel("Ref. wire-scanner"), self.ref_ws_id_dropdown
-        )
-        self.model_calc_panel2 = AlignedLabeledComponentsPanel()
-        self.model_calc_panel2.add_row(JLabel("Energy [GeV]"), self.energy_text_field)
-        self.model_calc_panel2.add_row(
-            JLabel("Phase coverage [deg]"), self.phase_coverage_text_field
-        )
-        self.model_calc_panel2.add_row(
-            JLabel("<html>Max. &beta; [m/rad]<html>"), self.max_beta_text_field
-        )
-        self.model_calc_panel2.add_row(JLabel("Steps in scan"), self.n_steps_text_field)
-        self.model_calc_panel2.add_row(JLabel("Scan type"), self.scan_type_dropdown)
+        scan_optics_panel = JPanel()
+        scan_optics_panel.setLayout(GridBagLayout())
 
-        self.model_calc_panel = JPanel()
-        init_twiss_label = JLabel("Initial Twiss")
-        init_twiss_label.setAlignmentX(0)
-        self.model_calc_panel.add(init_twiss_label)
-        self.model_calc_panel.add(self.init_twiss_table.getTableHeader())
-        self.model_calc_panel.add(self.init_twiss_table)
-        self.model_calc_panel.setLayout(
-            BoxLayout(self.model_calc_panel, BoxLayout.Y_AXIS)
+        c = GridBagConstraints()
+        c.anchor = GridBagConstraints.NORTHWEST
+        c.gridwidth = GridBagConstraints.REMAINDER
+        c.fill = GridBagConstraints.HORIZONTAL
+        c.weightx = 1.0
+
+        scan_optics_panel.add(JLabel('Scan optics'), c)
+        
+        row = JPanel()
+        row.setLayout(FlowLayout(FlowLayout.LEFT))
+        row.add(JLabel("Ref. wire-scanner"))
+        row.add(self.ref_ws_id_dropdown)
+        scan_optics_panel.add(row, c)
+
+        row = JPanel()
+        row.setLayout(FlowLayout(FlowLayout.LEFT))
+        row.add(JLabel("Energy [GeV]"))
+        row.add(self.energy_text_field)
+        row.add(JLabel("<html>Max. &beta; [m/rad]<html>"))
+        row.add(self.max_beta_text_field)
+        scan_optics_panel.add(row, c)
+
+        row = JPanel()
+        row.setLayout(FlowLayout(FlowLayout.LEFT))
+        row.add(JLabel("Coverage [deg]"))
+        row.add(self.phase_coverage_text_field)
+        row.add(JLabel("Steps"))
+        row.add(self.n_steps_text_field)
+        row.add(JLabel("Scan type"))
+        row.add(self.scan_type_dropdown)
+        scan_optics_panel.add(row, c)
+
+        c.weighty = 1.0
+        scan_optics_panel.add(JPanel(), c)
+        c.weighty = 0.0
+
+        self.phase_scan_plot_panel = plt.LinePlotPanel(
+            xlabel='Scan index',
+            ylabel='Phase adv.',
+            n_lines=2,
+            grid='y',
+            ms=8,
         )
-        self.model_calc_panel.add(self.model_calc_panel1)
-        self.model_calc_panel.add(self.model_calc_panel2)
+        self.phase_scan_plot_panel.setBorder(BorderFactory.createEmptyBorder())
+        xvals = list(range(10))
+        yvals1 = list(range(10))
+        yvals2 = list(reversed(range(10)))
+        self.phase_scan_plot_panel.set_data(xvals, [yvals1, yvals2])
+
 
         # Machine update panel
         # ------------------------------------------------------------------------
         # Components
-        self.sleep_time_text_field = JTextField("0.5", 3)
-        self.max_frac_change_text_field = JTextField("0.01", 4)
         self.set_live_optics_button1 = JButton("Set from scan")
         self.set_live_optics_button2 = JButton("Set manually ")
         self.quad_settings_table = JTable(QuadSettingsTableModel(self))
         self.quad_settings_table.setShowGrid(True)
         n_steps = int(self.n_steps_text_field.getText())
         self.scan_index_dropdown = JComboBox(["default"] + list(range(n_steps)))
-        self.delta_mux_text_field = JTextField("0.0", 5)
-        self.delta_muy_text_field = JTextField("0.0", 5)
+        self.delta_mux_text_field = JTextField("0.0    ")
+        self.delta_muy_text_field = JTextField("0.0    ")
 
         # Action listeners
         self.n_steps_text_field.addActionListener(NStepsTextFieldListener(self))
@@ -124,26 +167,26 @@ class PhaseControllerPanel(JPanel):
         )
 
         # Build panel
-        self.machine_update_panel = JPanel()
-        self.machine_update_panel.setLayout(
-            BoxLayout(self.machine_update_panel, BoxLayout.Y_AXIS)
-        )
+        machine_update_panel = JPanel()
+        machine_update_panel.setLayout(GridBagLayout())
+
+        c = GridBagConstraints()
+        c.anchor = GridBagConstraints.NORTHWEST
+        c.gridwidth = GridBagConstraints.REMAINDER
+        c.weightx = 1.0
 
         row = JPanel()
         row.setLayout(FlowLayout(FlowLayout.LEFT))
-        row.add(JLabel("Sleep [s]"))
-        row.add(self.sleep_time_text_field)
-        row.add(JLabel("Max. frac. change"))
-        row.add(self.max_frac_change_text_field)
-        self.machine_update_panel.add(row)
-
+        row.add(JLabel('Set live optics'))
+        machine_update_panel.add(row, c)
+        
         row = JPanel()
         row.setLayout(FlowLayout(FlowLayout.LEFT))
         row.add(self.set_live_optics_button1)
         row.add(JLabel("Scan index"))
         row.add(self.scan_index_dropdown)
-        self.machine_update_panel.add(row)
-
+        machine_update_panel.add(row, c)
+        
         row = JPanel()
         row.setLayout(FlowLayout(FlowLayout.LEFT))
         row.add(self.set_live_optics_button2)
@@ -151,93 +194,101 @@ class PhaseControllerPanel(JPanel):
         row.add(self.delta_mux_text_field)
         row.add(JLabel("<html>&Delta&mu;<SUB>y</SUB> [deg]<html>"))
         row.add(self.delta_muy_text_field)
-        self.machine_update_panel.add(row)
+        machine_update_panel.add(row, c)
+        
+        machine_update_panel.add(self.quad_settings_table.getTableHeader(), c)
+        machine_update_panel.add(JScrollPane(self.quad_settings_table), c)
+        c.weighty = 1.0
+        machine_update_panel.add(JPanel(), c)
+        c.weighty = 0.0
 
-        self.machine_update_panel.add(self.quad_settings_table.getTableHeader())
-        self.machine_update_panel.add(JScrollPane(self.quad_settings_table))
 
-        # Build left panel
+        # Plot panel
         # ------------------------------------------------------------------------
-        self.left_panel = JPanel()
-        self.left_panel.setLayout(BoxLayout(self.left_panel, BoxLayout.Y_AXIS))
-
-        label = JLabel("Compute model optics")
-        font = label.getFont()
-        label.setFont(Font(font.name, font.BOLD, int(1.1 * font.size)))
-        temp_panel = JPanel()
-        temp_panel.setLayout(FlowLayout(FlowLayout.LEFT))
-        temp_panel.add(label)
-        self.left_panel.add(temp_panel)
-
-        self.left_panel.add(self.model_calc_panel)
-
-        panel = JPanel()
-        temp_panel = JPanel()
-        temp_panel.add(self.calculate_model_optics_button)
-        self.progress_bar = JProgressBar(0, int(self.n_steps_text_field.getText()))
-        self.progress_bar.setValue(0)
-        self.progress_bar.setStringPainted(True)
-        temp_panel.add(self.progress_bar)
-        panel.add(temp_panel)
-        self.left_panel.add(panel)
-
-        label = JLabel("Set live optics")
-        label.setFont(Font(font.name, font.BOLD, int(1.1 * font.size)))
-        row = JPanel()
-        row.setLayout(FlowLayout(FlowLayout.LEFT))
-        row.add(label)
-        self.left_panel.add(row)
-        self.left_panel.add(self.machine_update_panel)
-        self.add(self.left_panel, BorderLayout.WEST)
-
-        # Plotting panels
-        # ------------------------------------------------------------------------
+        self.plot_panel = JPanel()
+        self.plot_panel.setLayout(BoxLayout(self.plot_panel, BoxLayout.Y_AXIS))
         self.beta_plot_panel = plt.LinePlotPanel(
             xlabel="Position [m]",
-            ylabel="[m/rad]",
-            title="Beta function vs. position",
+            ylabel="Beta function [m/rad]",
             n_lines=2,
             grid="y",
         )
         self.beta_plot_panel.setLimitsAndTicksY(0.0, 100.0, 10.0)
+        self.beta_plot_panel.legend([' x', ' y'])
+        self.plot_panel.add(self.beta_plot_panel)
         self.phase_plot_panel = plt.LinePlotPanel(
             xlabel="Position [m]",
             ylabel="Phase adv. mod 2pi [rad]",
-            title="Phase advance vs. position",
             n_lines=2,
             grid="y",
         )
-        self.bpm_plot_panel = plt.LinePlotPanel(
-            xlabel="Position [m]",
-            ylabel="Amplitude [mm]",
-            title="BMP amplitudes",
-            n_lines=2,
-            lw=2,
-            ms=5,
-            grid="y",
+        self.phase_plot_panel.legend([' x', ' y'])
+        self.plot_panel.add(self.phase_plot_panel)
+
+        rtbt_length = self.phase_controller.sequence.getDistanceBetween(
+            self.phase_controller.sequence.getNodes()[0],
+            self.phase_controller.sequence.getNodes()[-1],
         )
-
-        # Get BPM positions
-        self.bpms = self.phase_controller.sequence.getNodesOfType("BPM")
-        seq = self.phase_controller.sequence
-        start_node = seq.getNodes()[0]
-        self.bpm_positions = [
-            seq.getDistanceBetween(start_node, node) for node in self.bpms
-        ]
-
-        # Add the plots to the panel.
-        self.right_panel = JPanel()
-        self.right_panel.setLayout(BoxLayout(self.right_panel, BoxLayout.Y_AXIS))
-        self.right_panel.add(self.beta_plot_panel)
-        self.right_panel.add(self.phase_plot_panel)
-        self.right_panel.add(self.bpm_plot_panel)
-        self.add(self.right_panel, BorderLayout.CENTER)
+        for panel in [self.phase_plot_panel, self.beta_plot_panel]:
+            panel.set_xlim(0.0, rtbt_length, 20.0)
+            panel.setBorder(BorderFactory.createEmptyBorder())
         self.update_plots()
 
-    def read_bpms(self):
-        x_avgs = list([bpm.getXAvg() for bpm in self.bpms])
-        y_avgs = list([bpm.getYAvg() for bpm in self.bpms])
-        return x_avgs, y_avgs
+
+        # Build the main panel
+        # ------------------------------------------------------------------------
+        left_panel = JPanel()
+        left_panel.setBorder(BorderFactory.createEtchedBorder())
+
+        _pan = JPanel()
+        _pan.setLayout(BoxLayout(_pan, BoxLayout.Y_AXIS))
+        _pan.add(scan_optics_panel)
+        _pan.add(self.phase_scan_plot_panel)
+        self.phase_scan_plot_panel.setPreferredSize(Dimension(400, 250))
+        row = JPanel()
+        row.add(self.calculate_scan_optics_button)
+        self.progress_bar = JProgressBar(0, int(self.n_steps_text_field.getText()))
+        self.progress_bar.setValue(0)
+        self.progress_bar.setStringPainted(True)
+        row.add(self.progress_bar)
+        _pan.add(row)
+
+        _pan.setBorder(BorderFactory.createEtchedBorder())
+        machine_update_panel.setBorder(BorderFactory.createEtchedBorder())
+
+        left_panel.setLayout(GridBagLayout())
+        c = GridBagConstraints()
+        c.gridwidth = GridBagConstraints.REMAINDER
+        c.anchor = GridBagConstraints.NORTHWEST
+        c.fill = GridBagConstraints.HORIZONTAL
+        left_panel.add(_pan, c)
+        c.weighty = 1.0
+        left_panel.add(JPanel(), c)
+        c.weighty = 0.0
+        c.anchor = GridBagConstraints.SOUTHWEST
+        left_panel.add(machine_update_panel, c)
+
+        right_panel = JPanel()
+        right_panel.setBorder(BorderFactory.createEtchedBorder())
+        right_panel.setLayout(BoxLayout(right_panel, BoxLayout.Y_AXIS))
+        temp = JPanel()
+        temp.add(JButton("Hello"))
+        right_panel.add(temp)
+        right_panel.add(self.beta_plot_panel)
+        right_panel.add(self.phase_plot_panel)
+
+        c = GridBagConstraints()
+        c.weightx = 0.01
+        c.weighty = 0.5
+        c.fill = GridBagConstraints.VERTICAL
+        c.anchor = GridBagConstraints.NORTHWEST
+        self.add(left_panel, c)
+        c.weightx = 1.0
+        c.gridwidth = 5
+        c.fill = GridBagConstraints.BOTH
+        self.add(right_panel, c)
+
+
 
     def update_plots(self):
         # Plot model beta functions and phase advances.
@@ -245,38 +296,36 @@ class PhaseControllerPanel(JPanel):
         phases_x, phases_y = [], []
         self.phase_controller.track()
         for params in self.phase_controller.tracked_twiss():
-            mu_x, mu_y, alpha_x, alpha_y, beta_x, beta_y, eps_x, eps_y = params
+            mux, muy, alpha_x, alpha_y, beta_x, beta_y, eps_x, eps_y = params
             betas_x.append(beta_x)
             betas_y.append(beta_y)
-            phases_x.append(mu_x)
-            phases_y.append(mu_y)
+            phases_x.append(mux)
+            phases_y.append(muy)
         positions = self.phase_controller.positions
         self.beta_plot_panel.set_data(positions, [betas_x, betas_y])
         self.phase_plot_panel.set_data(positions, [phases_x, phases_y])
 
-        # Plot BPM readings.
-        x_avgs, y_avgs = self.read_bpms()
-        self.bpm_plot_panel.set_data(self.bpm_positions, [x_avgs, y_avgs])
-
         # Add a vertical line at each wire-scanner locations.
         ref_ws_index = self.ws_ids.index(self.ref_ws_id_dropdown.getSelectedItem())
-        for plot_panel in [
-            self.beta_plot_panel,
-            self.phase_plot_panel,
-            self.bpm_plot_panel,
-        ]:
+        for plot_panel in [self.beta_plot_panel, self.phase_plot_panel]:
             for i, ws_position in enumerate(self.ws_positions):
                 color = (
                     Color(150, 150, 150) if i == ref_ws_index else Color(225, 225, 225)
                 )
                 plot_panel.addVerticalLine(ws_position, color)
 
-    def get_field_set_kws(self):
-        field_set_kws = {
-            "sleep_time": float(self.sleep_time_text_field.getText()),
-            "max_frac_change": float(self.max_frac_change_text_field.getText()),
-        }
-        return field_set_kws
+        # Show phase scan
+        phase_coverage = float(self.phase_coverage_text_field.getText())
+        n_steps = int(self.n_steps_text_field.getText())
+        scan_type = self.scan_type_dropdown.getSelectedItem()
+        phases = self.phase_controller.get_phases_for_scan(
+            phase_coverage, n_steps, scan_type
+        )
+        self.phase_scan_plot_panel.set_data(
+            list(range(n_steps)),
+            [[mux for (mux, muy) in phases],
+             [muy for (mux, muy) in phases]],
+        )
 
 
 # Tables
@@ -287,19 +336,16 @@ class QuadSettingsTableModel(AbstractTableModel):
         self.phase_controller = panel.phase_controller
         self.quad_ids = self.phase_controller.ind_quad_ids
         self.column_names = ["Quad", "Model [T/m]", "Live [T/m]"]
-        self.nf4 = NumberFormat.getInstance()
-        self.nf4.setMaximumFractionDigits(4)
-        self.nf3 = NumberFormat.getInstance()
-        self.nf3.setMaximumFractionDigits(3)
+        self.decimals = 3
 
     def getValueAt(self, row, col):
         quad_id = self.quad_ids[row]
         if col == 0:
             return quad_id
         elif col == 1:
-            return self.phase_controller.get_field(quad_id, "model")
+            return round(self.phase_controller.get_field(quad_id, "model"), self.decimals)
         elif col == 2:
-            return self.phase_controller.get_field(quad_id, "live")
+            return round(self.phase_controller.get_field(quad_id, "live"), self.decimals)
 
     def getColumnCount(self):
         return len(self.column_names)
@@ -315,31 +361,37 @@ class InitTwissTableModel(AbstractTableModel):
     def __init__(self, panel):
         self.panel = panel
         self.phase_controller = panel.phase_controller
-        self.column_names = [
-            "<html>&alpha;<SUB>x</SUB> [m/rad]<html>",
-            "<html>&alpha;<SUB>y</SUB> [m/rad]<html>",
+        self.decimals = 3
+        self.names = [
+            "<html>&alpha;<SUB>x</SUB><html>",
+            "<html>&alpha;<SUB>y</SUB><html>",
             "<html>&beta;<SUB>x</SUB> [m/rad]<html>",
             "<html>&beta;<SUB>y</SUB> [m/rad]<html>",
         ]
 
     def getValueAt(self, row, col):
         if col == 0:
-            return self.phase_controller.init_twiss["alpha_x"]
-        elif col == 1:
-            return self.phase_controller.init_twiss["alpha_y"]
-        elif col == 2:
-            return self.phase_controller.init_twiss["beta_x"]
-        elif col == 3:
-            return self.phase_controller.init_twiss["beta_y"]
+            return self.names[row]
+        if row == 0:
+            return round(self.phase_controller.init_twiss["alpha_x"], self.decimals)
+        elif row == 1:
+            return round(self.phase_controller.init_twiss["alpha_y"], self.decimals)
+        elif row == 2:
+            return round(self.phase_controller.init_twiss["beta_x"], self.decimals)
+        elif row == 3:
+            return round(self.phase_controller.init_twiss["beta_y"], self.decimals)
 
     def getColumnCount(self):
-        return len(self.column_names)
+        return 2
 
     def getRowCount(self):
-        return 1
+        return 4
 
     def getColumnName(self, col):
-        return self.column_names[col]
+        if col == 0:
+            return 'Initial Twiss parameter'
+        elif col == 1:
+            return 'Value'
 
     def isCellEditable(self, row, col):
         return True
@@ -376,7 +428,7 @@ class RefWsIdDropdownListener(ActionListener):
 
     def actionPerformed(self, event):
         self.phase_controller.ref_ws_id = self.dropdown.getSelectedItem()
-        if hasattr(self.panel, "right_panel"):
+        if hasattr(self.panel, "plot_panel"):
             self.panel.update_plots()
         print("Updated ref_ws_id to {}".format(self.phase_controller.ref_ws_id))
 
@@ -403,8 +455,9 @@ class TwissTableListener(CellEditorListener):
 
     def editingStopped(self, event):
         value = float(self.cell_editor.getCellEditorValue())
+        row = self.table.getSelectedRow()
         col = self.table.getSelectedColumn()
-        key = ["alpha_x", "alpha_y", "beta_x", "beta_y"][col]
+        key = ["alpha_x", "alpha_y", "beta_x", "beta_y"][row]
         self.phase_controller.init_twiss[key] = value
         self.table.getModel().fireTableDataChanged()
         self.phase_controller.track()
@@ -412,7 +465,7 @@ class TwissTableListener(CellEditorListener):
         print("Updated initial Twiss:", self.phase_controller.init_twiss)
 
 
-class CalculateModelOpticsButtonListener(ActionListener):
+class CalculateScanOpticsButtonListener(ActionListener):
     def __init__(self, panel):
         self.panel = panel
         self.phase_controller = panel.phase_controller
@@ -435,27 +488,24 @@ class CalculateModelOpticsButtonListener(ActionListener):
         phases = self.phase_controller.get_phases_for_scan(
             phase_coverage, n_steps, scan_type
         )
-        print("index | mu_x  | mu_y [rad]")
+        print("index | mux  | muy [rad]")
         print("---------------------")
-        for scan_index, (mu_x, mu_y) in enumerate(phases):
-            print("{:<5} | {:.3f} | {:.3f}".format(scan_index, mu_x, mu_y))
+        for scan_index, (mux, muy) in enumerate(phases):
+            print("{:<5} | {:.3f} | {:.3f}".format(scan_index, mux, muy))
 
         # Compute the optics needed for step in the scan.
         self.panel.progress_bar.setValue(0)
         self.panel.progress_bar.setMaximum(n_steps)
 
-        for scan_index, (mu_x, mu_y) in enumerate(phases):
+        for scan_index, (mux, muy) in enumerate(phases):
             # Set the model optics.
             print("Scan index = {}/{}.".format(scan_index, n_steps - 1))
             print("Setting phases at {}...".format(self.phase_controller.ref_ws_id))
-            self.phase_controller.set_ref_ws_phases(mu_x, mu_y, beta_lims, verbose=1)
+            self.phase_controller.set_ref_ws_phases(mux, muy, beta_lims, verbose=1)
 
             # Constrain beam size on target if it's too far from the default.
             beta_x_target, beta_y_target = self.phase_controller.beta_funcs("RTBT:Tgt")
-            (
-                beta_x_default,
-                beta_y_default,
-            ) = self.phase_controller.default_betas_at_target
+            beta_x_default, beta_y_default = self.phase_controller.default_betas_at_target
             frac_change_x = abs(beta_x_target - beta_x_default) / beta_x_default
             frac_change_y = abs(beta_y_target - beta_y_default) / beta_y_default
             tol = 0.05
@@ -484,6 +534,14 @@ class CalculateModelOpticsButtonListener(ActionListener):
         self.phase_controller.track()
 
 
+class ScanSettingsListener(ActionListener):
+    def __init__(self, panel):
+        self.panel = panel
+
+    def actionPerformed(self, action):
+        self.panel.update_plots()
+
+
 class SetLiveOpticsButton1Listener(ActionListener):
     def __init__(self, panel):
         self.panel = panel
@@ -492,10 +550,9 @@ class SetLiveOpticsButton1Listener(ActionListener):
 
     def actionPerformed(self, action):
         quad_ids = self.phase_controller.ind_quad_ids
-        field_set_kws = self.panel.get_field_set_kws()
         scan_index = self.panel.scan_index_dropdown.getSelectedItem()
         print("Syncing live quads with model...")
-        print(field_set_kws)
+        print(FIELD_SET_KWS)
         if scan_index == "default":
             self.phase_controller.restore_default_optics("model")
             self.phase_controller.restore_default_optics("live")
@@ -503,7 +560,7 @@ class SetLiveOpticsButton1Listener(ActionListener):
             scan_index = int(scan_index)
             fields = self.panel.model_fields_list[scan_index]
             self.phase_controller.set_fields(quad_ids, fields, "model")
-            self.phase_controller.set_fields(quad_ids, fields, "live", **field_set_kws)
+            self.phase_controller.set_fields(quad_ids, fields, "live", **FIELD_SET_KWS)
         self.panel.quad_settings_table.getModel().fireTableDataChanged()
         self.panel.update_plots()
         print("Done.")
@@ -545,9 +602,8 @@ class SetLiveOpticsButton2Listener(ActionListener):
 
         # Sync the live optics with the model.
         print("Syncing live quads with model...")
-        field_set_kws = self.panel.get_field_set_kws()
-        print(field_set_kws)
-        # self.phase_controller.sync_live_with_model(**field_set_kws)
+        print(FIELD_SET_KWS)
+        self.phase_controller.sync_live_with_model(**FIELD_SET_KWS)
         self.panel.quad_settings_table.getModel().fireTableDataChanged()
         self.panel.update_plots()
         print("Done.")

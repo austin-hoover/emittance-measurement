@@ -194,12 +194,12 @@ class AnalysisPanel(JPanel):
         self.bottom_right_panel_A_top.add(self.norm_label)
         self.bottom_right_panel_A_top.add(self.norm_dropdown)
         self.corner_plot_panel = plt.CornerPlotPanel()
-        self.corner_plot_panel.setPreferredSize(Dimension(500, 500))
+        # self.corner_plot_panel.setPreferredSize(Dimension(500, 500))
         for panel in self.corner_plot_panel.plots.values():
             panel.xMarkersOn(False)
             panel.yMarkersOn(False)
         self.bottom_right_panel_A.add(self.bottom_right_panel_A_top, BorderLayout.NORTH)
-        self.bottom_right_panel_A.add(self.corner_plot_panel, BorderLayout.WEST)
+        self.bottom_right_panel_A.add(self.corner_plot_panel, BorderLayout.CENTER)
 
         self.bottom_right_panel_B = JPanel()
         self.bottom_right_panel_B.setLayout(
@@ -223,23 +223,32 @@ class AnalysisPanel(JPanel):
             self.bottom_right_panel_B.add(panel)
 
         self.bottom_right_pane = JTabbedPane()
-        self.bottom_right_pane.setPreferredSize(Dimension(725, 500))
-        self.bottom_right_pane.addTab(
-            "Phase space projections", self.bottom_right_panel_A
-        )
+        # self.bottom_right_pane.setPreferredSize(Dimension(725, 500))
+        self.bottom_right_pane.addTab("Phase space projections", self.bottom_right_panel_A)
         self.bottom_right_pane.addTab("Emittances", self.bottom_right_panel_B)
 
         self.bottom_panel = JPanel()
-        self.bottom_panel.setBorder(BorderFactory.createLineBorder(Color.black))
-        self.bottom_panel.setLayout(BorderLayout())
+        self.bottom_panel.setBorder(BorderFactory.createEtchedBorder())
+        self.bottom_panel.setLayout(GridBagLayout())
+        c = GridBagConstraints()
 
-        self.bottom_panel.setPreferredSize(Dimension(1100, 550))
-        self.bottom_panel.add(self.bottom_left_panel, BorderLayout.WEST)
-        self.bottom_panel.add(self.bottom_right_pane, BorderLayout.EAST)
+        # self.bottom_panel.setPreferredSize(Dimension(1100, 550))
+        c.gridx = 0
+        c.gridy = 0
+        c.weightx = 0.5
+        c.weighty = 0.5
+        c.fill = GridBagConstraints.BOTH
+        c.anchor = GridBagConstraints.WEST
+        self.bottom_panel.add(self.bottom_left_panel, c)
+        c.gridx = 1
+        c.gridy = 0
+        c.gridwidth = GridBagConstraints.REMAINDER
+        c.fill = GridBagConstraints.BOTH
+        self.bottom_panel.add(self.bottom_right_pane, c)
 
         # Build the main panel
         self.add(self.top_panel, BorderLayout.NORTH)
-        self.add(self.bottom_panel, BorderLayout.SOUTH)
+        self.add(self.bottom_panel, BorderLayout.CENTER)
 
     def update_tables(self):
         self.results_table.getModel().fireTableDataChanged()
