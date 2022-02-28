@@ -159,7 +159,6 @@ class BeamStats:
 
         if Sigmas is not None:
             self.Sigmas = Sigmas
-
             (
                 ran_eps_x_list,
                 ran_eps_y_list,
@@ -299,10 +298,10 @@ def reconstruct(
     A, b = [], []
     for M, (sig_xx, sig_yy, sig_xy) in zip(transfer_mats, moments):
         A.append(
-            [M[0][0] ** 2, M[0][1] ** 2, 2 * M[0][0] * M[0][1], 0, 0, 0, 0, 0, 0, 0]
+            [M[0][0]**2, M[0][1]**2, 2 * M[0][0] * M[0][1], 0, 0, 0, 0, 0, 0, 0]
         )
         A.append(
-            [0, 0, 0, M[2][2] ** 2, M[2][3] ** 2, 2 * M[2][2] * M[2][3], 0, 0, 0, 0]
+            [0, 0, 0, M[2][2]**2, M[2][3]**2, 2 * M[2][2] * M[2][3], 0, 0, 0, 0]
         )
         A.append(
             [

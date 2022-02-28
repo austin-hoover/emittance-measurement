@@ -1,10 +1,11 @@
-"""Analyze wire-scanner files."""
+"""Analyze wire-scanner files.
+
+To do: clean up.
+"""
 from __future__ import print_function
 import os
 import math
-from math import sqrt
-import random
-from pprint import pprint
+from collections import Counter
 
 from Jama import Matrix
 
@@ -22,6 +23,8 @@ from java.awt.event import WindowAdapter
 from java.awt.geom import Ellipse2D
 from javax.swing import BorderFactory
 from javax.swing import BoxLayout
+from javax.swing import DefaultCellEditor
+from javax.swing.table import DefaultTableModel
 from javax.swing import GroupLayout
 from javax.swing import JButton
 from javax.swing import JCheckBox
@@ -31,6 +34,7 @@ from javax.swing import JFrame
 from javax.swing import JLabel
 from javax.swing import JPanel
 from javax.swing import JProgressBar
+from javax.swing import JScrollPane
 from javax.swing import JTable
 from javax.swing import JTabbedPane
 from javax.swing import JTextField
@@ -82,11 +86,12 @@ class AnalysisPanel(JPanel):
         self.build_panel()
 
     def clear_data(self):
+        self.groups = 0
+        self.grouped_meas_indices = None
         self.measurements = []
         self.moments_dict = dict()
         self.tmats_dict = dict()
         self.beam_stats = None
-        self.beam_stats_ind = None
         self.model_twiss = dict()
 
     def build_panel(self):
@@ -100,7 +105,7 @@ class AnalysisPanel(JPanel):
         self.export_data_button.addActionListener(
             ExportDataButtonListener(self, "_output")
         )
-        self.meas_index_label = JLabel("Measurement index to plot")
+        self.meas_index_label = JLabel("Measurement to plot")
         self.meas_index_dropdown = JComboBox([0])
         self.meas_index_dropdown.addActionListener(MeasIndexDropdownListener(self))
         self.kinetic_energy_label = JLabel("Energy [GeV]")
@@ -134,14 +139,19 @@ class AnalysisPanel(JPanel):
             panel.setNumberFormatY(DecimalFormat("#.##"))
             self.profile_plots_panel.add(panel)
 
-        self.top_panel = JPanel()
-        self.top_panel.setLayout(BorderLayout())
-        self.top_panel.setPreferredSize(Dimension(1100, 225))
-        self.top_panel.add(self.top_top_panel, BorderLayout.NORTH)
-        self.top_panel.add(self.profile_plots_panel)
+        top_panel = JPanel()
+        top_panel.setLayout(BorderLayout())
+        top_panel.setPreferredSize(Dimension(1100, 225))
+        top_panel.add(self.top_top_panel, BorderLayout.NORTH)
+        top_panel.add(self.profile_plots_panel)
 
         # Bottom panel
         # -------------------------------------------------------------------------------
+        self.group_meas_table = JTable(DefaultTableModel([['Measurement 0', 'Group 0']], ['Measurement', 'Group']))
+        self.group_meas_table.getColumnModel().getColumn(1).setPreferredWidth(25)
+        self.group_label = JLabel('Group')
+        self.group_dropdown = JComboBox(['0'])
+        self.group_dropdown.addActionListener(GroupDropdownListener(self))
         self.reconstruct_covariance_button = JButton("Reconstruct covariance matrix")
         self.reconstruct_covariance_button.addActionListener(
             ReconstructCovarianceButtonListener(self)
@@ -152,41 +162,56 @@ class AnalysisPanel(JPanel):
         self.reconstruction_point_dropdown.addActionListener(
             ReconstructionPointDropdownListener(self)
         )
+        self.frac_noise_text_field = JTextField('0.030')
+        self.n_trials_text_field = JTextField('2000')
         self.results_table = JTable(ResultsTableModel(self))
         self.results_table.setShowGrid(True)
         self.norm_label = JLabel("Normalization")
         self.norm_dropdown = JComboBox(["None", "2D", "4D"])
         self.norm_dropdown.addActionListener(NormDropdownListener(self))
         self.keep_physical_checkbox = JCheckBox("Keep answer physical", False)
+        self.persevere_checkbox = JCheckBox('Persevere', True)
 
-        self.bottom_left_panel = JPanel()
-        self.bottom_left_panel.setLayout(BorderLayout())
+        bottom_left_panel = JPanel()
+        bottom_left_panel.setLayout(BoxLayout(bottom_left_panel, BoxLayout.Y_AXIS))
+
+        bottom_left_panel.add(JScrollPane(self.group_meas_table))
+
         bottom_left_top_panel = JPanel()
-        bottom_left_top_panel.setLayout(
-            BoxLayout(bottom_left_top_panel, BoxLayout.Y_AXIS)
-        )
-        temp_panel = JPanel()
-        temp_panel.setLayout(FlowLayout(FlowLayout.LEFT))
-        temp_panel.add(self.reconstruct_covariance_button)
-        bottom_left_top_panel.add(temp_panel)
-        bottom_left_top_panel1 = JPanel()
-        bottom_left_top_panel1.setLayout(FlowLayout(FlowLayout.LEFT))
-        bottom_left_top_panel1.add(self.reconstruction_point_label)
-        bottom_left_top_panel1.add(self.reconstruction_point_dropdown)
-        bottom_left_top_panel2 = JPanel()
-        bottom_left_top_panel2.setLayout(FlowLayout(FlowLayout.LEFT))
-        bottom_left_top_panel2.add(self.keep_physical_checkbox)
+        bottom_left_top_panel.setLayout(BoxLayout(bottom_left_top_panel, BoxLayout.Y_AXIS))
+        row = JPanel()
+        row.setLayout(FlowLayout(FlowLayout.LEFT))
+        row.add(self.reconstruct_covariance_button)
+        bottom_left_top_panel.add(row)
+        row = JPanel()
+        row.setLayout(FlowLayout(FlowLayout.LEFT))
+        row.add(self.reconstruction_point_label)
+        row.add(self.reconstruction_point_dropdown)
+        row.add(self.keep_physical_checkbox)
+        bottom_left_top_panel.add(row)
+        row = JPanel()
+        row.setLayout(FlowLayout(FlowLayout.LEFT))
+        row.add(JLabel('Frac. noise'))
+        row.add(self.frac_noise_text_field)
+        row.add(JLabel('Trials'))
+        row.add(self.n_trials_text_field)
+        row.add(self.persevere_checkbox)
+        bottom_left_top_panel.add(row)
 
-        bottom_left_top_panel.add(bottom_left_top_panel1)
-        bottom_left_top_panel.add(bottom_left_top_panel2)
-        self.bottom_left_panel.add(bottom_left_top_panel, BorderLayout.NORTH)
+        row = JPanel()
+        row.setLayout(FlowLayout(FlowLayout.LEFT))
+        row.add(self.group_label)
+        row.add(self.group_dropdown)
+        bottom_left_top_panel.add(row)
+        bottom_left_panel.add(bottom_left_top_panel)
+
         bottom_left_bottom_panel = JPanel()
         bottom_left_bottom_panel.setLayout(BorderLayout())
         bottom_left_bottom_panel.add(
             self.results_table.getTableHeader(), BorderLayout.NORTH
         )
         bottom_left_bottom_panel.add(self.results_table)
-        self.bottom_left_panel.add(bottom_left_bottom_panel)
+        bottom_left_panel.add(bottom_left_bottom_panel)
 
         self.bottom_right_panel_A = JPanel()
         self.bottom_right_panel_A.setLayout(BorderLayout())
@@ -194,7 +219,6 @@ class AnalysisPanel(JPanel):
         self.bottom_right_panel_A_top.add(self.norm_label)
         self.bottom_right_panel_A_top.add(self.norm_dropdown)
         self.corner_plot_panel = plt.CornerPlotPanel()
-        # self.corner_plot_panel.setPreferredSize(Dimension(500, 500))
         for panel in self.corner_plot_panel.plots.values():
             panel.xMarkersOn(False)
             panel.yMarkersOn(False)
@@ -212,7 +236,7 @@ class AnalysisPanel(JPanel):
             plt.LinePlotPanel(
                 n_lines=4,
                 grid="y",
-                xlabel="Measurement index",
+                xlabel="Group",
                 ylabel="[mm^2 mrad^2]",
                 title="4D emittance",
             ),
@@ -223,41 +247,68 @@ class AnalysisPanel(JPanel):
             self.bottom_right_panel_B.add(panel)
 
         self.bottom_right_pane = JTabbedPane()
-        # self.bottom_right_pane.setPreferredSize(Dimension(725, 500))
         self.bottom_right_pane.addTab("Phase space projections", self.bottom_right_panel_A)
         self.bottom_right_pane.addTab("Emittances", self.bottom_right_panel_B)
 
-        self.bottom_panel = JPanel()
-        self.bottom_panel.setBorder(BorderFactory.createEtchedBorder())
-        self.bottom_panel.setLayout(GridBagLayout())
+        # Build the bottom panel.
+        bottom_panel = JPanel()
+        bottom_panel.setBorder(BorderFactory.createEtchedBorder())
+        bottom_panel.setLayout(GridBagLayout())
         c = GridBagConstraints()
 
-        # self.bottom_panel.setPreferredSize(Dimension(1100, 550))
         c.gridx = 0
         c.gridy = 0
-        c.weightx = 0.5
+        c.weightx = 0.25
         c.weighty = 0.5
         c.fill = GridBagConstraints.BOTH
         c.anchor = GridBagConstraints.WEST
-        self.bottom_panel.add(self.bottom_left_panel, c)
+        bottom_panel.add(bottom_left_panel, c)
+
         c.gridx = 1
         c.gridy = 0
+        c.gridwidth = 2
+        c.weightx = 1.0
         c.gridwidth = GridBagConstraints.REMAINDER
         c.fill = GridBagConstraints.BOTH
-        self.bottom_panel.add(self.bottom_right_pane, c)
+        bottom_panel.add(self.bottom_right_pane, c)
 
         # Build the main panel
-        self.add(self.top_panel, BorderLayout.NORTH)
-        self.add(self.bottom_panel, BorderLayout.CENTER)
+        self.setLayout(GridBagLayout())
+        c = GridBagConstraints()
+        c.gridy = 0
+        c.weightx = 1.0
+        c.weighty = 0.4
+        c.fill = GridBagConstraints.BOTH
+        self.add(top_panel, c)
+        c.gridy = 1
+        c.weightx = 1.0
+        c.weighty = 1.0
+        c.gridheight = 4
+        c.fill = GridBagConstraints.BOTH
+        self.add(bottom_panel, c)
 
-    def update_tables(self):
-        self.results_table.getModel().fireTableDataChanged()
+    def reset_grouping(self):
+        data = [[self.measurements[i].filename_short, 'Group {}'.format(i)]
+                for i in range(len(self.measurements))]
+        col_names = ['Measurement', 'Group']
+        n_meas = len(self.measurements)
+        self.groups = n_meas
+        group_options = JComboBox(['Group {}'.format(i) for i in range(self.groups)])
+        group_options.addActionListener(GroupOptionsListener(self))
+        self.group_meas_table.setModel(DefaultTableModel(data, col_names))
+        self.group_meas_table.getColumnModel().getColumn(1).setCellEditor(
+            DefaultCellEditor(group_options)
+        )
+        self.group_meas_table.setFillsViewportHeight(True)
+        self.group_meas_table.getModel().fireTableDataChanged()
+        self.group_dropdown.removeAllItems()
+        for i in range(n_meas):
+            self.group_dropdown.addItem(str(i))
 
     def update_plots(self):
         measurements = self.measurements
         tmats_dict = self.tmats_dict
         moments_dict = self.moments_dict
-        beam_stats = self.beam_stats
 
         # Clear the plots if there is no data.
         if not measurements:
@@ -321,14 +372,16 @@ class AnalysisPanel(JPanel):
             return
 
         # Plot the 2D projections of the rms ellipsoid (x^T Sigma x = 1).
-        Sigma = self.beam_stats.Sigma
+        group = int(self.group_dropdown.getSelectedItem())
+        beam_stats = self.beam_stats[group]
+        Sigma = beam_stats.Sigma
         V = utils.identity_matrix(4)
         norm = self.norm_dropdown.getSelectedItem()
         if norm == "2D":
-            alpha_x = self.beam_stats.alpha_x
-            alpha_y = self.beam_stats.alpha_y
-            beta_x = self.beam_stats.beta_x
-            beta_y = self.beam_stats.beta_y
+            alpha_x = beam_stats.alpha_x
+            alpha_y = beam_stats.alpha_y
+            beta_x = beam_stats.beta_x
+            beta_y = beam_stats.beta_y
             V = analysis.V_matrix_uncoupled(alpha_x, alpha_y, beta_x, beta_y)
         elif norm == "4D":
             U = Matrix([[0, 1, 0, 0], [-1, 0, 0, 0], [0, 0, 0, 1], [0, 0, -1, 0]])
@@ -337,7 +390,6 @@ class AnalysisPanel(JPanel):
             V = eig.getV()
         Vinv = V.inverse()
         Sigma = Vinv.times(Sigma.times(Vinv.transpose()))
-
         self.corner_plot_panel.clear()
         self.corner_plot_panel.rms_ellipses(Sigma)
 
@@ -347,7 +399,7 @@ class AnalysisPanel(JPanel):
             x_max = math.sqrt(sig_xx)
             y_max = math.sqrt(sig_yy)
             x_vals, xp_vals, y_vals, yp_vals = [], [], [], []
-            for slope in [-100, 100]:
+            for slope in [-100.0, 100.0]:
                 vec_1 = utils.list_to_col_mat([x_max, slope, 0, 0])
                 vec_0 = Minv.times(vec_1)
                 vec_0 = Vinv.times(vec_0)
@@ -364,17 +416,17 @@ class AnalysisPanel(JPanel):
         yyp_panel = self.corner_plot_panel.plots["y-yp"]
         node_ids = sorted(list(tmats_dict))
         for node_id, color in zip(node_ids, plt.CYCLE_538):
-            for M, (sig_xx, sig_yy, sig_uu, sig_xy) in zip(
-                tmats_dict[node_id], moments_dict[node_id]
+            for meas_index, (M, (sig_xx, sig_yy, sig_uu, sig_xy)) in enumerate(
+                    zip(tmats_dict[node_id], moments_dict[node_id])
             ):
-                M = Matrix(M)
-                x_vals, xp_vals, y_vals, yp_vals = possible_points(M, sig_xx, sig_yy)
-                xxp_panel.plot(x_vals, xp_vals, color=color, ms=0, lw=2)
-                yyp_panel.plot(y_vals, yp_vals, color=color, ms=0, lw=2)
+                if meas_index in self.grouped_meas_indices[group]:
+                    M = Matrix(M)
+                    x_vals, xp_vals, y_vals, yp_vals = possible_points(M, sig_xx, sig_yy)
+                    xxp_panel.plot(x_vals, xp_vals, color=color, ms=0, lw=2)
+                    yyp_panel.plot(y_vals, yp_vals, color=color, ms=0, lw=2)
 
-        # Plot emittance vs. measurement index. Each emittance is calculated only from that
-        # measurement index.
-        meas_indices = []
+        # Plot emittance vs. group number.
+        groups = []
         eps_x_list = []
         eps_y_list = []
         eps_1_list = []
@@ -393,8 +445,8 @@ class AnalysisPanel(JPanel):
         ran_eps_2_std_list = []
         ran_eps_x_eps_y_std_list = []
         ran_eps_1_eps_2_std_list = []
-        for meas_index, beam_stats in enumerate(self.beam_stats_ind):
-            meas_indices.append(meas_index)
+        for group, beam_stats in enumerate(self.beam_stats):
+            groups.append(group)
             eps_x_list.append(beam_stats.eps_x)
             eps_y_list.append(beam_stats.eps_y)
             eps_1_list.append(beam_stats.eps_1)
@@ -438,10 +490,10 @@ class AnalysisPanel(JPanel):
             zip(data_lists, mean_lists, std_lists)
         ):
             self.emittance_plot_panels[0].plot(
-                meas_indices, data_list, color=plt.CYCLE_COLORBLIND[i], **plt_kws
+                groups, data_list, color=plt.CYCLE_COLORBLIND[i], **plt_kws
             )
             self.emittance_plot_panels[0].plot(
-                meas_indices,
+                groups,
                 mean_list,
                 yerrs=std_list,
                 color=plt.CYCLE_COLORBLIND[i],
@@ -460,10 +512,10 @@ class AnalysisPanel(JPanel):
             zip(data_lists, mean_lists, std_lists)
         ):
             self.emittance_plot_panels[1].plot(
-                meas_indices, data_list, color=colors[i], **plt_kws
+                groups, data_list, color=colors[i], **plt_kws
             )
             self.emittance_plot_panels[1].plot(
-                meas_indices,
+                groups,
                 mean_list,
                 yerrs=std_list,
                 color=colors[i],
@@ -476,7 +528,7 @@ class AnalysisPanel(JPanel):
 
         # Pad the x axis limits.
         for plot_panel in self.emittance_plot_panels:
-            plot_panel.set_xlim(-1, meas_indices[-1] + 1, 1.0)
+            plot_panel.set_xlim(-1, groups[-1] + 1, 1.0)
 
         graph_data_list = self.emittance_plot_panels[0].getAllGraphData()
         for i, label in enumerate(["eps_x", "eps_y", "eps_1", "eps_2"]):
@@ -511,19 +563,6 @@ class AnalysisPanel(JPanel):
         self.model_twiss["alpha_y"] = alpha_y
         self.model_twiss["beta_x"] = beta_x
         self.model_twiss["beta_y"] = beta_y
-
-    def compute_design_twiss(self):
-        """Get the design Twiss parameters at the reconstruction point."""
-        alpha_x, alpha_y, beta_x, beta_y = optics.compute_model_twiss(
-            self.reconstruction_node_id,
-            self.kinetic_energy,
-            pvloggerid=None,
-            sync_mode="design",
-        )
-        self.design_twiss["alpha_x"] = alpha_x
-        self.design_twiss["alpha_y"] = alpha_y
-        self.design_twiss["beta_x"] = beta_x
-        self.design_twiss["beta_y"] = beta_y
 
     def ws_phases(self):
         """Compute model phase advance to each wire-scanner for each measurement.
@@ -587,10 +626,29 @@ class AnalysisPanel(JPanel):
 
 # Tables
 # -------------------------------------------------------------------------------
+class GroupOptionsListener(ActionListener):
+    def __init__(self, panel):
+        self.panel = panel
+        self.table = panel.group_meas_table
+
+    def actionPerformed(self, event):
+        self.panel.groups = len(self.panel.measurements)
+        if self.panel.groups == 0:
+            return
+        counter = Counter(
+            [self.table.getModel().getValueAt(row, 1) for row in range(self.table.getRowCount())]
+        )
+        self.panel.groups = len(counter.keys())
+        self.panel.group_dropdown.removeAllItems()
+        for group in range(self.panel.groups):
+            self.panel.group_dropdown.addItem(str(group))
+        print('There are now {} groups'.format(self.panel.groups))
+
+
 class ResultsTableModel(AbstractTableModel):
     def __init__(self, panel):
         self.panel = panel
-        self.column_names = ["Parameters", "Measured", "Model", "Design"]
+        self.column_names = ["Parameter", "Model", "Measured", "Mean", "Std."]
         self.parameter_names = [
             "<html>&epsilon;<SUB>1</SUB> [mm mrad]<html>",
             "<html>&epsilon;<SUB>2</SUB> [mm mrad]<html>",
@@ -599,20 +657,39 @@ class ResultsTableModel(AbstractTableModel):
             "C",
             "<html>&beta;<SUB>x</SUB> [m/rad]<html>",
             "<html>&beta;<SUB>y</SUB> [m/rad]<html>",
-            "<html>&alpha;<SUB>x</SUB> [rad]<html>",
-            "<html>&alpha;<SUB>y</SUB> [rad]<html>",
+            "<html>&alpha;<SUB>x</SUB><html>",
+            "<html>&alpha;<SUB>y</SUB><html>",
         ]
 
+    def round(self, value, decimals=4):
+        if type(value) is not float:
+            return value
+        return round(value, 4)
+
     def getValueAt(self, row, col):
-        beam_stats = self.panel.beam_stats
-        measurements = self.panel.measurements
-        no_calc_data = not beam_stats
-        no_meas_data = not measurements
+        no_meas_data = not self.panel.measurements
+        no_calc_data = not self.panel.beam_stats
+        if not no_calc_data:
+            group = int(self.panel.group_dropdown.getSelectedItem())
+            beam_stats = self.panel.beam_stats[group]
         if col == 0:
             return self.parameter_names[row]
-        elif col == 1:
-            if no_calc_data:
+        if col == 1:
+            if no_meas_data or row < 5:
                 return "-"
+            if not self.panel.model_twiss:
+                self.panel.compute_model_twiss()
+            if row == 5:
+                return self.round(self.panel.model_twiss["beta_x"])
+            if row == 6:
+                return self.round(self.panel.model_twiss["beta_y"])
+            if row == 7:
+                return self.round(self.panel.model_twiss["alpha_x"])
+            if row == 8:
+                return self.round(self.panel.model_twiss["alpha_y"])
+        if no_calc_data:
+            return "-"
+        if col == 2:
             data = [
                 beam_stats.eps_1,
                 beam_stats.eps_2,
@@ -624,33 +701,31 @@ class ResultsTableModel(AbstractTableModel):
                 beam_stats.alpha_x,
                 beam_stats.alpha_y,
             ]
-            return data[row]
-        elif col == 2:
-            if no_meas_data or row < 5:
-                return "-"
-            if not self.panel.model_twiss:
-                self.panel.compute_model_twiss()
-            if row == 5:
-                return self.panel.model_twiss["beta_x"]
-            if row == 6:
-                return self.panel.model_twiss["beta_y"]
-            if row == 7:
-                return self.panel.model_twiss["alpha_x"]
-            if row == 8:
-                return self.panel.model_twiss["alpha_y"]
         elif col == 3:
-            if row < 5:
-                return "-"
-            if not self.panel.design_twiss:
-                self.panel.compute_design_twiss()
-            if row == 5:
-                return self.panel.design_twiss["beta_x"]
-            if row == 6:
-                return self.panel.design_twiss["beta_y"]
-            if row == 7:
-                return self.panel.design_twiss["alpha_x"]
-            if row == 8:
-                return self.panel.design_twiss["alpha_y"]
+            data = [
+                beam_stats.ran_eps_1_mean,
+                beam_stats.ran_eps_2_mean,
+                beam_stats.ran_eps_x_mean,
+                beam_stats.ran_eps_y_mean,
+                "",
+                beam_stats.ran_beta_x_mean,
+                beam_stats.ran_beta_y_mean,
+                beam_stats.ran_alpha_x_mean,
+                beam_stats.ran_alpha_y_mean,
+            ]
+        elif col == 4:
+            data = [
+                beam_stats.ran_eps_1_std,
+                beam_stats.ran_eps_2_std,
+                beam_stats.ran_eps_x_std,
+                beam_stats.ran_eps_y_std,
+                "",
+                beam_stats.ran_beta_x_std,
+                beam_stats.ran_beta_y_std,
+                beam_stats.ran_alpha_x_std,
+                beam_stats.ran_alpha_y_std,
+            ]
+        return self.round(data[row])
 
     def getColumnCount(self):
         return len(self.column_names)
@@ -697,6 +772,8 @@ class LoadFilesButtonListener(ActionListener):
         for meas_index in range(1 if not measurements else len(measurements)):
             self.panel.meas_index_dropdown.addItem(meas_index)
         self.panel.update_plots()
+        self.panel.results_table.getModel().fireTableDataChanged()
+        self.panel.reset_grouping()
 
 
 class ClearFilesButtonListener(ActionListener):
@@ -706,7 +783,8 @@ class ClearFilesButtonListener(ActionListener):
     def actionPerformed(self, event):
         self.panel.clear_data()
         self.panel.update_plots()
-        self.panel.update_tables()
+        self.panel.results_table.getModel().fireTableDataChanged()
+        self.panel.reset_grouping()
         print("Cleared data.")
 
 
@@ -812,7 +890,8 @@ class KinEnergyTextFieldListener(ActionListener):
         kinetic_energy = 1e9 * float(self.panel.kinetic_energy_text_field.getText())
         self.panel.kinetic_energy = kinetic_energy
         self.panel.tmat_generator.set_kinetic_energy(kinetic_energy)
-        self.panel.update_tables()
+        self.panel.results_table.getModel().fireTableDataChanged()
+        self.panel.reset_grouping()
         print(
             "Updated reconstruction kinetic energy to {:.3e} [eV].".format(
                 kinetic_energy
@@ -850,6 +929,15 @@ class ReconstructionPointDropdownListener(ActionListener):
         self.panel.results_table.getModel().fireTableDataChanged()
 
 
+class GroupDropdownListener(ActionListener):
+    def __init__(self, panel):
+        self.panel = panel
+
+    def actionPerformed(self, event):
+        self.panel.results_table.getModel().fireTableDataChanged()
+        self.panel.update_plots()
+
+
 class ReconstructCovarianceButtonListener(ActionListener):
     def __init__(self, panel):
         self.panel = panel
@@ -859,65 +947,47 @@ class ReconstructCovarianceButtonListener(ActionListener):
         moments_dict = self.panel.moments_dict
         tmats_dict = self.panel.tmats_dict
         constr = self.panel.keep_physical_checkbox.isSelected()
+        node_ids = list(moments_dict)
 
         if not measurements:
             raise ValueError("No wire-scanner files have been loaded.")
 
-        # Reconstruct the covariance matrix.
-        tmats_list, moments_list = [], []
-        node_ids = list(moments_dict)
-        for node_id in node_ids:
-            moments = []
-            for (sig_xx, sig_yy, sig_uu, sig_xy) in moments_dict[node_id]:
-                moments.append([sig_xx, sig_yy, sig_xy])
-            moments_list.extend(moments)
-            tmats_list.extend(tmats_dict[node_id])
-        Sigma = analysis.reconstruct(tmats_list, moments_list, constr=constr, verbose=2)
+        # Group the measurements.
+        grouped_meas_indices = dict()
+        for meas_index, measurement in enumerate(measurements):
+            string = self.panel.group_meas_table.getModel().getValueAt(meas_index, 1)
+            group = int(string.split(' ')[-1])
+            if group not in grouped_meas_indices:
+                grouped_meas_indices[group] = []
+            grouped_meas_indices[group].append(meas_index)
+        self.panel.grouped_meas_indices = grouped_meas_indices
 
-        # Reconstruct the covariance matrix with noise added to the measured moments.
-        moments_list = []
-        for node_id in node_ids:
-            moments = []
-            for (sig_xx, sig_yy, sig_uu, sig_xy) in moments_dict[node_id]:
-                moments.append([sig_xx, sig_yy, sig_uu])
-            moments_list.extend(moments)
-        Sigmas = analysis.reconstruct_random_trials(
-            tmats_list, moments_list, frac_err=0.03, n_trials=2000
-        )
-
-        # Compute/store beam statistics.
-        beam_stats = analysis.BeamStats(Sigma, Sigmas)
-        beam_stats.print_all()
-        self.panel.beam_stats = beam_stats
-
-        # Reconstruct at each individual measurement.
-        print()
-        print("Reconstructing with each individual measurement.")
-        self.panel.beam_stats_ind = []
-        for i, measurement in enumerate(measurements):
-            print("Measurement index = {}".format(i))
-
-            # Using measured moments:
-            tmats_list, moments_list = [], []
+        # Reconstruct at each group.
+        print('Reconstructing...')
+        self.panel.beam_stats = []
+        for group in range(len(grouped_meas_indices)):
+            # Collect the moments and transfer matrices in this group.
+            _meas_indices = grouped_meas_indices[group]
+            tmats_list, moments_list_xy, moments_list_uu = [], [], []
             for node_id in node_ids:
-                sig_xx, sig_yy, sig_uu, sig_xy = moments_dict[node_id][i]
-                moments_list.append([sig_xx, sig_yy, sig_xy])
-                tmats_list.append(tmats_dict[node_id][i])
-            Sigma = analysis.reconstruct(tmats_list, moments_list, constr=constr)
-
-            # With noise added to measured moments:
-            moments_list = []
-            for node_id in node_ids:
-                sig_xx, sig_yy, sig_uu, sig_xy = moments_dict[node_id][i]
-                moments_list.append([sig_xx, sig_yy, sig_uu])
+                for meas_index in _meas_indices:
+                    tmats_list.append(tmats_dict[node_id][meas_index])
+                    sig_xx, sig_yy, sig_uu, sig_xy = moments_dict[node_id][meas_index]
+                    moments_list_xy.append([sig_xx, sig_yy, sig_xy])
+                    moments_list_uu.append([sig_xx, sig_yy, sig_uu])
+            # Reconstruct using measured moments.
+            Sigma = analysis.reconstruct(tmats_list, moments_list_xy, constr=constr, verbose=2)
+            # Reconstruct with noise.
             Sigmas = analysis.reconstruct_random_trials(
-                tmats_list, moments_list, frac_err=0.03, n_trials=1000, persevere=True
+                tmats_list,
+                moments_list_uu,
+                frac_err=float(self.panel.frac_noise_text_field.getText()),
+                n_trials=int(self.panel.n_trials_text_field.getText()),
+                persevere=bool(self.panel.persevere_checkbox.isSelected())
             )
-
             # Save statistics.
             stats = analysis.BeamStats(Sigma, Sigmas)
-            self.panel.beam_stats_ind.append(stats)
-
+            self.panel.beam_stats.append(stats)
             # Display results.
             stats.print_all()
             print("Random trials:")
@@ -938,13 +1008,12 @@ class ReconstructCovarianceButtonListener(ActionListener):
             print()
 
         # Update the panel.
-        self.panel.update_tables()
+        self.panel.results_table.getModel().fireTableDataChanged()
         self.panel.update_plots()
 
 
 class NormDropdownListener(ActionListener):
     """Normalize the plotted phase space."""
-
     def __init__(self, panel):
         self.panel = panel
 
