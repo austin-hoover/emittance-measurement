@@ -287,7 +287,7 @@ class AnalysisPanel(JPanel):
         c.fill = GridBagConstraints.BOTH
         self.add(bottom_panel, c)
 
-    def reset_grouping(self):
+    def reset_groups(self):
         data = [[self.measurements[i].filename_short, 'Group {}'.format(i)]
                 for i in range(len(self.measurements))]
         col_names = ['Measurement', 'Group']
@@ -758,22 +758,23 @@ class LoadFilesButtonListener(ActionListener):
                 files.extend(item.listFiles())
             else:
                 files.append(item)
-        filenames = [file.toString() for file in files]
-        # Make dictionaries of measured moments and transfer matrices at each wire-scanner.
+        filenames = [filename.toString() for filename in files]
+        # Read the files and add to the list of measurements.
         measurements = analysis.process(filenames)
-        moments_dict, tmats_dict = analysis.get_scan_info(
-            measurements, self.tmat_generator, self.panel.reconstruction_node_id
+        self.panel.measurements.extend(measurements)
+        # Make dictionaries of measured moments and transfer matrices at each wire-scanner.
+        self.panel.moments_dict, self.panel.tmats_dict = analysis.get_scan_info(
+            self.panel.measurements,
+            self.tmat_generator,
+            self.panel.reconstruction_node_id
         )
-        # Save data and update GUI.
-        self.panel.measurements = measurements
-        self.panel.moments_dict = moments_dict
-        self.panel.tmats_dict = tmats_dict
+        # Update GUI
         self.panel.meas_index_dropdown.removeAllItems()
-        for meas_index in range(1 if not measurements else len(measurements)):
+        for meas_index in range(1 if not self.panel.measurements else len(self.panel.measurements)):
             self.panel.meas_index_dropdown.addItem(meas_index)
         self.panel.update_plots()
         self.panel.results_table.getModel().fireTableDataChanged()
-        self.panel.reset_grouping()
+        self.panel.reset_groups()
 
 
 class ClearFilesButtonListener(ActionListener):
@@ -784,7 +785,7 @@ class ClearFilesButtonListener(ActionListener):
         self.panel.clear_data()
         self.panel.update_plots()
         self.panel.results_table.getModel().fireTableDataChanged()
-        self.panel.reset_grouping()
+        self.panel.reset_groups()
         print("Cleared data.")
 
 
@@ -891,7 +892,7 @@ class KinEnergyTextFieldListener(ActionListener):
         self.panel.kinetic_energy = kinetic_energy
         self.panel.tmat_generator.set_kinetic_energy(kinetic_energy)
         self.panel.results_table.getModel().fireTableDataChanged()
-        self.panel.reset_grouping()
+        self.panel.reset_groups()
         print(
             "Updated reconstruction kinetic energy to {:.3e} [eV].".format(
                 kinetic_energy
