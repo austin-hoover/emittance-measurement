@@ -76,7 +76,7 @@ def save_image_batch(images, filename):
 if __name__ == "__main__":
     # Get and save a batch of images to a time-stamped file.
     ig = TargetImageGetter()
-    images, timestamps = ig.get_images(n=15, sleep_time=1.75)
+    images, timestamps = ig.get_images(n=15, sleep_time=2.0)
     filename = "_output/data/image_{}.dat".format(timestamps[0])
     save_image_batch(images, filename)
     exit()
