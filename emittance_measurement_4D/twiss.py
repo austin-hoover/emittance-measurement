@@ -17,7 +17,7 @@ from xal.tools.beam.calc import CalculationsOnRings
 
 
 kin_energy = 0.8e9  # [eV]
-ypmax = 1.1  # [mrad]
+ypmax = 1.5  # [mrad]
 sync_live = True
 pvloggerid = None
 
@@ -59,13 +59,13 @@ beta_x = twissX.getBeta()
 beta_y = twissY.getBeta()
 print("Ring tunes = {}, {}".format(nux, nuy))
 print("Twiss parameters at foil:")
-print("  alpha_x = {} [rad]".format(alpha_x))
-print("  alpha_y = {} [rad]".format(alpha_y))
+print("  alpha_x = {}".format(alpha_x))
+print("  alpha_y = {}".format(alpha_y))
 print("  beta_x = {} [m/rad]".format(beta_x))
 print("  beta_y = {} [m/rad]".format(beta_y))
 
 
-gamma_x = (1 + alpha_x ** 2) / beta_x
+gamma_x = (1.0 + alpha_x**2) / beta_x
 ratio = math.sqrt(beta_y / gamma_x)
 print("To paint equal emittances with x-yp painting:")
 print("  xmax(xp=0) / ypmax(y=0) = {}".format(ratio))
