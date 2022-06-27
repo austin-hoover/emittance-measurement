@@ -50,7 +50,7 @@ kinetic_energy = 1.0e9  # [eV]
 ws_ids = ["RTBT_Diag:WS20", "RTBT_Diag:WS21", "RTBT_Diag:WS23", "RTBT_Diag:WS24"]
 ref_ws_id = "RTBT_Diag:WS24"
 rec_node_id = "RTBT_Diag:BPM17"
-n_steps_x = n_steps_y = 30
+n_steps_x = n_steps_y = 10
 dmux_lo = utils.radians(-45.0)
 dmux_hi = utils.radians(+45.0)
 dmuy_lo = utils.radians(-45.0)
