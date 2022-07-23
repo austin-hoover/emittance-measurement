@@ -48,7 +48,7 @@ def get_moments(Sigma0, tmats, frac_error=None):
     return moments
 
 
-def solve(tmats, moments):
+def solve(tmats, moments, return_type='matrix'):
     """Return the LLSQ solution from the measurements."""
     Axx, Ayy, Axy = [], [], []
     bxx, byy, bxy = [], [], []
@@ -64,9 +64,14 @@ def solve(tmats, moments):
     sig_11, sig_22, sig_12 = lsq_linear(Axx, bxx)
     sig_33, sig_44, sig_34 = lsq_linear(Ayy, byy)
     sig_13, sig_23, sig_14, sig_24 = lsq_linear(Axy, bxy)
-    Sigma = analysis.to_mat(
-        [sig_11, sig_22, sig_12, sig_33, sig_44, sig_34, sig_13, sig_23, sig_14, sig_24]
-    )
+    Sigma = [
+        [sig_11, sig_12, sig_13, sig_14],
+        [sig_12, sig_22, sig_23, sig_24],
+        [sig_13, sig_23, sig_33, sig_34],
+        [sig_14, sig_24, sig_34, sig_44],
+    ]
+    if return_type == 'matrix':
+        Sigma = Matrix(Sigma)
     return Sigma
 
 
@@ -97,6 +102,34 @@ def run_trials(Sigma0, tmats, n_trials, frac_error=None, disp=False):
     if not emittances:
         emittances = [[0.0, 0.0, 0.0, 0.0]]
     return fail_rate, emittances
+
+
+def run_trials2(Sigma0, tmats, n_trials, frac_error=None, disp=False):
+    """Repeat measurement `n_trials` times.
+    
+    Returns
+    -------
+    fail_rate : float
+        Fraction of failed trials.
+    Sigmas : list, shape (n_trials - n_fail, 4, 4)
+        Reconstructed [eps_x, eps_y, eps_1, eps_2] at each successful trial.
+    """
+    Sigmas, n_fail = [], 0
+    for i in range(n_trials):
+        moments = get_moments(Sigma0, tmats, frac_error)
+        Sigma = solve(tmats, moments, return_type='list')
+        if not analysis.is_valid_covariance_matrix(Matrix(Sigma)):
+            n_fail += 1
+            if disp:
+                print(i, "Failed.")
+            continue
+        Sigmas.append(Sigma)
+        if disp:
+            print(i, Sigma)
+    if len(Sigmas) == 0:
+        Sigmas = 4 * [4 * [0.0]]
+    fail_rate = float(n_fail) / n_trials
+    return fail_rate, Sigmas
 
 
 def uncoupled_matched_cov(alpha_x, alpha_y, beta_x, beta_y, eps_x, eps_y):

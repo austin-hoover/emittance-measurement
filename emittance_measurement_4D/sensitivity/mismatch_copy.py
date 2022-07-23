@@ -41,7 +41,7 @@ from lib import utils
 kinetic_energy = 1.0e9  # [eV]
 ws_ids = ["RTBT_Diag:WS20", "RTBT_Diag:WS21", "RTBT_Diag:WS23", "RTBT_Diag:WS24"]
 ref_ws_id = "RTBT_Diag:WS24"
-n_trials = 1000
+n_trials = 250
 frac_error = 0.03
 controller = optics.PhaseController(
     ref_ws_id=ref_ws_id, kinetic_energy=kinetic_energy, sync_mode="design",
@@ -166,10 +166,6 @@ for run, c in enumerate(cvals):
                     print(i, j, k, l)
                     Sigma = matched_cov(alpha_x, alpha_y, beta_x, beta_y, eps_x, eps_y, c=c)
                     fail_rate, emittances = run_trials(Sigma, tmats, n_trials, frac_error)
-                    
-                    if i == n // 2 and j == n // 2 and k == n // 2 and l == n // 2:
-                        utils.save_pickle('_output/data/{}_{}_{}_{}_{}.pkl'.format(c, i, j, k, l), emittances)
-                        
                     means = utils.mean_cols(emittances)
                     stds = utils.std_cols(emittances)
                     for m in range(4):
@@ -180,7 +176,7 @@ for run, c in enumerate(cvals):
     save(fail_rates, "_output/data/fail_rates_{}.pkl".format(run), pkl=True)
     save(emittance_means_list, "_output/data/emittance_means_{}.pkl".format(run), pkl=True)
     save(emittance_stds_list, "_output/data/emittance_stds_{}.pkl".format(run), pkl=True)
-    stats = analysis.BeamStats(Sigma) # We just want the emittances, which never changed (Only the Twiss parameters changed.)
+    stats = analysis.BeamStats(Sigma) # We just want the emittances, which never changed.
     save([stats.eps_x, stats.eps_y, stats.eps_1, stats.eps_2],
          "_output/data/true_emittances_{}.dat".format(run))
 

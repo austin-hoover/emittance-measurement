@@ -1,6 +1,6 @@
-"""General utility functions."""
 import math
 import os
+import pickle
 from Jama import Matrix
 
 
@@ -15,6 +15,18 @@ def list_files(path, join=True):
             else:
                 files.append(file)
     return files
+
+
+def save_pickle(filename, item):
+    """Convenience function to save pickled file."""
+    with open(filename, 'wb') as file:
+        pickle.dump(item, file)
+        
+        
+def load_pickle(filename):
+    """Convenience function to load pickled file."""
+    with open(filename, 'rb') as file:
+        return pickle.load(file)
 
 
 # Lists

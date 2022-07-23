@@ -2,8 +2,8 @@
 
 At each (mux, muy) in the scan:
     1. Calculate the condition numbers of the coefficient matrices Axx, Ayy, Axy.
-    2. Run a Monte Carlo simulation and record the fail rate, mean emittances, 
-       and standard deviation of the emittances.
+    2. Run a Monte Carlo simulation and record the fail rate + covariance matrix
+       ensemble.
 """
 from __future__ import print_function
 import sys
@@ -31,7 +31,7 @@ from xal.tools.beam.calc import CalculationsOnBeams
 from xal.tools.beam.calc import CalculationsOnRings
 
 from helpers import get_moments
-from helpers import run_trials
+from helpers import run_trials2
 from helpers import solve
 from helpers import matched_cov
 
@@ -50,7 +50,7 @@ kinetic_energy = 1.0e9  # [eV]
 ws_ids = ["RTBT_Diag:WS20", "RTBT_Diag:WS21", "RTBT_Diag:WS23", "RTBT_Diag:WS24"]
 ref_ws_id = "RTBT_Diag:WS24"
 rec_node_id = "RTBT_Diag:BPM17"
-n_steps_x = n_steps_y = 10
+n_steps_x = n_steps_y = 12
 dmux_lo = utils.radians(-45.0)
 dmux_hi = utils.radians(+45.0)
 dmuy_lo = utils.radians(-45.0)
@@ -59,7 +59,7 @@ n_trials = 1000
 frac_error = 0.03
 controller = optics.PhaseController(ref_ws_id=ref_ws_id, kinetic_energy=kinetic_energy)
 
-pvloggerid = 48842900  # 2021/08/01
+pvloggerid = 48842900  # 2021/08/01, production optics
 if pvloggerid is not None:
     controller.sync_model_pvloggerid(pvloggerid)
 
@@ -111,29 +111,19 @@ def cond(A):
 
 dmuxx = utils.linspace(dmux_lo, dmux_hi, n_steps_x)
 dmuyy = utils.linspace(dmuy_lo, dmuy_hi, n_steps_y)
-condition_numbers = Matrix(n_steps_x, n_steps_y)
-condition_numbers_xx = Matrix(n_steps_x, n_steps_y)
-condition_numbers_yy = Matrix(n_steps_x, n_steps_y)
-condition_numbers_xy = Matrix(n_steps_x, n_steps_y)
+    
 fail_rates = Matrix(n_steps_x, n_steps_y)
-eps_x_means = Matrix(n_steps_x, n_steps_y)
-eps_y_means = Matrix(n_steps_x, n_steps_y)
-eps_1_means = Matrix(n_steps_x, n_steps_y)
-eps_2_means = Matrix(n_steps_x, n_steps_y)
-eps_x_stds = Matrix(n_steps_x, n_steps_y)
-eps_y_stds = Matrix(n_steps_x, n_steps_y)
-eps_1_stds = Matrix(n_steps_x, n_steps_y)
-eps_2_stds = Matrix(n_steps_x, n_steps_y)
-Sigmas = Matrix(n_steps_x, n_steps_y, 4, 4)
+Sigmas = []
 
 print()
 print(
-    "i/N  | j/N  | Cxx | Cyy | Cxy |fail rate | eps_x_mean | eps_y_mean | eps_1_mean | eps_2_mean"
+    "i/N  | j/N |fail rate"
 )
 print(
     "-------------------------------------------------------------------------------------------------------"
 )
 for i, dmux in enumerate(dmuxx):
+    Sigmas.append([])
     mux = utils.put_angle_in_range(mux0 + dmux)
     for j, dmuy in enumerate(dmuyy):
         muy = utils.put_angle_in_range(muy0 + dmuy)
@@ -168,61 +158,20 @@ for i, dmux in enumerate(dmuxx):
         condition_number_yy = cond(Ayy)
         condition_number_xy = cond(Axy)
 
-        fail_rate, emittances = run_trials(Sigma0, tmats, n_trials, frac_error)
-        means = utils.mean_cols(emittances)
-        stds = utils.std_cols(emittances)
-        eps_x_means.set(i, j, means[0])
-        eps_y_means.set(i, j, means[1])
-        eps_1_means.set(i, j, means[2])
-        eps_2_means.set(i, j, means[3])
-        eps_x_stds.set(i, j, stds[0])
-        eps_y_stds.set(i, j, stds[1])
-        eps_1_stds.set(i, j, stds[2])
-        eps_2_stds.set(i, j, stds[3])
+        fail_rate, _Sigmas = run_trials2(Sigma0, tmats, n_trials, frac_error)
         fail_rates.set(i, j, fail_rate)
-        condition_numbers.set(i, j, condition_number)
-        condition_numbers_xx.set(i, j, condition_number_xx)
-        condition_numbers_yy.set(i, j, condition_number_yy)
-        condition_numbers_xy.set(i, j, condition_number_xy)
+        Sigmas[i].append(_Sigmas)
         print(
-            "{}/{} | {}/{} | {:.2f} | {:.2f} | {:.2f} | {} {:.2e} {:.2e} {:.2e} {:.2e}".format(
-                i,
-                n_steps_x - 1,
-                j,
-                n_steps_y - 1,
-                condition_number_xx,
-                condition_number_yy,
-                condition_number_xy,
+            "{}/{} | {}/{} | {:.2f}".format(
+                i, n_steps_x - 1,
+                j, n_steps_y - 1,
                 fail_rate,
-                means[0],
-                means[1],
-                means[2],
-                means[3],
             )
         )
-
         controller.set_fields(quad_ids, default_fields, "model")
 
-utils.save_array(condition_numbers.getArray(), "_output/data/condition_numbers.dat")
-utils.save_array(
-    condition_numbers_xx.getArray(), "_output/data/condition_numbers_xx.dat"
-)
-utils.save_array(
-    condition_numbers_yy.getArray(), "_output/data/condition_numbers_yy.dat"
-)
-utils.save_array(
-    condition_numbers_xy.getArray(), "_output/data/condition_numbers_xy.dat"
-)
+utils.save_pickle("_output/data/Sigmas.pkl", Sigmas)
 utils.save_array(fail_rates.getArray(), "_output/data/fail_rates.dat")
-utils.save_array(eps_x_means.getArray(), "_output/data/eps_x_means.dat")
-utils.save_array(eps_y_means.getArray(), "_output/data/eps_y_means.dat")
-utils.save_array(eps_1_means.getArray(), "_output/data/eps_1_means.dat")
-utils.save_array(eps_2_means.getArray(), "_output/data/eps_2_means.dat")
-utils.save_array(eps_x_stds.getArray(), "_output/data/eps_x_stds.dat")
-utils.save_array(eps_y_stds.getArray(), "_output/data/eps_y_stds.dat")
-utils.save_array(eps_1_stds.getArray(), "_output/data/eps_1_stds.dat")
-utils.save_array(eps_2_stds.getArray(), "_output/data/eps_2_stds.dat")
 utils.save_array(dmuxx, "_output/data/phase_devs_x.dat")
 utils.save_array(dmuyy, "_output/data/phase_devs_y.dat")
-
 exit()
